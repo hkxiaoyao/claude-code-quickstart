@@ -250,7 +250,7 @@ function Main {
         -FileOrder $bootstrapOrder `
         -OutputPath $bootstrapOutput `
         -RequiresHeader "#Requires -Version 5.1" `
-        -OutputEncoding 'utf8BOM'
+        -OutputEncoding 'UTF8'
 
     # 构建 Installer 单文件版本
     Write-Host ""

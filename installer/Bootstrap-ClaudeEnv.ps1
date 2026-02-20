@@ -4,21 +4,6 @@
 
 #Requires -Version 5.1
 
-# 剥离 BOM（irm|iex 管道场景）：
-# 当脚本通过 irm 下载后用 iex 执行时，UTF-8 BOM（EF BB BF）会被当成字符 ï»¿，
-# PowerShell 会尝试将其作为命令执行导致 CommandNotFoundException。
-# 本段代码检测并移除 $MyInvocation.MyCommand.ScriptBlock 开头的 BOM 字符，
-# 然后用干净的脚本内容重新执行。注意：-File 模式下 PS 解析器会自动跳过 BOM，
-# 此逻辑仅在 iex 管道场景触发。
-if ($MyInvocation.MyCommand.ScriptBlock) {
-    $scriptText = $MyInvocation.MyCommand.ScriptBlock.ToString()
-    if ($scriptText[0] -eq [char]0xFEFF) {
-        $cleanScript = $scriptText.Substring(1)
-        Invoke-Expression $cleanScript
-        return
-    }
-}
-
 # 修复 irm|iex 管道执行时的控制台编码，防止中文乱码。
 # 仅设置 [Console]::OutputEncoding 不够：.NET 用 UTF-8 写字节，
 # 但 Windows 控制台窗口仍用旧 OEM 代码页（如 936/437）解释字节，
