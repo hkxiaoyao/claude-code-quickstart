@@ -1,0 +1,563 @@
+﻿# Step06: CC-Switch 安装 - Claude Code 环境安装器
+# 作者: 哈雷酱 (本小姐的 CC-Switch 安装杰作！)
+# 功能: CC-Switch GitHub Release 下载 + MSI 静默安装
+
+#Requires -Version 5.1
+
+Set-StrictMode -Version Latest
+
+# 导入依赖模块
+. "$PSScriptRoot\..\core\Process.ps1"
+. "$PSScriptRoot\..\core\Ui.ps1"
+. "$PSScriptRoot\..\core\Admin.ps1"
+
+# 配置
+$script:CcSwitchRepo = "anthropics/cc-switch"
+$script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
+$script:TempDownloadDir = "$env:TEMP\CcSwitchInstall"
+
+function Test-Step06Installed {
+    <#
+    .SYNOPSIS
+    检测 CC-Switch 是否已安装
+    .RETURNS
+    布尔值，表示是否已安装
+    #>
+    param()
+
+    try {
+        # 检查注册表中的 CC-Switch 安装信息
+        $uninstallKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        )
+
+        foreach ($keyPath in $uninstallKeys) {
+            try {
+                $items = Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
+                    $_.DisplayName -like "*CC-Switch*" -or
+                    $_.DisplayName -like "*Claude Code Switch*" -or
+                    $_.Publisher -like "*Anthropic*"
+                }
+
+                if ($items) {
+                    foreach ($item in $items) {
+                        Write-Host "检测到已安装的 CC-Switch:" -ForegroundColor Green
+                        Write-Host "  名称: $($item.DisplayName)" -ForegroundColor Gray
+                        Write-Host "  版本: $($item.DisplayVersion)" -ForegroundColor Gray
+                        Write-Host "  发布商: $($item.Publisher)" -ForegroundColor Gray
+                        return $true
+                    }
+                }
+            } catch {
+                # 忽略注册表访问错误
+            }
+        }
+
+        # 检查常见安装路径
+        $commonPaths = @(
+            "$env:ProgramFiles\CC-Switch",
+            "$env:ProgramFiles\Claude Code Switch",
+            "$env:ProgramFiles\Anthropic\CC-Switch",
+            "${env:ProgramFiles(x86)}\CC-Switch",
+            "${env:ProgramFiles(x86)}\Claude Code Switch",
+            "${env:ProgramFiles(x86)}\Anthropic\CC-Switch",
+            "$env:LOCALAPPDATA\Programs\CC-Switch"
+        )
+
+        foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+                $exeFiles = Get-ChildItem -Path $path -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+                if ($exeFiles) {
+                    Write-Host "检测到 CC-Switch 安装目录: $path" -ForegroundColor Green
+                    return $true
+                }
+            }
+        }
+
+        return $false
+
+    } catch {
+        return $false
+    }
+}
+
+function Install-Step06 {
+    <#
+    .SYNOPSIS
+    安装 CC-Switch
+    .RETURNS
+    安装结果对象
+    #>
+    param()
+
+    Write-Host "=== Step 06: CC-Switch 安装 ===" -ForegroundColor Cyan
+    Write-Host ""
+
+    try {
+        # 1. 检查前置条件
+        Write-Host "1. 检查前置条件..." -ForegroundColor Gray
+
+        if (-not (Test-CommandAvailable -Command "claude")) {
+            throw "Claude Code 未安装，请先完成 Step04"
+        }
+
+        Write-Host "✓ 前置条件检查完成" -ForegroundColor Green
+
+        # 2. 检查 CC-Switch 是否已安装
+        Write-Host ""
+        Write-Host "2. 检查 CC-Switch 安装状态..." -ForegroundColor Gray
+
+        if (Test-Step06Installed) {
+            Write-Host "✓ CC-Switch 已安装" -ForegroundColor Green
+
+            # 询问是否重新安装
+            $response = Read-Host "CC-Switch 已安装，是否重新安装最新版本？[y/N]"
+            if ($response -notmatch "^[Yy]") {
+                Write-Host "跳过 CC-Switch 重新安装" -ForegroundColor Gray
+                return @{
+                    Success = $true
+                    Message = "CC-Switch 已存在，跳过安装"
+                    Skipped = $true
+                }
+            }
+        }
+
+        # 3. 检查管理员权限
+        Write-Host ""
+        Write-Host "3. 检查安装权限..." -ForegroundColor Gray
+
+        if (-not (Assert-StepPrivilege -StepName "安装 CC-Switch" -RequiresAdmin $true)) {
+            throw "CC-Switch 安装需要管理员权限"
+        }
+
+        Write-Host "✓ 管理员权限确认" -ForegroundColor Green
+
+        # 4. 获取最新版本信息
+        Write-Host ""
+        Write-Host "4. 获取 CC-Switch 最新版本信息..." -ForegroundColor Gray
+
+        $releaseInfo = Get-LatestCcSwitchRelease
+        if (-not $releaseInfo) {
+            throw "无法获取 CC-Switch 最新版本信息"
+        }
+
+        Write-Host "✓ 最新版本: $($releaseInfo.Version)" -ForegroundColor Green
+        Write-Host "  发布时间: $($releaseInfo.PublishedAt)" -ForegroundColor Gray
+        Write-Host "  下载地址: $($releaseInfo.DownloadUrl)" -ForegroundColor Gray
+
+        # 5. 下载 CC-Switch 安装包
+        Write-Host ""
+        Write-Host "5. 下载 CC-Switch 安装包..." -ForegroundColor Gray
+
+        $installerPath = Download-CcSwitchInstaller -DownloadUrl $releaseInfo.DownloadUrl -Version $releaseInfo.Version
+
+        if (-not $installerPath -or -not (Test-Path $installerPath)) {
+            throw "CC-Switch 安装包下载失败"
+        }
+
+        Write-Host "✓ 安装包下载成功: $installerPath" -ForegroundColor Green
+
+        # 6. 验证安装包
+        Write-Host ""
+        Write-Host "6. 验证安装包..." -ForegroundColor Gray
+
+        $fileInfo = Get-Item $installerPath
+        Write-Host "  文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Gray
+
+        # 检查文件类型
+        if ($installerPath -notmatch "\.(msi|exe)$") {
+            throw "不支持的安装包格式: $installerPath"
+        }
+
+        Write-Host "✓ 安装包验证通过" -ForegroundColor Green
+
+        # 7. 执行静默安装
+        Write-Host ""
+        Write-Host "7. 执行 CC-Switch 静默安装..." -ForegroundColor Gray
+
+        $installResult = Install-CcSwitchPackage -InstallerPath $installerPath
+
+        if (-not $installResult.Success) {
+            throw "CC-Switch 安装失败: $($installResult.ErrorMessage)"
+        }
+
+        Write-Host "✓ CC-Switch 安装成功" -ForegroundColor Green
+
+        # 8. 验证安装
+        Write-Host ""
+        Write-Host "8. 验证 CC-Switch 安装..." -ForegroundColor Gray
+
+        # 等待安装完成
+        Start-Sleep -Seconds 3
+
+        if (-not (Test-Step06Installed)) {
+            Write-Host "⚠ CC-Switch 安装验证失败，但安装过程成功" -ForegroundColor Yellow
+            Write-Host "  可能需要重启系统或重新登录才能完全生效" -ForegroundColor Gray
+        } else {
+            Write-Host "✓ CC-Switch 安装验证成功" -ForegroundColor Green
+        }
+
+        # 9. 清理临时文件
+        Write-Host ""
+        Write-Host "9. 清理临时文件..." -ForegroundColor Gray
+
+        try {
+            if (Test-Path $script:TempDownloadDir) {
+                Remove-Item $script:TempDownloadDir -Recurse -Force
+                Write-Host "✓ 临时文件清理完成" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "⚠ 临时文件清理失败，但不影响使用: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+
+        # 10. 使用提示
+        Write-Host ""
+        Write-Host "10. 使用提示..." -ForegroundColor Gray
+        Write-Host "  CC-Switch 已安装完成" -ForegroundColor Cyan
+        Write-Host "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:" -ForegroundColor Gray
+        Write-Host "    - 快速切换 Claude Code 配置" -ForegroundColor Gray
+        Write-Host "    - 项目环境管理" -ForegroundColor Gray
+        Write-Host "    - 工作流程优化" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "  安装后可能需要重启系统或重新登录才能完全生效" -ForegroundColor Yellow
+
+        Write-Host ""
+        Write-Host "✓ CC-Switch 安装完成" -ForegroundColor Green
+
+        return @{
+            Success = $true
+            Version = $releaseInfo.Version
+            InstallerPath = $installerPath
+            InstallResult = $installResult
+            Message = "CC-Switch 安装成功"
+        }
+
+    } catch {
+        Write-Host "✗ CC-Switch 安装失败: $($_.Exception.Message)" -ForegroundColor Red
+
+        # 清理临时文件
+        try {
+            if (Test-Path $script:TempDownloadDir) {
+                Remove-Item $script:TempDownloadDir -Recurse -Force
+            }
+        } catch { }
+
+        throw
+    }
+}
+
+function Get-LatestCcSwitchRelease {
+    <#
+    .SYNOPSIS
+    获取 CC-Switch 最新版本信息
+    .RETURNS
+    包含版本信息的对象
+    #>
+    param()
+
+    try {
+        Write-Host "  正在获取 GitHub Release 信息..." -ForegroundColor Gray
+
+        # 使用 Invoke-RestMethod 获取最新版本信息
+        $headers = @{
+            "User-Agent" = "ClaudeEnvInstaller/1.0"
+            "Accept" = "application/vnd.github.v3+json"
+        }
+
+        $release = Invoke-RestMethod -Uri $script:CcSwitchApiUrl -Headers $headers -TimeoutSec 30
+
+        if (-not $release) {
+            throw "无法获取 Release 信息"
+        }
+
+        # 查找 Windows MSI 安装包
+        $msiAsset = $release.assets | Where-Object {
+            $_.name -match "\.(msi|exe)$" -and
+            $_.name -match "(windows|win|x64|amd64)" -and
+            $_.content_type -match "(application/x-msi|application/octet-stream|application/x-msdownload)"
+        } | Select-Object -First 1
+
+        if (-not $msiAsset) {
+            # 如果没找到明确的 Windows 安装包，尝试查找任何 MSI/EXE 文件
+            $msiAsset = $release.assets | Where-Object {
+                $_.name -match "\.(msi|exe)$"
+            } | Select-Object -First 1
+        }
+
+        if (-not $msiAsset) {
+            throw "未找到适用于 Windows 的安装包"
+        }
+
+        return @{
+            Version = $release.tag_name -replace '^v', ''
+            TagName = $release.tag_name
+            PublishedAt = $release.published_at
+            DownloadUrl = $msiAsset.browser_download_url
+            FileName = $msiAsset.name
+            FileSize = $msiAsset.size
+        }
+
+    } catch {
+        Write-Host "  获取版本信息失败: $($_.Exception.Message)" -ForegroundColor Red
+        return $null
+    }
+}
+
+function Download-CcSwitchInstaller {
+    <#
+    .SYNOPSIS
+    下载 CC-Switch 安装包
+    .PARAMETER DownloadUrl
+    下载地址
+    .PARAMETER Version
+    版本号
+    .RETURNS
+    下载的文件路径
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $DownloadUrl,
+
+        [Parameter(Mandatory = $true)]
+        [string] $Version
+    )
+
+    try {
+        # 创建临时下载目录
+        if (Test-Path $script:TempDownloadDir) {
+            Remove-Item $script:TempDownloadDir -Recurse -Force
+        }
+        New-Item -Path $script:TempDownloadDir -ItemType Directory -Force | Out-Null
+
+        # 确定文件名和路径
+        $fileName = Split-Path $DownloadUrl -Leaf
+        if (-not $fileName -or $fileName -notmatch "\.(msi|exe)$") {
+            $fileName = "cc-switch-$Version.msi"
+        }
+
+        $filePath = Join-Path $script:TempDownloadDir $fileName
+
+        Write-Host "  正在下载: $fileName" -ForegroundColor Gray
+        Write-Host "  下载地址: $DownloadUrl" -ForegroundColor Gray
+
+        # 下载文件
+        $progressPreference = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
+
+        try {
+            Invoke-WebRequest -Uri $DownloadUrl -OutFile $filePath -UseBasicParsing -TimeoutSec 300
+
+            # 验证下载
+            if (-not (Test-Path $filePath)) {
+                throw "下载的文件不存在"
+            }
+
+            $fileInfo = Get-Item $filePath
+            if ($fileInfo.Length -eq 0) {
+                throw "下载的文件为空"
+            }
+
+            Write-Host "  ✓ 下载完成: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
+            return $filePath
+
+        } finally {
+            $ProgressPreference = $progressPreference
+        }
+
+    } catch {
+        Write-Host "  下载失败: $($_.Exception.Message)" -ForegroundColor Red
+        return $null
+    }
+}
+
+function Install-CcSwitchPackage {
+    <#
+    .SYNOPSIS
+    安装 CC-Switch 安装包
+    .PARAMETER InstallerPath
+    安装包路径
+    .RETURNS
+    安装结果对象
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $InstallerPath
+    )
+
+    try {
+        $fileExtension = [System.IO.Path]::GetExtension($InstallerPath).ToLower()
+
+        switch ($fileExtension) {
+            ".msi" {
+                Write-Host "  正在执行 MSI 静默安装..." -ForegroundColor Gray
+
+                # MSI 静默安装参数
+                $arguments = @(
+                    "/i", "`"$InstallerPath`"",
+                    "/quiet",
+                    "/norestart",
+                    "/l*v", "`"$script:TempDownloadDir\install.log`""
+                )
+
+                $result = Invoke-ExternalCommand -Command "msiexec" -Arguments $arguments -TimeoutSeconds 300
+
+                if ($result.Success) {
+                    Write-Host "  ✓ MSI 安装完成" -ForegroundColor Green
+                } else {
+                    # 检查安装日志
+                    $logPath = "$script:TempDownloadDir\install.log"
+                    $errorDetails = ""
+                    if (Test-Path $logPath) {
+                        try {
+                            $logContent = Get-Content $logPath -Tail 20 -ErrorAction SilentlyContinue
+                            $errorLines = $logContent | Where-Object { $_ -match "(error|failed|exception)" }
+                            if ($errorLines) {
+                                $errorDetails = "`n安装日志错误: $($errorLines -join '; ')"
+                            }
+                        } catch { }
+                    }
+
+                    throw "MSI 安装失败 (退出码: $($result.ExitCode))$errorDetails"
+                }
+            }
+
+            ".exe" {
+                Write-Host "  正在执行 EXE 静默安装..." -ForegroundColor Gray
+
+                # 尝试常见的静默安装参数
+                $silentArgs = @("/S", "/SILENT", "/VERYSILENT", "/quiet", "/q")
+                $installSuccess = $false
+
+                foreach ($arg in $silentArgs) {
+                    try {
+                        Write-Host "    尝试参数: $arg" -ForegroundColor Gray
+                        $result = Invoke-ExternalCommand -Command $InstallerPath -Arguments @($arg) -TimeoutSeconds 300
+
+                        if ($result.Success) {
+                            Write-Host "  ✓ EXE 安装完成 (参数: $arg)" -ForegroundColor Green
+                            $installSuccess = $true
+                            break
+                        }
+                    } catch {
+                        continue
+                    }
+                }
+
+                if (-not $installSuccess) {
+                    throw "EXE 静默安装失败，尝试了所有常见参数"
+                }
+            }
+
+            default {
+                throw "不支持的安装包格式: $fileExtension"
+            }
+        }
+
+        return @{
+            Success = $true
+            InstallerType = $fileExtension
+            Message = "安装成功"
+        }
+
+    } catch {
+        return @{
+            Success = $false
+            ErrorMessage = $_.Exception.Message
+        }
+    }
+}
+
+function Verify-Step06 {
+    <#
+    .SYNOPSIS
+    验证 CC-Switch 安装
+    .RETURNS
+    布尔值，表示验证是否成功
+    #>
+    param()
+
+    return Test-Step06Installed
+}
+
+function Rollback-Step06 {
+    <#
+    .SYNOPSIS
+    回滚 CC-Switch 安装
+    #>
+    param()
+
+    Write-Host "回滚 CC-Switch 安装..." -ForegroundColor Yellow
+
+    try {
+        # 查找已安装的 CC-Switch
+        $uninstallKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        )
+
+        $ccSwitchItems = @()
+        foreach ($keyPath in $uninstallKeys) {
+            try {
+                $items = Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
+                    $_.DisplayName -like "*CC-Switch*" -or
+                    $_.DisplayName -like "*Claude Code Switch*" -or
+                    $_.Publisher -like "*Anthropic*"
+                }
+                $ccSwitchItems += $items
+            } catch { }
+        }
+
+        if ($ccSwitchItems.Count -eq 0) {
+            Write-Host "未找到已安装的 CC-Switch" -ForegroundColor Gray
+            return
+        }
+
+        foreach ($item in $ccSwitchItems) {
+            Write-Host "找到 CC-Switch 安装: $($item.DisplayName)" -ForegroundColor Yellow
+
+            if ($item.UninstallString) {
+                Write-Host "尝试卸载..." -ForegroundColor Gray
+
+                try {
+                    # 解析卸载命令
+                    $uninstallCmd = $item.UninstallString
+                    if ($uninstallCmd -match "msiexec") {
+                        # MSI 卸载
+                        $productCode = $item.PSChildName
+                        $arguments = @("/x", $productCode, "/quiet", "/norestart")
+                        $result = Invoke-ExternalCommand -Command "msiexec" -Arguments $arguments -TimeoutSeconds 180
+
+                        if ($result.Success) {
+                            Write-Host "✓ CC-Switch 卸载成功" -ForegroundColor Green
+                        } else {
+                            Write-Host "⚠ CC-Switch 卸载失败" -ForegroundColor Yellow
+                        }
+                    } else {
+                        Write-Host "⚠ 不支持的卸载方式，请手动卸载" -ForegroundColor Yellow
+                        Write-Host "  卸载命令: $uninstallCmd" -ForegroundColor Gray
+                    }
+                } catch {
+                    Write-Host "⚠ 卸载过程出错: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "⚠ 未找到卸载信息，请手动卸载" -ForegroundColor Yellow
+            }
+        }
+
+        # 清理临时文件
+        try {
+            if (Test-Path $script:TempDownloadDir) {
+                Remove-Item $script:TempDownloadDir -Recurse -Force
+            }
+        } catch { }
+
+    } catch {
+        Write-Host "✗ 回滚失败: $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
+# 所有函数在 dot-source 后自动可用
