@@ -4,14 +4,22 @@
 
 #Requires -Version 5.1
 
+# 修复 irm|iex 管道执行时的控制台编码，防止中文乱码
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 # 严格模式
 Set-StrictMode -Version Latest
 
 # 导入核心模块
-# 安全获取脚本根目录：兼容 irm|iex 管道执行场景（此时 Path 为 $null）
-$scriptRoot = if ($MyInvocation.MyCommand.Path) {
-    Split-Path -Parent $MyInvocation.MyCommand.Path
-} else {
+# 用 try/catch 安全获取脚本根目录：
+# Set-StrictMode -Version Latest 下，在 iex 管道场景中访问
+# $MyInvocation.MyCommand.Path 会因属性不存在而直接抛异常，
+# if 条件判断本身也无法阻止该异常，必须用 try/catch 捕获。
+$scriptRoot = try {
+    $p = $MyInvocation.MyCommand.Path
+    if ($p) { Split-Path -Parent $p } else { $null }
+} catch {
     $null  # iex 管道场景，依赖已内联，无需本地路径
 }
 . "$scriptRoot\core\Admin.ps1"
