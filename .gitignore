@@ -2,7 +2,7 @@
 .ace-tool/
 .claude/
 
-# ─── 构建产物（将来 build/ 里的打包输出）───
+# ─── 构建产物（将来 build/ 里的打包输出，由 GitHub Actions 自动构建）───
 installer/build/dist/
 installer/build/*.zip
 installer/build/*.exe
