@@ -40,26 +40,22 @@
 
 ```powershell
 # 第一步：执行引导脚本（PS 5.1+）
-irm https://raw.githubusercontent.com/MrNine-666/claude-code-quickstart/main/installer/build/dist/Bootstrap-ClaudeEnv.built.ps1 | iex
+Set-ExecutionPolicy Bypass -Scope Process -Force
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1' | iex
 ```
 
 引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
 # 第二步：执行主安装脚本（PS 7+）
-irm https://raw.githubusercontent.com/MrNine-666/claude-code-quickstart/main/installer/build/dist/Install-ClaudeEnv.built.ps1 | iex
+Set-ExecutionPolicy Bypass -Scope Process -Force
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex
 ```
 
 > **说明**：
 > - `irm` (Invoke-RestMethod) 从 GitHub 下载脚本内容
 > - `iex` (Invoke-Expression) 直接执行脚本
 > - 执行前可以先访问 URL 查看脚本源码，确保安全
->
-> **国内加速**：如果 GitHub 访问较慢，可以使用镜像加速：
-> ```powershell
-> # 使用 ghproxy.com 镜像
-> irm https://ghproxy.com/https://raw.githubusercontent.com/MrNine-666/claude-code-quickstart/main/installer/build/dist/Bootstrap-ClaudeEnv.built.ps1 | iex
-> ```
 
 ---
 
@@ -226,9 +222,7 @@ claude-code-quickstart/
 │   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口
 │   ├── build/                    # 构建工具目录
 │   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本
-│   │   └── dist/                 # 构建产物输出目录
-│   │       ├── Bootstrap-ClaudeEnv.built.ps1   # 引导脚本单文件版本
-│   │       └── Install-ClaudeEnv.built.ps1     # 主安装脚本单文件版本
+│   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
 │   ├── core/                     # 核心功能模块
 │   │   ├── Ui.ps1                # TUI 组件（彩色输出、菜单、进度条）
 │   │   ├── Process.ps1           # 外部命令执行封装
@@ -289,7 +283,7 @@ gemini --help
 
 ```powershell
 # 如果使用云端执行，需要先下载脚本到本地
-Invoke-RestMethod -Uri "https://raw.githubusercontent.com/MrNine-666/claude-code-quickstart/main/installer/build/dist/Install-ClaudeEnv.built.ps1" -OutFile "Install-ClaudeEnv.built.ps1"
+Invoke-RestMethod -Uri "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1" -OutFile "Install-ClaudeEnv.built.ps1"
 pwsh -File ".\Install-ClaudeEnv.built.ps1" -Resume
 
 # 或使用本地单文件版本
@@ -334,6 +328,9 @@ pwsh -File ".\installer\build\Build-SingleFile.ps1"
 - **功能完全相同**：两者执行逻辑一致，只是文件组织方式不同
 - **单文件版本**：适合快速分发，无需携带整个源码目录，下载即用
 - **源码版本**：适合开发调试，可以单独修改某个模块文件，便于维护和扩展
+
+> **注意**：构建后的单文件脚本不在仓库中，需从 [Releases](../../releases) 下载，
+> 或本地运行 `pwsh -File ".\installer\build\Build-SingleFile.ps1"` 自行构建。
 
 ---
 

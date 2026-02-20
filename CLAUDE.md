@@ -13,6 +13,9 @@ claude-code-quickstart/
 ├── installer/
 │   ├── Bootstrap-ClaudeEnv.ps1   # PS 5.1 引导入口 → 检测/安装 PS7
 │   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口（-Resume/-OneClick/-Staged）
+│   ├── build/                    # 构建工具目录
+│   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本
+│   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
 │   ├── core/                     # 6 个基础功能库（Ui/Process/Profile/Admin/Net/Bootstrap）
 │   └── steps/                    # 13 个安装步骤模块（Step01~Step13）
 └── test-syntax.ps1               # PS7 全量语法校验工具

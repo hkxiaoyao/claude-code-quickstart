@@ -1,0 +1,92 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Verify
+    runs-on: windows-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 构建单文件脚本
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell 版本: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
+          & ".\installer\build\Build-SingleFile.ps1"
+
+      - name: 验证构建产物
+        shell: pwsh
+        run: |
+          $bootstrapPath = ".\installer\build\dist\Bootstrap-ClaudeEnv.built.ps1"
+          $installerPath  = ".\installer\build\dist\Install-ClaudeEnv.built.ps1"
+          if (-not (Test-Path $bootstrapPath)) { throw "Bootstrap 构建产物不存在" }
+          if (-not (Test-Path $installerPath))  { throw "Installer 构建产物不存在" }
+          Write-Host "[PASS] 构建产物验证通过" -ForegroundColor Green
+          Write-Host "  Bootstrap: $([math]::Round((Get-Item $bootstrapPath).Length / 1KB, 1)) KB"
+          Write-Host "  Installer: $([math]::Round((Get-Item $installerPath).Length / 1KB, 1)) KB"
+
+      - name: 上传构建产物（Artifacts）
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-scripts-${{ github.sha }}
+          path: |
+            installer/build/dist/Bootstrap-ClaudeEnv.built.ps1
+            installer/build/dist/Install-ClaudeEnv.built.ps1
+          retention-days: 7
+
+      - name: 创建或更新 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/build/dist/*.built.ps1
+          generate_release_notes: true
+          body: |
+            ## 🚀 云端一键安装
+
+            打开 **PowerShell**（任意版本，无需管理员），粘贴以下命令：
+
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
+            ```
+
+            > Bootstrap 脚本会自动安装 PowerShell 7 等前置依赖，完成后引导运行主安装脚本。
+
+            ---
+
+            ## 📋 分步安装
+
+            **步骤 1**（在旧版 PowerShell / Git Bash 中运行）：
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
+            ```
+
+            **步骤 2**（在 PowerShell 7 中运行）：
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Install-ClaudeEnv.built.ps1' | iex
+            ```
+
+            ---
+
+            ## 📦 文件说明
+
+            | 文件 | PS 版本要求 | 用途 |
+            |------|------------|------|
+            | `Bootstrap-ClaudeEnv.built.ps1` | 5.1+ | 安装前置依赖（首先运行）|
+            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 安装 Claude Code 开发环境 |
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
