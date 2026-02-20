@@ -149,7 +149,11 @@ function Build-SingleFileScript {
 
     $tempPath = Join-Path $outputDir ("_tmp_" + [System.IO.Path]::GetRandomFileName() + ".ps1")
     try {
-        $buffer -join "`r`n" | Set-Content -Path $tempPath -Encoding UTF8 -NoNewline
+        # 必须用 utf8BOM（带 BOM 的 UTF-8）：
+        # GitHub Release 以 application/octet-stream 下发，无 charset 信息。
+        # PS5 的 irm 遇到无 BOM 的 UTF-8 文件会按 Latin-1 解码，导致中文乱码。
+        # 写入 BOM (EF BB BF) 后，PS5 可正确识别为 UTF-8 并解码中文字符串。
+        $buffer -join "`r`n" | Set-Content -Path $tempPath -Encoding utf8BOM -NoNewline
         # 原子替换：Move-Item -Force 在 Windows 上可直接覆盖同卷文件，
         # 无需先删除旧文件（避免"删除成功 + 移动失败"导致产物丢失的窗口）
         Move-Item -Path $tempPath -Destination $OutputPath -Force
