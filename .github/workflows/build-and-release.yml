@@ -59,12 +59,10 @@ jobs:
 
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
             ```
 
             > Bootstrap 脚本会自动安装 PowerShell 7 等前置依赖，完成后引导运行主安装脚本。
-            > `[Net.ServicePointManager]::SecurityProtocol` 这行是必须的：PS 5.1 默认 TLS 1.0，GitHub 要求 TLS 1.2+。
 
             ---
 
@@ -73,7 +71,6 @@ jobs:
             **步骤 1**（在旧版 PowerShell / Git Bash 中运行）：
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
             ```
 

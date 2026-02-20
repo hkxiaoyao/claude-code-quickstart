@@ -41,7 +41,6 @@
 ```powershell
 # 第一步：执行引导脚本（PS 5.1+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1' | iex
 ```
 
@@ -54,7 +53,6 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 ```
 
 > **说明**：
-> - `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12`：PS 5.1 默认使用 TLS 1.0，而 GitHub 要求 TLS 1.2+，必须手动升级，否则连接会被中止
 > - `irm` (Invoke-RestMethod) 从 GitHub 下载脚本内容
 > - `iex` (Invoke-Expression) 直接执行脚本
 > - 执行前可以先访问 URL 查看脚本源码，确保安全
@@ -275,13 +273,9 @@ gemini --help
 **Q：云端执行失败怎么办？**
 
 可能原因及解决方案：
-1. **TLS 版本不足（最常见）**：PS 5.1 默认 TLS 1.0，GitHub 要求 TLS 1.2+，连接被中止。解决：在 `irm` 前加一行：
-   ```powershell
-   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-   ```
-2. **网络问题**：GitHub 访问受限，使用镜像加速或下载单文件脚本
-3. **执行策略限制**：先运行 `Set-ExecutionPolicy Bypass -Scope Process -Force`
-4. **权限不足**：确保以管理员身份运行 PowerShell
+1. **网络问题**：GitHub 访问受限，使用镜像加速或下载单文件脚本
+2. **执行策略限制**：先运行 `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`
+3. **权限不足**：确保以管理员身份运行 PowerShell
 
 **Q：安装中途失败了怎么办？**
 
