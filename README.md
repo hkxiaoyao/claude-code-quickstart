@@ -41,7 +41,7 @@
 ```powershell
 # 第一步：执行引导脚本（PS 5.1+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
-irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1' | iex
+[Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex
 ```
 
 引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
@@ -53,7 +53,8 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 ```
 
 > **说明**：
-> - `irm` (Invoke-RestMethod) 从 GitHub 下载脚本内容
+> - 第一步使用 `WebClient.DownloadData` + `UTF8.GetString` 显式 UTF-8 解码，避免 PS 5.1 `irm` 默认用系统代码页解码导致中文乱码
+> - 第二步在 PS 7 中运行，`irm` 原生支持 UTF-8，无需特殊处理
 > - `iex` (Invoke-Expression) 直接执行脚本
 > - 执行前可以先访问 URL 查看脚本源码，确保安全
 

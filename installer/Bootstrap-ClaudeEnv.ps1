@@ -369,7 +369,7 @@ function Show-CompletionMessage {
         # 本地文件模式：直接指向同目录的安装脚本
         Write-UiSuccess "  pwsh -File `"$scriptRoot\Install-ClaudeEnv.ps1`""
     } else {
-        # iex 管道模式：提示用相同方式下载并执行主安装脚本
+        # iex 管道模式：PS7 原生支持 UTF-8，irm|iex 无需特殊处理
         Write-UiSuccess "  irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex"
     }
     Write-Host ""
