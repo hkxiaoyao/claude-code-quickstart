@@ -8,7 +8,12 @@
 Set-StrictMode -Version Latest
 
 # 导入核心模块
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 安全获取脚本根目录：兼容 irm|iex 管道执行场景（此时 Path 为 $null）
+$scriptRoot = if ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    $null  # iex 管道场景，依赖已内联，无需本地路径
+}
 . "$scriptRoot\core\Admin.ps1"
 . "$scriptRoot\core\Ui.ps1"
 . "$scriptRoot\core\Process.ps1"
@@ -335,7 +340,13 @@ function Show-CompletionMessage {
     Write-UiInfo "🚀 下一步操作："
     Write-UiInfo "请在 PowerShell 7 中运行主安装脚本："
     Write-Host ""
-    Write-UiSuccess "  pwsh -File `"$scriptRoot\Install-ClaudeEnv.ps1`""
+    if ($scriptRoot) {
+        # 本地文件模式：直接指向同目录的安装脚本
+        Write-UiSuccess "  pwsh -File `"$scriptRoot\Install-ClaudeEnv.ps1`""
+    } else {
+        # iex 管道模式：提示用相同方式下载并执行主安装脚本
+        Write-UiSuccess "  irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex"
+    }
     Write-Host ""
 
     Write-UiInfo "💡 提示："
