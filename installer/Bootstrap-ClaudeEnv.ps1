@@ -4,9 +4,26 @@
 
 #Requires -Version 5.1
 
-# 修复 irm|iex 管道执行时的控制台编码，防止中文乱码
+# 修复 irm|iex 管道执行时的控制台编码，防止中文乱码。
+# 仅设置 [Console]::OutputEncoding 不够：.NET 用 UTF-8 写字节，
+# 但 Windows 控制台窗口仍用旧 OEM 代码页（如 936/437）解释字节，
+# 两端不一致导致乱码。必须通过 kernel32 API 将控制台代码页也改为
+# 65001（UTF-8），使两端完全对齐。
+try {
+    if (-not ([System.Management.Automation.PSTypeName]'_BootstrapKernel32Cp').Type) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public class _BootstrapKernel32Cp {
+    [DllImport("kernel32.dll")] public static extern bool SetConsoleOutputCP(uint cp);
+    [DllImport("kernel32.dll")] public static extern bool SetConsoleCP(uint cp);
+}
+'@ -ErrorAction Stop
+    }
+    [_BootstrapKernel32Cp]::SetConsoleOutputCP(65001) | Out-Null
+    [_BootstrapKernel32Cp]::SetConsoleCP(65001) | Out-Null
+} catch { }
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding  = [System.Text.Encoding]::UTF8
 
 # 严格模式
 Set-StrictMode -Version Latest
