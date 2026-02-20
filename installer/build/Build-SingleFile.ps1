@@ -82,7 +82,10 @@ function Build-SingleFileScript {
         [string]$OutputPath,
 
         [Parameter(Mandatory)]
-        [string]$RequiresHeader
+        [string]$RequiresHeader,
+
+        # PS5 读脚本默认用 ANSI，需要 BOM 才能识别 UTF-8；PS7 无此限制
+        [string]$OutputEncoding = 'UTF8'
     )
 
     # 验证所有源文件存在
@@ -149,7 +152,7 @@ function Build-SingleFileScript {
 
     $tempPath = Join-Path $outputDir ("_tmp_" + [System.IO.Path]::GetRandomFileName() + ".ps1")
     try {
-        $buffer -join "`r`n" | Set-Content -Path $tempPath -Encoding UTF8 -NoNewline
+        $buffer -join "`r`n" | Set-Content -Path $tempPath -Encoding $OutputEncoding -NoNewline
         # 原子替换：Move-Item -Force 在 Windows 上可直接覆盖同卷文件，
         # 无需先删除旧文件（避免"删除成功 + 移动失败"导致产物丢失的窗口）
         Move-Item -Path $tempPath -Destination $OutputPath -Force
@@ -246,7 +249,8 @@ function Main {
         -InstallerRoot $InstallerRoot `
         -FileOrder $bootstrapOrder `
         -OutputPath $bootstrapOutput `
-        -RequiresHeader "#Requires -Version 5.1"
+        -RequiresHeader "#Requires -Version 5.1" `
+        -OutputEncoding 'utf8BOM'
 
     # 构建 Installer 单文件版本
     Write-Host ""

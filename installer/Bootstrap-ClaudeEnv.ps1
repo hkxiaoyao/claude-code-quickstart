@@ -380,8 +380,10 @@ function Show-CompletionMessage {
     Write-UiInfo "• 安装过程支持断点续传，遇到问题可以重新运行"
     Write-Host ""
 
-    Write-UiInfo "按任意键退出..."
-    $null = [Console]::ReadKey($true)
+    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Write-UiInfo "按任意键退出..."
+        $null = [Console]::ReadKey($true)
+    }
 }
 
 function Main {
