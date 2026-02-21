@@ -187,8 +187,6 @@ function Install-WindowsTerminal {
         $choice = Show-SingleSelectMenu -Title "是否安装 Windows Terminal？" -Options $options
 
         if ($choice -eq 0) {
-            Write-UiInfo "正在安装 Windows Terminal..."
-
             # 尝试使用 winget 安装
             if (Test-CommandAvailable -Command "winget") {
                 try {
@@ -290,7 +288,6 @@ function Install-PowerShell7 {
         }
 
         Write-UiInfo "PowerShell 7 是运行主安装脚本的必要条件"
-        Write-UiInfo "正在安装 PowerShell 7..."
 
         # 尝试使用 winget 安装
         if (Test-CommandAvailable -Command "winget") {

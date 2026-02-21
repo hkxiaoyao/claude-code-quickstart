@@ -98,19 +98,24 @@ function Invoke-ExternalCommand {
                 $process.BeginOutputReadLine()
                 $process.BeginErrorReadLine()
 
-                # 等待进程完成或超时（循环轮询 + 心跳输出）
+                # 等待进程完成或超时（循环轮询 + 延迟心跳输出）
                 $elapsed = 0
-                $heartbeatInterval = 10
+                $heartbeatInterval = 1
+                $heartbeatDelaySeconds = 2
+                $heartbeatShown = $false
                 while (-not $process.WaitForExit($heartbeatInterval * 1000)) {
                     $elapsed += $heartbeatInterval
-                    if (-not $SuppressOutput) { Write-Host "." -NoNewline }
+                    if (-not $SuppressOutput -and $elapsed -ge $heartbeatDelaySeconds) {
+                        Write-Host "`r  等待中... ($elapsed 秒)" -NoNewline
+                        $heartbeatShown = $true
+                    }
                     if ($elapsed -ge $TimeoutSeconds) {
-                        if (-not $SuppressOutput) { Write-Host "" }
+                        if ($heartbeatShown) { Write-Host "" }
                         $process.Kill()
                         throw "命令执行超时 ($TimeoutSeconds 秒): $($result.Command)"
                     }
                 }
-                if (-not $SuppressOutput -and $elapsed -gt 0) { Write-Host "" }
+                if ($heartbeatShown) { Write-Host "" }
 
                 # 等待异步读取完成
                 $process.WaitForExit()
@@ -217,23 +222,51 @@ function Invoke-WingetInstall {
 
     Write-Host "正在安装 $PackageName..." -ForegroundColor Cyan
 
+    $maxAttempts = 2
+    $timeoutSeconds = 300
+
     try {
-        $result = Invoke-ExternalCommand -Command "winget" -Arguments $arguments -TimeoutSeconds 300 -RetryCount 1
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $wingetProcess = $null
+            try {
+                if ($attempt -gt 1) {
+                    Write-Host "重试第 $($attempt - 1) 次安装: $PackageName" -ForegroundColor Yellow
+                }
 
-        if ($result.Success) {
-            Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
+                # 直通模式：让 winget 输出直接写入当前控制台，保留原生 ANSI 进度条
+                $wingetProcess = Start-Process -FilePath "winget" -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
 
-            # 刷新 PATH 以确保新安装的命令可用
-            Refresh-SessionPath
+                # 超时保护：避免 winget 异常时无限等待
+                if (-not $wingetProcess.WaitForExit($timeoutSeconds * 1000)) {
+                    try { $wingetProcess.Kill() } catch { }
+                    throw "winget 安装超时 ($timeoutSeconds 秒)"
+                }
 
-            return @{
-                Success = $true
-                PackageId = $PackageId
-                PackageName = $PackageName
-                Output = $result.Output
+                if ($wingetProcess.ExitCode -eq 0) {
+                    Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
+
+                    # 刷新 PATH 以确保新安装的命令可用
+                    Refresh-SessionPath
+
+                    return @{
+                        Success = $true
+                        PackageId = $PackageId
+                        PackageName = $PackageName
+                        Output = ""
+                    }
+                } else {
+                    throw "winget 安装失败 (退出码: $($wingetProcess.ExitCode))"
+                }
+            } catch {
+                if ($attempt -lt $maxAttempts) {
+                    Write-Host "安装失败，准备重试: $($_.Exception.Message)" -ForegroundColor Yellow
+                    Start-Sleep -Seconds (2 * $attempt)
+                    continue
+                }
+                throw
+            } finally {
+                if ($wingetProcess) { $wingetProcess.Dispose() }
             }
-        } else {
-            throw "winget 安装失败: $($result.Error)"
         }
     } catch {
         Write-Host "✗ $PackageName 安装失败: $($_.Exception.Message)" -ForegroundColor Red
