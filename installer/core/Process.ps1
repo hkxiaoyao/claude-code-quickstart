@@ -227,25 +227,34 @@ function Invoke-WingetInstall {
 
     try {
         for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            $wingetProcess = $null
+            $proc = $null
             try {
                 if ($attempt -gt 1) {
                     Write-Host "重试第 $($attempt - 1) 次安装: $PackageName" -ForegroundColor Yellow
                 }
 
-                # 直通模式：让 winget 输出直接写入当前控制台，保留原生 ANSI 进度条
-                $wingetProcess = Start-Process -FilePath "winget" -ArgumentList $arguments -NoNewWindow -PassThru -ErrorAction Stop
+                # 使用 .NET Process 直通模式：不重定向输出，winget 进度条直接写入控制台
+                $procInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $procInfo.FileName = "winget"
+                $procInfo.Arguments = $arguments -join ' '
+                $procInfo.UseShellExecute = $false
+                $procInfo.RedirectStandardOutput = $false
+                $procInfo.RedirectStandardError = $false
+                $procInfo.CreateNoWindow = $false
+
+                $proc = New-Object System.Diagnostics.Process
+                $proc.StartInfo = $procInfo
+                [void]$proc.Start()
 
                 # 超时保护：避免 winget 异常时无限等待
-                if (-not $wingetProcess.WaitForExit($timeoutSeconds * 1000)) {
-                    try { $wingetProcess.Kill() } catch { }
+                if (-not $proc.WaitForExit($timeoutSeconds * 1000)) {
+                    try { $proc.Kill() } catch { }
                     throw "winget 安装超时 ($timeoutSeconds 秒)"
                 }
 
-                # 确保进程完全退出并填充 ExitCode（PowerShell 已知问题）
-                $wingetProcess.WaitForExit()
+                $exitCode = $proc.ExitCode
 
-                if ($wingetProcess.ExitCode -eq 0) {
+                if ($exitCode -eq 0) {
                     Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
 
                     # 刷新 PATH 以确保新安装的命令可用
@@ -258,7 +267,7 @@ function Invoke-WingetInstall {
                         Output = ""
                     }
                 } else {
-                    throw "winget 安装失败 (退出码: $($wingetProcess.ExitCode))"
+                    throw "winget 安装失败 (退出码: $exitCode)"
                 }
             } catch {
                 if ($attempt -lt $maxAttempts) {
@@ -268,7 +277,7 @@ function Invoke-WingetInstall {
                 }
                 throw
             } finally {
-                if ($wingetProcess) { $wingetProcess.Dispose() }
+                if ($proc) { $proc.Dispose() }
             }
         }
     } catch {
