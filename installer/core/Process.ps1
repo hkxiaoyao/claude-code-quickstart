@@ -242,6 +242,9 @@ function Invoke-WingetInstall {
                     throw "winget 安装超时 ($timeoutSeconds 秒)"
                 }
 
+                # 确保进程完全退出并填充 ExitCode（PowerShell 已知问题）
+                $wingetProcess.WaitForExit()
+
                 if ($wingetProcess.ExitCode -eq 0) {
                     Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
 
