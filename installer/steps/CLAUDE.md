@@ -58,7 +58,7 @@ function Rollback-StepXX {
 | Step08 | Claude 基础配置 | — | ✓ | Step07 |
 | Step09 | CLAUDE.md 配置 | — | ✓ | Step08 |
 | Step10 | MCP Server 配置 | — | ✓ | Step08 |
-| Step11 | CCG 工作流 | — | ✓ | Step03 + Step08 |
+| Step11 | CCG 工作流 | — | ✓ | Step02 + Step08 |
 | Step12 | Codex CLI | **✓** | ✓ | Step02 |
 | Step13 | Gemini CLI | **✓** | ✓ | Step02 |
 
@@ -215,11 +215,26 @@ $script:ApiProviders = @{
 
 ## Step11 — CCG 工作流
 
-**文件**：`Step11.CcgWorkflow.ps1`（495 行）
-**依赖**：Step03.Git + Step08.ClaudeConfig（双依赖）
+**文件**：`Step11.CcgWorkflow.ps1`（约 369 行）
+**依赖**：Step02.NodeFnm + Step08.ClaudeConfig
 
-**功能**：安装 Claude Code Generator 工作流脚本和 Slash Commands 配置。
-所有文件写入使用 `Write-FileAtomically -FilePath`（**注意参数名**）。
+**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎。
+
+**安装命令**：
+```powershell
+npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir "$env:USERPROFILE\.claude"
+```
+
+**安装后目录结构**：
+- `~/.claude/commands/ccg/` — 命令模板（Slash Commands）
+- `~/.claude/agents/ccg/` — Agent 模板
+- `~/.claude/.ccg/` — CCG 配置目录（含 config.toml）
+- `~/.claude/bin/codeagent-wrapper.exe` — 核心二进制
+
+**关键机制**：
+- `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Step10 的 MCP 配置
+- 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
+- 安装后立即调用 `Refresh-SessionPath`
 
 ---
 

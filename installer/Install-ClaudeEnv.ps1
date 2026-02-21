@@ -3,15 +3,15 @@
 # 作者: 哈雷酱 (本小姐的架构设计杰作！)
 # 功能: PS7+ 主安装脚本，提供一键和分阶段安装模式，支持断点续传
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
 param(
     [switch]$Resume,
     [switch]$OneClick,
     [switch]$Staged,
     [switch]$ListSteps
 )
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
 # 安装器根目录（使用 $PSScriptRoot 避免被 dot-source 覆盖）
 $script:InstallerRoot = $PSScriptRoot

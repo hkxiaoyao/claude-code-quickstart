@@ -368,7 +368,7 @@ function Get-StepDependencies {
         "Step08.ClaudeConfig" = @("Step07.ApiKey")
         "Step09.ClaudeMd" = @("Step08.ClaudeConfig")
         "Step10.Mcp" = @("Step08.ClaudeConfig")
-        "Step11.CcgWorkflow" = @("Step03.Git", "Step08.ClaudeConfig")
+        "Step11.CcgWorkflow" = @("Step02.NodeFnm", "Step08.ClaudeConfig")
         "Step12.CodexCli" = @("Step02.NodeFnm")
         "Step13.GeminiCli" = @("Step02.NodeFnm")
     }

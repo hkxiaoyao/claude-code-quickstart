@@ -40,13 +40,14 @@ graph TD
 ```
 Step01.Proxy ─────────────────────────────────────────────────────────
 ├── Step02.NodeFnm ──────────────────────────────────── Step12.CodexCli [可选]
-│   └── Step04.ClaudeCode                              Step13.GeminiCli [可选]
-│       ├── Step05.Ccline
-│       ├── Step06.CcSwitch
-│       └── Step07.ApiKey → Step08.ClaudeConfig ──┬── Step09.ClaudeMd
-│                                                  └── Step10.Mcp
-└── Step03.Git ─────────────────────────────────── Step11.CcgWorkflow
-                                                   (还依赖 Step08.ClaudeConfig)
+│   ├── Step04.ClaudeCode                              Step13.GeminiCli [可选]
+│   │   ├── Step05.Ccline
+│   │   ├── Step06.CcSwitch
+│   │   └── Step07.ApiKey → Step08.ClaudeConfig ──┬── Step09.ClaudeMd
+│   │                                              └── Step10.Mcp
+│   └── Step11.CcgWorkflow
+│       (还依赖 Step08.ClaudeConfig)
+└── Step03.Git
 ```
 
 ---

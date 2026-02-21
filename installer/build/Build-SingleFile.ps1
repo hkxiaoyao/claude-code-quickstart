@@ -56,6 +56,51 @@ function Get-MainInstallerBuildOrder {
     )
 }
 
+function Get-ScriptParamBlockInfo {
+    <#
+    .SYNOPSIS
+    解析脚本的顶层 param 块，并返回其行号范围与原始文本行
+    .PARAMETER ScriptPath
+    脚本绝对路径
+    .RETURNS
+    hashtable 或 $null（无 param 块时）
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [string]$ScriptPath
+    )
+
+    if (-not (Test-Path $ScriptPath -PathType Leaf)) {
+        return $null
+    }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+        $ScriptPath, [ref]$tokens, [ref]$errors
+    )
+
+    if (-not $ast.ParamBlock) {
+        return $null
+    }
+
+    $startLine = $ast.ParamBlock.Extent.StartLineNumber
+    $endLine = $ast.ParamBlock.Extent.EndLineNumber
+    $allLines = Get-Content -Path $ScriptPath -Encoding UTF8
+
+    if ($allLines.Count -lt $startLine) {
+        return $null
+    }
+
+    $paramLines = $allLines[($startLine - 1)..($endLine - 1)]
+
+    return @{
+        StartLine = $startLine
+        EndLine = $endLine
+        Lines = $paramLines
+    }
+}
+
 # ─── 核心构建函数 ──────────────────────────────────────────────────────────────
 
 function Build-SingleFileScript {
@@ -83,6 +128,9 @@ function Build-SingleFileScript {
 
         [Parameter(Mandatory)]
         [string]$RequiresHeader,
+
+        # 需要被提升到单文件顶部的 param 来源文件（相对 installer/）
+        [string]$HoistParamFromRelativePath = '',
 
         # PS5 读脚本默认用 ANSI，需要 BOM 才能识别 UTF-8；PS7 无此限制
         [string]$OutputEncoding = 'UTF8'
@@ -114,6 +162,21 @@ function Build-SingleFileScript {
     $buffer.Add($RequiresHeader)
     $buffer.Add("")
 
+    # 需要时将入口脚本 param 块提升到最顶部（#Requires 之后）
+    $hoistedParamInfo = $null
+    if ($HoistParamFromRelativePath) {
+        $paramSourcePath = Join-Path $InstallerRoot $HoistParamFromRelativePath
+        $hoistedParamInfo = Get-ScriptParamBlockInfo -ScriptPath $paramSourcePath
+        if (-not $hoistedParamInfo) {
+            throw "未找到可提升的 param 块: $paramSourcePath"
+        }
+
+        foreach ($paramLine in $hoistedParamInfo.Lines) {
+            $buffer.Add($paramLine)
+        }
+        $buffer.Add("")
+    }
+
     # dot-source 行匹配模式（已内联的依赖无需再 dot-source）
     # 注意：本过滤基于行文本，覆盖 `. "path"`、`. 'path'`、`. $var` 等所有常见形式。
     # 约束：不适用于 here-string 内含有 `. ` 开头的普通文本行（当前源文件中不存在此情况）。
@@ -131,7 +194,18 @@ function Build-SingleFileScript {
 
         # 读取并过滤内容
         $lines = Get-Content -Path $fullPath -Encoding UTF8
+        $lineNumber = 0
         foreach ($line in $lines) {
+            $lineNumber++
+
+            # 跳过已提升到脚本顶部的 param 块，避免重复定义
+            if ($hoistedParamInfo -and
+                $relPath -eq $HoistParamFromRelativePath -and
+                $lineNumber -ge $hoistedParamInfo.StartLine -and
+                $lineNumber -le $hoistedParamInfo.EndLine) {
+                continue
+            }
+
             # 剥离 dot-source 行（已内联）
             if ($line -match $dotSourcePattern) {
                 continue
@@ -261,7 +335,8 @@ function Main {
         -InstallerRoot $InstallerRoot `
         -FileOrder $installerOrder `
         -OutputPath $installerOutput `
-        -RequiresHeader "#Requires -Version 7.0"
+        -RequiresHeader "#Requires -Version 7.0" `
+        -HoistParamFromRelativePath 'Install-ClaudeEnv.ps1'
 
     # 语法检查
     Write-Host ""
