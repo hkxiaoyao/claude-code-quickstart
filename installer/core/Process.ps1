@@ -73,20 +73,22 @@ function Invoke-ExternalCommand {
             $process = New-Object System.Diagnostics.Process
             $process.StartInfo = $processInfo
 
-            # 输出和错误收集
-            $outputBuilder = New-Object System.Text.StringBuilder
-            $errorBuilder = New-Object System.Text.StringBuilder
+            # 输出和错误收集（通过 -MessageData 传递共享状态，避免事件处理器作用域隔离问题）
+            $sharedState = @{
+                Output = New-Object System.Text.StringBuilder
+                Error  = New-Object System.Text.StringBuilder
+            }
 
             # 注册事件处理器
-            $outputEvent = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -Action {
+            $outputEvent = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData $sharedState -Action {
                 if ($Event.SourceEventArgs.Data) {
-                    [void]$outputBuilder.AppendLine($Event.SourceEventArgs.Data)
+                    [void]$Event.MessageData.Output.AppendLine($Event.SourceEventArgs.Data)
                 }
             }
 
-            $errorEvent = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -Action {
+            $errorEvent = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData $sharedState -Action {
                 if ($Event.SourceEventArgs.Data) {
-                    [void]$errorBuilder.AppendLine($Event.SourceEventArgs.Data)
+                    [void]$Event.MessageData.Error.AppendLine($Event.SourceEventArgs.Data)
                 }
             }
 
@@ -96,19 +98,27 @@ function Invoke-ExternalCommand {
                 $process.BeginOutputReadLine()
                 $process.BeginErrorReadLine()
 
-                # 等待进程完成或超时
-                if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-                    $process.Kill()
-                    throw "命令执行超时 ($TimeoutSeconds 秒): $($result.Command)"
+                # 等待进程完成或超时（循环轮询 + 心跳输出）
+                $elapsed = 0
+                $heartbeatInterval = 10
+                while (-not $process.WaitForExit($heartbeatInterval * 1000)) {
+                    $elapsed += $heartbeatInterval
+                    if (-not $SuppressOutput) { Write-Host "." -NoNewline }
+                    if ($elapsed -ge $TimeoutSeconds) {
+                        if (-not $SuppressOutput) { Write-Host "" }
+                        $process.Kill()
+                        throw "命令执行超时 ($TimeoutSeconds 秒): $($result.Command)"
+                    }
                 }
+                if (-not $SuppressOutput -and $elapsed -gt 0) { Write-Host "" }
 
                 # 等待异步读取完成
                 $process.WaitForExit()
 
                 # 收集结果
                 $result.ExitCode = $process.ExitCode
-                $result.Output = $outputBuilder.ToString().Trim()
-                $result.Error = $errorBuilder.ToString().Trim()
+                $result.Output = $sharedState.Output.ToString().Trim()
+                $result.Error = $sharedState.Error.ToString().Trim()
                 $result.Success = ($process.ExitCode -eq 0)
 
                 if ($result.Success) {
@@ -131,9 +141,15 @@ function Invoke-ExternalCommand {
                     }
                 }
             } finally {
-                # 清理事件处理器
-                if ($outputEvent) { Unregister-Event -SourceIdentifier $outputEvent.Name }
-                if ($errorEvent) { Unregister-Event -SourceIdentifier $errorEvent.Name }
+                # 清理事件处理器和关联的后台作业
+                if ($outputEvent) {
+                    Unregister-Event -SourceIdentifier $outputEvent.Name -ErrorAction SilentlyContinue
+                    Remove-Job -Id $outputEvent.Id -Force -ErrorAction SilentlyContinue
+                }
+                if ($errorEvent) {
+                    Unregister-Event -SourceIdentifier $errorEvent.Name -ErrorAction SilentlyContinue
+                    Remove-Job -Id $errorEvent.Id -Force -ErrorAction SilentlyContinue
+                }
 
                 # 确保进程被清理
                 if (-not $process.HasExited) {
@@ -193,7 +209,7 @@ function Invoke-WingetInstall {
     }
 
     # 构建参数
-    $arguments = @("install", $PackageId)
+    $arguments = @("install", "--id", $PackageId, "-e", "--source", "winget", "--disable-interactivity")
 
     if ($AcceptLicense) { $arguments += "--accept-package-agreements", "--accept-source-agreements" }
     if ($Silent) { $arguments += "--silent" }
@@ -202,7 +218,7 @@ function Invoke-WingetInstall {
     Write-Host "正在安装 $PackageName..." -ForegroundColor Cyan
 
     try {
-        $result = Invoke-ExternalCommand -Command "winget" -Arguments $arguments -TimeoutSeconds 600
+        $result = Invoke-ExternalCommand -Command "winget" -Arguments $arguments -TimeoutSeconds 300 -RetryCount 1
 
         if ($result.Success) {
             Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
