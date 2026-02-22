@@ -270,20 +270,47 @@ function Install-Step01 {
         # 6. 验证 Node.js 和 npm
         Write-UiInfo "🔍 验证 Node.js 和 npm 安装..."
 
-        if (Test-CommandAvailable -Command "node") {
+        # 验证 Node.js
+        $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
+        if ($nodeDetails.Available) {
             $nodeVersion = Get-CommandVersion -Command "node"
             $result.Data["NodeVersion"] = $nodeVersion
+            $result.Data["NodePath"] = $nodeDetails.ResolvedPath
             Write-UiSuccess "✓ Node.js 验证成功 (版本: $nodeVersion)"
+            Write-UiInfo "  路径: $($nodeDetails.ResolvedPath)"
         } else {
-            throw "Node.js 安装后不可用，请重新启动 PowerShell 后重试"
+            $errorMsg = "Node.js 安装后不可用"
+            if ($nodeDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($nodeDetails.ResolvedPath)"
+            }
+            if ($nodeDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($nodeDetails.ErrorMessage)"
+            }
+            $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试，或手动执行: . `$PROFILE"
+            throw $errorMsg
         }
 
-        if (Test-CommandAvailable -Command "npm") {
+        # 验证 npm
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        if ($npmDetails.Available) {
             $npmVersion = Get-CommandVersion -Command "npm"
             $result.Data["NpmVersion"] = $npmVersion
+            $result.Data["NpmPath"] = $npmDetails.ResolvedPath
             Write-UiSuccess "✓ npm 验证成功 (版本: $npmVersion)"
+            Write-UiInfo "  路径: $($npmDetails.ResolvedPath)"
         } else {
-            throw "npm 安装后不可用"
+            $errorMsg = "npm 安装后不可用"
+            if ($npmDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
+            }
+            if ($npmDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($npmDetails.ErrorMessage)"
+            }
+            if ($npmDetails.ExitCode -ne -1) {
+                $errorMsg += "`n  退出码: $($npmDetails.ExitCode)"
+            }
+            $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试，或手动执行: . `$PROFILE"
+            throw $errorMsg
         }
 
         # 5. 配置 npm 镜像源（可选优化）

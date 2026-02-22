@@ -73,12 +73,27 @@ function Install-Step04 {
         # 1. 检查前置条件
         Write-Host "1. 检查前置条件..." -ForegroundColor Gray
 
-        if (-not (Test-CommandAvailable -Command "claude")) {
-            throw "Claude Code 未安装，请先完成 Step03"
+        # 验证 Claude Code
+        $claudeDetails = Test-CommandAvailable -Command "claude" -ReturnDetails
+        if (-not $claudeDetails.Available) {
+            $errorMsg = "Claude Code 未安装，请先完成 Step03"
+            if ($claudeDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($claudeDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
 
-        if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "npm 未安装，请先完成 Step01"
+        # 验证 npm
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        if (-not $npmDetails.Available) {
+            $errorMsg = "npm 未安装，请先完成 Step01"
+            if ($npmDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
+            }
+            if ($npmDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($npmDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
 
         Write-Host "✓ 前置条件检查完成" -ForegroundColor Green

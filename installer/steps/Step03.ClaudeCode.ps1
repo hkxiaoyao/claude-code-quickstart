@@ -137,8 +137,13 @@ function Install-Step03 {
         # 先刷新 PATH 确保能找到 node 和 npm
         Refresh-SessionPath
 
-        if (-not (Test-CommandAvailable -Command "node")) {
+        # 验证 Node.js
+        $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
+        if (-not $nodeDetails.Available) {
             Write-UiError "✗ Node.js 未找到"
+            if ($nodeDetails.ErrorMessage) {
+                Write-UiInfo "  错误详情: $($nodeDetails.ErrorMessage)"
+            }
             Write-UiInfo "💡 这可能是因为 fnm 环境变量尚未在当前会话中生效"
             Write-UiInfo "💡 请尝试以下操作之一："
             Write-UiInfo "   1. 重新启动 PowerShell 后运行: pwsh -File installer/Install-ClaudeEnv.ps1 -Resume"
@@ -146,7 +151,16 @@ function Install-Step03 {
             throw "Node.js 未安装或不可用，请先完成 Step01 并重新启动 PowerShell"
         }
 
-        if (-not (Test-CommandAvailable -Command "npm")) {
+        # 验证 npm
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        if (-not $npmDetails.Available) {
+            Write-UiError "✗ npm 未找到"
+            if ($npmDetails.ResolvedPath) {
+                Write-UiInfo "  解析路径: $($npmDetails.ResolvedPath)"
+            }
+            if ($npmDetails.ErrorMessage) {
+                Write-UiInfo "  错误详情: $($npmDetails.ErrorMessage)"
+            }
             throw "npm 未安装，请先完成 Step01 并重新启动 PowerShell"
         }
 
@@ -226,7 +240,8 @@ function Install-Step03 {
         Start-Sleep -Seconds 2
 
         # 验证 claude 命令是否可用
-        if (-not (Test-CommandAvailable -Command "claude")) {
+        $claudeDetails = Test-CommandAvailable -Command "claude" -ReturnDetails
+        if (-not $claudeDetails.Available) {
             # 尝试手动添加 npm 全局路径
             try {
                 $npmGlobalPath = & npm config get prefix 2>$null
@@ -239,8 +254,17 @@ function Install-Step03 {
             }
 
             # 再次验证
-            if (-not (Test-CommandAvailable -Command "claude")) {
-                throw "Claude Code 安装后仍不可用，请重新启动终端后重试"
+            $claudeDetails = Test-CommandAvailable -Command "claude" -ReturnDetails
+            if (-not $claudeDetails.Available) {
+                $errorMsg = "Claude Code 安装后仍不可用"
+                if ($claudeDetails.ResolvedPath) {
+                    $errorMsg += "`n  解析路径: $($claudeDetails.ResolvedPath)"
+                }
+                if ($claudeDetails.ErrorMessage) {
+                    $errorMsg += "`n  错误详情: $($claudeDetails.ErrorMessage)"
+                }
+                $errorMsg += "`n  建议: 请重新启动终端后重试"
+                throw $errorMsg
             }
         }
 

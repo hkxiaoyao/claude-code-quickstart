@@ -105,14 +105,40 @@ function Install-Step10 {
         # ── 前置检查 ──
         Refresh-SessionPath
 
-        if (-not (Test-CommandAvailable -Command "node")) {
-            throw "未找到 node 命令，请检查 Node.js 安装 (Step01)"
+        # 验证 Node.js
+        $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
+        if (-not $nodeDetails.Available) {
+            $errorMsg = "未找到 node 命令，请检查 Node.js 安装 (Step01)"
+            if ($nodeDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($nodeDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
-        if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "未找到 npm 命令，请检查 Node.js 安装 (Step01)"
+
+        # 验证 npm
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        if (-not $npmDetails.Available) {
+            $errorMsg = "未找到 npm 命令，请检查 Node.js 安装 (Step01)"
+            if ($npmDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
+            }
+            if ($npmDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($npmDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
-        if (-not (Test-CommandAvailable -Command "npx")) {
-            throw "未找到 npx 命令，请检查 Node.js 安装 (Step01)"
+
+        # 验证 npx
+        $npxDetails = Test-CommandAvailable -Command "npx" -ReturnDetails
+        if (-not $npxDetails.Available) {
+            $errorMsg = "未找到 npx 命令，请检查 Node.js 安装 (Step01)"
+            if ($npxDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($npxDetails.ResolvedPath)"
+            }
+            if ($npxDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($npxDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
 
         Write-UiSuccess "环境检查: Node.js & npm 已就绪"

@@ -28,7 +28,7 @@ function Invoke-ExternalCommand {
     .PARAMETER SuppressOutput
     抑制输出
     .RETURNS
-    包含 ExitCode, Output, Error 的对象
+    包含 ExitCode, Output, Error, ResolvedPath 的对象
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -51,6 +51,49 @@ function Invoke-ExternalCommand {
         Error = ""
         Success = $false
         Command = "$Command $($Arguments -join ' ')"
+        ResolvedPath = ""
+    }
+
+    # 先解析命令路径，确定执行方式
+    $cmdInfo = $null
+    $actualFileName = $Command
+    $actualArguments = $Arguments
+
+    try {
+        $cmdInfo = Get-Command $Command -ErrorAction Stop
+        $result.ResolvedPath = $cmdInfo.Source
+
+        # 根据命令类型选择执行方式
+        if ($cmdInfo.CommandType -eq 'Application' -or $cmdInfo.CommandType -eq 'ExternalScript') {
+            $extension = [System.IO.Path]::GetExtension($cmdInfo.Source).ToLower()
+
+            # 对于 .cmd/.bat 文件，需要通过 cmd.exe 执行
+            if ($extension -eq '.cmd' -or $extension -eq '.bat') {
+                $actualFileName = 'cmd.exe'
+                # 构建完整的命令字符串（路径 + 参数）
+                $cmdPath = $cmdInfo.Source
+                if ($cmdPath -match '\s') {
+                    $cmdPath = "`"$cmdPath`""
+                }
+                $fullCommand = $cmdPath
+                if ($Arguments.Count -gt 0) {
+                    $fullCommand += " " + ($Arguments -join ' ')
+                }
+                $actualArguments = @('/d', '/s', '/c', $fullCommand)
+            }
+            # 对于 .ps1 文件，通过 powershell 执行
+            elseif ($extension -eq '.ps1') {
+                $actualFileName = 'pwsh.exe'
+                $actualArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $cmdInfo.Source) + $Arguments
+            }
+            # 对于 .exe 文件，直接使用解析后的完整路径
+            elseif ($extension -eq '.exe') {
+                $actualFileName = $cmdInfo.Source
+            }
+        }
+    } catch {
+        # Get-Command 失败，尝试直接执行（可能是系统命令）
+        $result.ResolvedPath = "未解析"
     }
 
     for ($attempt = 1; $attempt -le ($RetryCount + 1); $attempt++) {
@@ -61,8 +104,8 @@ function Invoke-ExternalCommand {
 
             # 构建进程启动信息
             $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $processInfo.FileName = $Command
-            $processInfo.Arguments = $Arguments -join ' '
+            $processInfo.FileName = $actualFileName
+            $processInfo.Arguments = $actualArguments -join ' '
             $processInfo.WorkingDirectory = $WorkingDirectory
             $processInfo.UseShellExecute = $false
             $processInfo.RedirectStandardOutput = $true
@@ -73,36 +116,24 @@ function Invoke-ExternalCommand {
             $process = New-Object System.Diagnostics.Process
             $process.StartInfo = $processInfo
 
-            # 输出和错误收集（通过 -MessageData 传递共享状态，避免事件处理器作用域隔离问题）
-            $sharedState = @{
-                Output = New-Object System.Text.StringBuilder
-                Error  = New-Object System.Text.StringBuilder
-            }
-
-            # 注册事件处理器
-            $outputEvent = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData $sharedState -Action {
-                if ($Event.SourceEventArgs.Data) {
-                    [void]$Event.MessageData.Output.AppendLine($Event.SourceEventArgs.Data)
-                }
-            }
-
-            $errorEvent = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData $sharedState -Action {
-                if ($Event.SourceEventArgs.Data) {
-                    [void]$Event.MessageData.Error.AppendLine($Event.SourceEventArgs.Data)
-                }
-            }
-
             try {
-                # 启动进程并开始异步读取
+                # 启动进程
                 [void]$process.Start()
-                $process.BeginOutputReadLine()
-                $process.BeginErrorReadLine()
 
-                # 等待进程完成或超时（循环轮询 + 延迟心跳输出）
+                # 同步读取输出（避免快速命令输出丢失）
+                $outputBuilder = New-Object System.Text.StringBuilder
+                $errorBuilder = New-Object System.Text.StringBuilder
+
+                # 异步读取任务
+                $outputTask = $process.StandardOutput.ReadToEndAsync()
+                $errorTask = $process.StandardError.ReadToEndAsync()
+
+                # 等待进程完成或超时
                 $elapsed = 0
                 $heartbeatInterval = 1
                 $heartbeatDelaySeconds = 2
                 $heartbeatShown = $false
+
                 while (-not $process.WaitForExit($heartbeatInterval * 1000)) {
                     $elapsed += $heartbeatInterval
                     if (-not $SuppressOutput -and $elapsed -ge $heartbeatDelaySeconds) {
@@ -117,13 +148,17 @@ function Invoke-ExternalCommand {
                 }
                 if ($heartbeatShown) { Write-Host "" }
 
-                # 等待异步读取完成
+                # 确保进程完全退出
                 $process.WaitForExit()
+
+                # 等待输出读取完成
+                $outputText = $outputTask.GetAwaiter().GetResult()
+                $errorText = $errorTask.GetAwaiter().GetResult()
 
                 # 收集结果
                 $result.ExitCode = $process.ExitCode
-                $result.Output = $sharedState.Output.ToString().Trim()
-                $result.Error = $sharedState.Error.ToString().Trim()
+                $result.Output = $outputText.Trim()
+                $result.Error = $errorText.Trim()
                 $result.Success = ($process.ExitCode -eq 0)
 
                 if ($result.Success) {
@@ -136,26 +171,19 @@ function Invoke-ExternalCommand {
                     if ($result.Error) {
                         $errorMessage += "`n错误输出: $($result.Error)"
                     }
+                    if ($result.ResolvedPath) {
+                        $errorMessage += "`n解析路径: $($result.ResolvedPath)"
+                    }
 
                     if ($attempt -le $RetryCount) {
                         Write-Host $errorMessage -ForegroundColor Yellow
-                        Start-Sleep -Seconds (2 * $attempt)  # 递增延迟
+                        Start-Sleep -Seconds (2 * $attempt)
                         continue
                     } else {
                         throw $errorMessage
                     }
                 }
             } finally {
-                # 清理事件处理器和关联的后台作业
-                if ($outputEvent) {
-                    Unregister-Event -SourceIdentifier $outputEvent.Name -ErrorAction SilentlyContinue
-                    Remove-Job -Id $outputEvent.Id -Force -ErrorAction SilentlyContinue
-                }
-                if ($errorEvent) {
-                    Unregister-Event -SourceIdentifier $errorEvent.Name -ErrorAction SilentlyContinue
-                    Remove-Job -Id $errorEvent.Id -Force -ErrorAction SilentlyContinue
-                }
-
                 # 确保进程被清理
                 if (-not $process.HasExited) {
                     try { $process.Kill() } catch { }
@@ -356,59 +384,121 @@ function Test-CommandAvailable {
     检测命令是否可用（验证实际可执行性）
     .PARAMETER Command
     要检测的命令名
+    .PARAMETER ReturnDetails
+    返回详细诊断信息而非布尔值
     .RETURNS
-    布尔值，表示命令是否可用
+    布尔值（默认）或详细诊断对象（ReturnDetails=true）
     #>
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Command
+        [string]$Command,
+
+        [switch]$ReturnDetails
     )
+
+    $details = @{
+        Available = $false
+        ResolvedPath = ""
+        CommandType = ""
+        ExitCode = -1
+        ErrorMessage = ""
+        Output = ""
+    }
 
     try {
         # 先用 Get-Command 检测命令路径
         $cmdInfo = Get-Command $Command -ErrorAction Stop
+        $details.ResolvedPath = $cmdInfo.Source
+        $details.CommandType = $cmdInfo.CommandType
 
         # 如果是外部命令（Application），验证文件是否真实存在
         if ($cmdInfo.CommandType -eq 'Application') {
             $exePath = $cmdInfo.Source
             if (-not (Test-Path $exePath -PathType Leaf)) {
-                # PATH 中有记录但文件不存在
+                $details.ErrorMessage = "PATH 中有记录但文件不存在: $exePath"
+                if ($ReturnDetails) { return $details }
                 return $false
             }
         }
 
-        # 通过实际执行验证命令可用性（最终验证）
+        # 如果是 PowerShell 内置命令（Cmdlet/Function/Alias），Get-Command 成功即可用
+        if ($cmdInfo.CommandType -in @('Cmdlet', 'Function', 'Alias')) {
+            $details.Available = $true
+            if ($ReturnDetails) { return $details }
+            return $true
+        }
+
+        # 对于外部命令，通过实际执行验证可用性
         try {
             $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
-            return $result.Success
+            $details.ExitCode = $result.ExitCode
+            $details.Output = $result.Output
+            $details.Available = $result.Success
+
+            if ($result.Success) {
+                if ($ReturnDetails) { return $details }
+                return $true
+            } else {
+                $details.ErrorMessage = $result.Error
+            }
         } catch {
             # 尝试 -v 参数
             try {
                 $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
-                return $result.Success
-            } catch {
-                # 如果是 PowerShell 内置命令（Cmdlet/Function），Get-Command 成功即可用
-                if ($cmdInfo.CommandType -in @('Cmdlet', 'Function', 'Alias')) {
+                $details.ExitCode = $result.ExitCode
+                $details.Output = $result.Output
+                $details.Available = $result.Success
+
+                if ($result.Success) {
+                    if ($ReturnDetails) { return $details }
                     return $true
+                } else {
+                    $details.ErrorMessage = $result.Error
                 }
-                return $false
+            } catch {
+                $details.ErrorMessage = $_.Exception.Message
             }
         }
 
     } catch {
         # Get-Command 失败，尝试直接执行验证
+        $details.ErrorMessage = "Get-Command 失败: $($_.Exception.Message)"
+
         try {
             $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
-            return $result.Success
+            $details.ExitCode = $result.ExitCode
+            $details.Output = $result.Output
+            $details.Available = $result.Success
+            $details.ResolvedPath = $result.ResolvedPath
+
+            if ($result.Success) {
+                if ($ReturnDetails) { return $details }
+                return $true
+            } else {
+                $details.ErrorMessage = $result.Error
+            }
         } catch {
             try {
                 $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
-                return $result.Success
+                $details.ExitCode = $result.ExitCode
+                $details.Output = $result.Output
+                $details.Available = $result.Success
+                $details.ResolvedPath = $result.ResolvedPath
+
+                if ($result.Success) {
+                    if ($ReturnDetails) { return $details }
+                    return $true
+                } else {
+                    $details.ErrorMessage = $result.Error
+                }
             } catch {
-                return $false
+                $details.ErrorMessage = $_.Exception.Message
             }
         }
     }
+
+    if ($ReturnDetails) { return $details }
+    return $false
 }
 
 function Get-CommandVersion {
@@ -428,10 +518,6 @@ function Get-CommandVersion {
 
         [string]$VersionArgument = "--version"
     )
-
-    if (-not (Test-CommandAvailable -Command $Command)) {
-        return "未安装"
-    }
 
     # 特殊处理：对于 PowerShell 命令，直接使用 Get-Command 获取版本
     if ($Command -eq "pwsh" -or $Command -eq "powershell") {
@@ -527,13 +613,16 @@ function Refresh-SessionPath {
 
         Write-Host "✓ PATH 环境变量已刷新" -ForegroundColor Green
 
-        # 验证一些常见命令是否现在可用
+        # 快速验证常见命令（仅使用 Get-Command，不实际执行）
         $commonCommands = @("node", "npm", "git", "winget", "pwsh", "claude")
         $availableCommands = @()
 
         foreach ($cmd in $commonCommands) {
-            if (Test-CommandAvailable -Command $cmd) {
+            try {
+                $cmdInfo = Get-Command $cmd -ErrorAction Stop
                 $availableCommands += $cmd
+            } catch {
+                # 命令不可用，跳过
             }
         }
 

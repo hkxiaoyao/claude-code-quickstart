@@ -70,8 +70,16 @@ function Install-Step12 {
         Write-UiInfo "安装 Gemini CLI..."
 
         # 检查 Node.js 是否可用
-        if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "npm 不可用，请先安装 Node.js"
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        if (-not $npmDetails.Available) {
+            $errorMsg = "npm 不可用，请先安装 Node.js"
+            if ($npmDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
+            }
+            if ($npmDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($npmDetails.ErrorMessage)"
+            }
+            throw $errorMsg
         }
 
         # 全局安装 Gemini CLI（HC-2: 无 -DisplayName 参数）
@@ -88,8 +96,17 @@ function Install-Step12 {
 
         # 验证安装
         Start-Sleep -Seconds 2
-        if (-not (Test-CommandAvailable -Command "gemini")) {
-            throw "安装后 gemini 命令仍不可用"
+        $geminiDetails = Test-CommandAvailable -Command "gemini" -ReturnDetails
+        if (-not $geminiDetails.Available) {
+            $errorMsg = "安装后 gemini 命令仍不可用"
+            if ($geminiDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($geminiDetails.ResolvedPath)"
+            }
+            if ($geminiDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($geminiDetails.ErrorMessage)"
+            }
+            $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试"
+            throw $errorMsg
         }
 
         $version = Get-CommandVersion -Command "gemini"
