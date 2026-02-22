@@ -1,6 +1,6 @@
 ﻿# Step02.Git.ps1 - Git 安装和基础配置
 # 作者: 哈雷酱 (本小姐的版本控制杰作！)
-# 功能: 安装 Git 并进行基础配置（user.name/email）
+# 功能: 安装 Git 并配置基础环境
 
 #Requires -Version 5.1
 
@@ -62,66 +62,38 @@ function Test-Step02Installed {
             Write-UiWarn "⚠ Git 未安装"
         }
 
-        # 检查 Git 基础配置
-        $configChecks = @{
-            "UserName" = $false
-            "UserEmail" = $false
-            "CoreEditor" = $false
-            "InitDefaultBranch" = $false
-        }
+        # 判断是否已完全安装和配置
+        # 检查项：Git 可用 + 版本 + 推荐配置哨兵 + .bashrc managed block
+        $allDelivered = $gitAvailable -and $result.Version
 
-        if ($gitAvailable) {
-            try {
-                # 检查 user.name
-                $userName = & git config --global --get user.name 2>$null
-                if ($userName) {
-                    $configChecks["UserName"] = $true
-                    $result.Data["UserName"] = $userName
-                    Write-UiSuccess "✓ Git user.name 已配置: $userName"
-                } else {
-                    Write-UiWarn "⚠ Git user.name 未配置"
-                }
-
-                # 检查 user.email
-                $userEmail = & git config --global --get user.email 2>$null
-                if ($userEmail) {
-                    $configChecks["UserEmail"] = $true
-                    $result.Data["UserEmail"] = $userEmail
-                    Write-UiSuccess "✓ Git user.email 已配置: $userEmail"
-                } else {
-                    Write-UiWarn "⚠ Git user.email 未配置"
-                }
-
-                # 检查核心编辑器配置
-                $coreEditor = & git config --global --get core.editor 2>$null
-                if ($coreEditor) {
-                    $configChecks["CoreEditor"] = $true
-                    $result.Data["CoreEditor"] = $coreEditor
-                    Write-UiSuccess "✓ Git core.editor 已配置: $coreEditor"
-                } else {
-                    Write-UiInfo "ℹ Git core.editor 未配置（将使用默认编辑器）"
-                }
-
-                # 检查默认分支配置
-                $defaultBranch = & git config --global --get init.defaultBranch 2>$null
-                if ($defaultBranch) {
-                    $configChecks["InitDefaultBranch"] = $true
-                    $result.Data["DefaultBranch"] = $defaultBranch
-                    Write-UiSuccess "✓ Git init.defaultBranch 已配置: $defaultBranch"
-                } else {
-                    Write-UiInfo "ℹ Git init.defaultBranch 未配置（将使用 Git 默认值）"
-                }
-
-            } catch {
-                Write-UiWarn "⚠ Git 配置检查失败: $($_.Exception.Message)"
+        if ($allDelivered) {
+            # 哨兵检查：init.defaultBranch 是否已配置为 main
+            $sentinel = & git config --global --get init.defaultBranch 2>$null
+            if ($sentinel -ne "main") {
+                $allDelivered = $false
             }
         }
 
-        $result.Data["ConfigChecks"] = $configChecks
+        if ($allDelivered) {
+            # 检查 .bashrc managed block 是否存在
+            $homeDir = $env:USERPROFILE
+            if (-not $homeDir) { $homeDir = $env:HOME }
+            if ($homeDir) {
+                $bashrcPath = Join-Path $homeDir ".bashrc"
+                if (Test-Path $bashrcPath) {
+                    $bashrcContent = Get-Content -Path $bashrcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+                    if (-not $bashrcContent -or -not $bashrcContent.Contains("# >>> Claude Code Quickstart >>>")) {
+                        $allDelivered = $false
+                    }
+                } else {
+                    $allDelivered = $false
+                }
+            } else {
+                $allDelivered = $false
+            }
+        }
 
-        # 判断是否已完全安装和配置
-        if ($gitAvailable -and $result.Version -and
-            $configChecks["UserName"] -and $configChecks["UserEmail"]) {
+        if ($allDelivered) {
             $result.IsInstalled = $true
             $result.Message = "Git 已完全安装并配置"
         } else {
@@ -213,97 +185,13 @@ function Install-Step02 {
 
         $finalGitVersion = Get-CommandVersion -Command "git"
         $result.Data["GitVersion"] = $finalGitVersion
-        Write-UiSuccess "✓ Git 验证成功 (版本: $finalGitVersion)"
 
-        # 2. 配置 Git 基础设置
-        Write-UiInfo "⚙️ 配置 Git 基础设置..."
-
-        # 检查现有配置
-        $existingUserName = & git config --global --get user.name 2>$null
-        $existingUserEmail = & git config --global --get user.email 2>$null
-
-        # 配置 user.name
-        if (-not $existingUserName) {
-            Write-UiInfo "配置 Git 用户名..."
-
-            # 尝试从系统获取用户名
-            $suggestedName = $env:USERNAME
-            if (-not $suggestedName) {
-                $suggestedName = $env:USER
-            }
-            if (-not $suggestedName) {
-                $suggestedName = "Claude Code User"
-            }
-
-            # 询问用户名
-            Write-UiInfo "请输入您的 Git 用户名（用于提交记录）："
-            Write-UiInfo "建议使用真实姓名，如：张三 或 Zhang San"
-            Write-Host "默认值: $suggestedName" -ForegroundColor Gray
-
-            $userName = Read-Host "用户名"
-            if (-not $userName.Trim()) {
-                $userName = $suggestedName
-            }
-
-            try {
-                $configResult = Invoke-ExternalCommand -Command "git" -Arguments @("config", "--global", "user.name", $userName) -TimeoutSeconds 30
-                if ($configResult.Success) {
-                    Write-UiSuccess "✓ Git user.name 配置成功: $userName"
-                    $result.Data["UserName"] = $userName
-                } else {
-                    throw "Git user.name 配置失败: $($configResult.Error)"
-                }
-            } catch {
-                throw "Git user.name 配置异常: $($_.Exception.Message)"
-            }
-        } else {
-            Write-UiSuccess "✓ Git user.name 已存在: $existingUserName"
-            $result.Data["UserName"] = $existingUserName
-        }
-
-        # 配置 user.email
-        if (-not $existingUserEmail) {
-            Write-UiInfo "配置 Git 邮箱..."
-
-            Write-UiInfo "请输入您的 Git 邮箱地址（用于提交记录）："
-            Write-UiInfo "建议使用常用邮箱，如：user@example.com"
-
-            do {
-                $userEmail = Read-Host "邮箱地址"
-                if ($userEmail -match '^[^@]+@[^@]+\.[^@]+$') {
-                    break
-                } else {
-                    Write-UiWarn "⚠ 邮箱格式不正确，请重新输入"
-                }
-            } while ($true)
-
-            try {
-                $configResult = Invoke-ExternalCommand -Command "git" -Arguments @("config", "--global", "user.email", $userEmail) -TimeoutSeconds 30
-                if ($configResult.Success) {
-                    Write-UiSuccess "✓ Git user.email 配置成功: $userEmail"
-                    $result.Data["UserEmail"] = $userEmail
-                } else {
-                    throw "Git user.email 配置失败: $($configResult.Error)"
-                }
-            } catch {
-                throw "Git user.email 配置异常: $($_.Exception.Message)"
-            }
-        } else {
-            Write-UiSuccess "✓ Git user.email 已存在: $existingUserEmail"
-            $result.Data["UserEmail"] = $existingUserEmail
-        }
-
-        # 3. 配置其他推荐设置
+        # 2. 配置 Git 推荐设置
         Write-UiInfo "🔧 配置 Git 推荐设置..."
 
         $recommendedConfigs = @(
             @{ Key = "init.defaultBranch"; Value = "main"; Description = "默认分支名" },
-            @{ Key = "core.autocrlf"; Value = "true"; Description = "Windows 换行符处理" },
-            @{ Key = "core.safecrlf"; Value = "warn"; Description = "换行符安全检查" },
-            @{ Key = "pull.rebase"; Value = "false"; Description = "拉取时使用合并策略" },
-            @{ Key = "core.editor"; Value = "notepad"; Description = "默认编辑器" },
-            @{ Key = "core.quotepath"; Value = "false"; Description = "Git 中文文件名支持" },
-            @{ Key = "gui.encoding"; Value = "utf-8"; Description = "GUI 编码" },
+            @{ Key = "core.quotepath"; Value = "false"; Description = "中文文件名显示" },
             @{ Key = "i18n.commit.encoding"; Value = "utf-8"; Description = "提交信息编码" },
             @{ Key = "i18n.logoutputencoding"; Value = "utf-8"; Description = "日志输出编码" }
         )
@@ -339,13 +227,42 @@ function Install-Step02 {
 
                 # UTF-8 配置内容
                 $utf8Config = @(
-                    "# UTF-8 编码配置",
-                    "export LANG=zh_CN.UTF-8",
-                    "export LC_ALL=zh_CN.UTF-8",
-                    "export LC_CTYPE=zh_CN.UTF-8",
+                    "# 搞定python",
+                    "export PYTHONIOENCODING=utf-8",
+                    "export PYTHONUTF8=1",
                     "",
-                    "# 终端颜色支持",
-                    "export TERM=xterm-256color"
+                    "# 搞定通过 Git Bash 管道调用时中文输出乱码问题",
+                    "_ps_utf8_wrapper() {",
+                    "    local exe=`"`$1`"; shift",
+                    "    local pre_args=()",
+                    "    local cmd=`"`"",
+                    "    local found_command=false",
+                    "",
+                    "    while [[ `$# -gt 0 ]]; do",
+                    "        case `"`$1`" in",
+                    "            -Command|-c)",
+                    "                found_command=true",
+                    "                shift",
+                    "                cmd=`"`$*`"",
+                    "                break",
+                    "                ;;",
+                    "            *)",
+                    "                pre_args+=(`"`$1`")",
+                    "                shift",
+                    "                ;;",
+                    "        esac",
+                    "    done",
+                    "",
+                    "    if `$found_command && [[ -n `"`$cmd`" ]]; then",
+                    "        command `"`$exe`" `"`${pre_args[@]}`" -Command \",
+                    "            `"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; `$cmd`"",
+                    "    else",
+                    "        command `"`$exe`" `"`${pre_args[@]}`"",
+                    "    fi",
+                    "}",
+                    "",
+                    "powershell() { _ps_utf8_wrapper powershell.exe `"`$@`"; }",
+                    "pwsh() { _ps_utf8_wrapper pwsh.exe `"`$@`"; }"
                 )
 
                 # 使用标记块写入配置
@@ -353,8 +270,7 @@ function Install-Step02 {
                 $success = Set-ManagedBlockInFile -FilePath $bashrcPath -Content $utf8Config -CreateIfNotExists -AppendIfNoBlock
 
                 if ($success) {
-                    Write-UiSuccess "✓ Git Bash UTF-8 配置已应用"
-                    Write-UiInfo "配置将在下次启动 Git Bash 时生效"
+                    Write-UiSuccess "✓ Git Bash UTF-8 配置已应用（Python UTF-8 + PowerShell wrapper）"
                 } else {
                     Write-UiWarn "⚠ Git Bash 配置写入失败（不影响主安装流程）"
                 }
@@ -364,20 +280,6 @@ function Install-Step02 {
         } catch {
             Write-UiWarn "⚠ Git Bash 配置过程中发生错误: $($_.Exception.Message)"
             Write-UiInfo "这不影响主安装流程，可以稍后手动配置"
-        }
-
-        # 4. 验证最终配置
-        Write-UiInfo "✅ 验证 Git 配置..."
-
-        $finalUserName = & git config --global --get user.name 2>$null
-        $finalUserEmail = & git config --global --get user.email 2>$null
-
-        if ($finalUserName -and $finalUserEmail) {
-            Write-UiSuccess "✓ Git 配置验证成功"
-            Write-UiInfo "  用户名: $finalUserName"
-            Write-UiInfo "  邮箱: $finalUserEmail"
-        } else {
-            throw "Git 配置验证失败，用户名或邮箱未正确设置"
         }
 
         # 安装成功
@@ -422,28 +324,6 @@ function Verify-Step02 {
         } else {
             $verificationPassed = $false
             $issues += "Git 命令不可用"
-        }
-
-        # 验证基础配置
-        try {
-            $userName = & git config --global --get user.name 2>$null
-            if ($userName) {
-                Write-UiSuccess "✓ Git user.name 验证通过: $userName"
-            } else {
-                $verificationPassed = $false
-                $issues += "Git user.name 未配置"
-            }
-
-            $userEmail = & git config --global --get user.email 2>$null
-            if ($userEmail) {
-                Write-UiSuccess "✓ Git user.email 验证通过: $userEmail"
-            } else {
-                $verificationPassed = $false
-                $issues += "Git user.email 未配置"
-            }
-        } catch {
-            $verificationPassed = $false
-            $issues += "Git 配置读取失败: $($_.Exception.Message)"
         }
 
         # 验证 Git 基本功能
