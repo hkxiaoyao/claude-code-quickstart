@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$env:USERPROFILE\.claude"
 
-function Test-Step11Installed {
+function Test-Step10Installed {
     <#
     .SYNOPSIS
     检测 CCG Workflow 是否已安装（基于官方目录结构判定）
@@ -85,7 +85,7 @@ function Test-Step11Installed {
     return $result
 }
 
-function Install-Step11 {
+function Install-Step10 {
     <#
     .SYNOPSIS
     通过官方 npx ccg-workflow@latest init 安装 CCG Workflow
@@ -106,13 +106,13 @@ function Install-Step11 {
         Refresh-SessionPath
 
         if (-not (Test-CommandAvailable -Command "node")) {
-            throw "未找到 node 命令，请检查 Node.js 安装 (Step02)"
+            throw "未找到 node 命令，请检查 Node.js 安装 (Step01)"
         }
         if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "未找到 npm 命令，请检查 Node.js 安装 (Step02)"
+            throw "未找到 npm 命令，请检查 Node.js 安装 (Step01)"
         }
         if (-not (Test-CommandAvailable -Command "npx")) {
-            throw "未找到 npx 命令，请检查 Node.js 安装 (Step02)"
+            throw "未找到 npx 命令，请检查 Node.js 安装 (Step01)"
         }
 
         Write-UiSuccess "环境检查: Node.js & npm 已就绪"
@@ -188,7 +188,7 @@ function Install-Step11 {
     return $result
 }
 
-function Verify-Step11 {
+function Verify-Step10 {
     <#
     .SYNOPSIS
     验证 CCG Workflow 安装结果
@@ -301,63 +301,6 @@ function Verify-Step11 {
     }
     catch {
         $result.ErrorMessage = "验证 CCG Workflow 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
-    }
-
-    return $result
-}
-
-function Rollback-Step11 {
-    <#
-    .SYNOPSIS
-    回滚 CCG Workflow 安装（精确清理官方安装产物）
-    .RETURNS
-    包含 Success 字段的结果对象
-    #>
-
-    $result = @{
-        Success      = $false
-        ErrorMessage = ""
-    }
-
-    try {
-        Write-UiInfo "回滚 CCG Workflow 安装..."
-
-        $itemsToRemove = @(
-            "$script:ClaudeDir\commands\ccg"
-            "$script:ClaudeDir\agents\ccg"
-            "$script:ClaudeDir\skills\multi-model-collaboration"
-            "$script:ClaudeDir\.ccg"
-            "$script:ClaudeDir\bin\codeagent-wrapper.exe"
-        )
-
-        foreach ($item in $itemsToRemove) {
-            if (Test-Path $item) {
-                Remove-Item $item -Recurse -Force -ErrorAction SilentlyContinue
-                Write-UiInfo "已移除: $item"
-            }
-        }
-
-        # 检查 bin 目录是否为空，如果为空则清理
-        $binDir = "$script:ClaudeDir\bin"
-        if (Test-Path $binDir) {
-            $binContents = Get-ChildItem $binDir -ErrorAction SilentlyContinue
-            if ($null -eq $binContents -or $binContents.Count -eq 0) {
-                Remove-Item $binDir -Force -ErrorAction SilentlyContinue
-                Write-UiInfo "已移除空目录: $binDir"
-            }
-        }
-
-        # 刷新 PATH
-        Refresh-SessionPath
-
-        Write-UiWarn "注意: PATH 中可能残留 CCG 相关条目，如需清理请手动检查"
-        Write-UiSuccess "CCG Workflow 回滚完成"
-
-        $result.Success = $true
-    }
-    catch {
-        $result.ErrorMessage = "回滚 CCG Workflow 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 

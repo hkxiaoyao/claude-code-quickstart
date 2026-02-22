@@ -1,4 +1,4 @@
-﻿# Step04.ClaudeCode.ps1 - Claude Code npm 全局安装
+﻿# Step03.ClaudeCode.ps1 - Claude Code npm 全局安装
 # 作者: 哈雷酱 (本小姐的 Claude Code 安装杰作！)
 # 功能: 通过 npm 全局安装 Claude Code CLI 工具
 
@@ -16,10 +16,10 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $script:ClaudeCodePackage = "@anthropic-ai/claude-code"
 $script:MinNodeVersion = "18"
 
-function Test-Step04Installed {
+function Test-Step03Installed {
     <#
     .SYNOPSIS
-    测试步骤 04 是否已完成（Claude Code 安装）
+    测试步骤 03 是否已完成（Claude Code 安装）
     .RETURNS
     测试结果对象
     #>
@@ -112,10 +112,10 @@ function Test-Step04Installed {
     return $result
 }
 
-function Install-Step04 {
+function Install-Step03 {
     <#
     .SYNOPSIS
-    执行步骤 04 安装（Claude Code npm 全局安装）
+    执行步骤 03 安装（Claude Code npm 全局安装）
     .RETURNS
     安装结果对象
     #>
@@ -134,12 +134,20 @@ function Install-Step04 {
         # 1. 验证前置条件
         Write-UiInfo "🔍 验证前置条件..."
 
+        # 先刷新 PATH 确保能找到 node 和 npm
+        Refresh-SessionPath
+
         if (-not (Test-CommandAvailable -Command "node")) {
-            throw "Node.js 未安装，请先完成 Step02"
+            Write-UiError "✗ Node.js 未找到"
+            Write-UiInfo "💡 这可能是因为 fnm 环境变量尚未在当前会话中生效"
+            Write-UiInfo "💡 请尝试以下操作之一："
+            Write-UiInfo "   1. 重新启动 PowerShell 后运行: pwsh -File installer/Install-ClaudeEnv.ps1 -Resume"
+            Write-UiInfo "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器"
+            throw "Node.js 未安装或不可用，请先完成 Step01 并重新启动 PowerShell"
         }
 
         if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "npm 未安装，请先完成 Step02"
+            throw "npm 未安装，请先完成 Step01 并重新启动 PowerShell"
         }
 
         $nodeVersion = Get-CommandVersion -Command "node"
@@ -268,7 +276,7 @@ function Install-Step04 {
         $result.Success = $true
         $result.Message = "Claude Code 安装完成"
 
-        Write-UiSuccess "✅ Step04 安装完成！"
+        Write-UiSuccess "✅ Step03 安装完成！"
         Write-UiInfo "💡 提示: Claude Code 现在可以通过 'claude' 命令使用"
 
     } catch {
@@ -279,10 +287,10 @@ function Install-Step04 {
     return $result
 }
 
-function Verify-Step04 {
+function Verify-Step03 {
     <#
     .SYNOPSIS
-    验证步骤 04 执行结果
+    验证步骤 03 执行结果
     .RETURNS
     验证结果对象
     #>
@@ -354,97 +362,6 @@ function Verify-Step04 {
 
     } catch {
         $result.ErrorMessage = "Claude Code 验证过程失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
-    }
-
-    return $result
-}
-
-function Rollback-Step04 {
-    <#
-    .SYNOPSIS
-    回滚步骤 04（卸载 Claude Code）
-    .RETURNS
-    回滚结果对象
-    #>
-    param()
-
-    $result = @{
-        Success = $false
-        Message = ""
-        ErrorMessage = ""
-    }
-
-    try {
-        Write-UiInfo "🔄 回滚 Claude Code 安装..."
-
-        $rollbackActions = @()
-
-        # 询问确认
-        Write-UiWarn "⚠ 此操作将卸载 Claude Code，是否继续？"
-        $options = @("确认卸载", "取消操作")
-        $choice = Show-SingleSelectMenu -Title "确认回滚操作：" -Options $options
-
-        if ($choice -eq 1) {
-            $result.Success = $true
-            $result.Message = "用户取消回滚操作"
-            Write-UiInfo "回滚操作已取消"
-            return $result
-        }
-
-        # 1. 使用 npm 卸载 Claude Code
-        try {
-            Write-UiInfo "通过 npm 卸载 Claude Code..."
-
-            if (Test-CommandAvailable -Command "npm") {
-                $uninstallResult = Invoke-ExternalCommand -Command "npm" -Arguments @("uninstall", "-g", $script:ClaudeCodePackage) -TimeoutSeconds 120
-                if ($uninstallResult.Success) {
-                    $rollbackActions += "Claude Code npm 包已卸载"
-                } else {
-                    $rollbackActions += "npm 卸载失败: $($uninstallResult.Error)"
-                }
-            } else {
-                $rollbackActions += "npm 不可用，无法自动卸载"
-            }
-
-        } catch {
-            $rollbackActions += "npm 卸载异常: $($_.Exception.Message)"
-        }
-
-        # 2. 清理可能的残留文件
-        try {
-            # 清理 npm 缓存中的相关文件
-            $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60
-            if ($cleanResult.Success) {
-                $rollbackActions += "npm 缓存已清理"
-            }
-        } catch {
-            $rollbackActions += "npm 缓存清理异常: $($_.Exception.Message)"
-        }
-
-        # 3. 刷新环境变量
-        try {
-            Refresh-SessionPath
-            $rollbackActions += "环境变量已刷新"
-        } catch {
-            $rollbackActions += "环境变量刷新异常: $($_.Exception.Message)"
-        }
-
-        # 4. 验证卸载结果
-        if (Test-CommandAvailable -Command "claude") {
-            $rollbackActions += "警告: claude 命令仍然可用，可能需要重启终端"
-        } else {
-            $rollbackActions += "claude 命令已不可用，卸载成功"
-        }
-
-        $result.Success = $true
-        $result.Message = "Claude Code 回滚完成: $($rollbackActions -join '; ')"
-
-        Write-UiSuccess "✓ 回滚操作完成"
-        Write-UiInfo "💡 提示: 完全清理可能需要重新启动终端"
-
-    } catch {
-        $result.ErrorMessage = "Claude Code 回滚失败: $($_.Exception.Message)"
         Write-UiError "✗ $($result.ErrorMessage)"
     }
 

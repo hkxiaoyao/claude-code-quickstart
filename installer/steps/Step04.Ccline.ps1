@@ -1,4 +1,4 @@
-﻿# Step05: CCometixLine 安装 - Claude Code 环境安装器
+﻿# Step04: CCometixLine 安装 - Claude Code 环境安装器
 # 作者: 哈雷酱 (本小姐的状态栏配置杰作！)
 # 功能: CCometixLine 安装 + statusLine 配置写入
 
@@ -15,7 +15,7 @@ $script:CclinePackage = "ccline"
 $script:ClaudeConfigDir = "$env:USERPROFILE\.claude"
 $script:ClaudeSettingsFile = "$script:ClaudeConfigDir\settings.json"
 
-function Test-Step05Installed {
+function Test-Step04Installed {
     <#
     .SYNOPSIS
     检测 CCometixLine 是否已安装并配置
@@ -57,7 +57,7 @@ function Test-Step05Installed {
     }
 }
 
-function Install-Step05 {
+function Install-Step04 {
     <#
     .SYNOPSIS
     安装 CCometixLine 并配置状态栏
@@ -74,11 +74,11 @@ function Install-Step05 {
         Write-Host "1. 检查前置条件..." -ForegroundColor Gray
 
         if (-not (Test-CommandAvailable -Command "claude")) {
-            throw "Claude Code 未安装，请先完成 Step04"
+            throw "Claude Code 未安装，请先完成 Step03"
         }
 
         if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "npm 未安装，请先完成 Step02"
+            throw "npm 未安装，请先完成 Step01"
         }
 
         Write-Host "✓ 前置条件检查完成" -ForegroundColor Green
@@ -238,7 +238,7 @@ function Install-Step05 {
     }
 }
 
-function Verify-Step05 {
+function Verify-Step04 {
     <#
     .SYNOPSIS
     验证 CCometixLine 安装和配置
@@ -247,61 +247,7 @@ function Verify-Step05 {
     #>
     param()
 
-    return Test-Step05Installed
-}
-
-function Rollback-Step05 {
-    <#
-    .SYNOPSIS
-    回滚 CCometixLine 安装和配置
-    #>
-    param()
-
-    Write-Host "回滚 CCometixLine 安装和配置..." -ForegroundColor Yellow
-
-    try {
-        # 1. 移除状态栏配置
-        if (Test-Path $script:ClaudeSettingsFile) {
-            try {
-                $settings = Get-Content $script:ClaudeSettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable
-                if ($settings.ContainsKey("statusLine")) {
-                    $settings.Remove("statusLine")
-
-                    $settingsJson = $settings | ConvertTo-Json -Depth 10 -Compress:$false
-                    $settingsJson | Out-File -FilePath $script:ClaudeSettingsFile -Encoding UTF8 -Force
-
-                    Write-Host "✓ 状态栏配置已从 settings.json 移除" -ForegroundColor Green
-                }
-            } catch {
-                Write-Host "⚠ 移除状态栏配置失败: $($_.Exception.Message)" -ForegroundColor Yellow
-            }
-        }
-
-        # 2. 卸载 CCometixLine
-        Write-Host "卸载 CCometixLine..." -ForegroundColor Gray
-
-        $uninstallResult = Invoke-ExternalCommand -Command "npm" -Arguments @("uninstall", "-g", $script:CclinePackage)
-
-        if ($uninstallResult.Success) {
-            Write-Host "✓ CCometixLine 已卸载" -ForegroundColor Green
-        } else {
-            Write-Host "⚠ CCometixLine 卸载失败，可能需要手动操作" -ForegroundColor Yellow
-            Write-Host "  手动卸载命令: npm uninstall -g $script:CclinePackage" -ForegroundColor Gray
-        }
-
-        # 刷新 PATH
-        Refresh-SessionPath
-
-        # 验证卸载
-        if (-not (Test-CommandAvailable -Command "ccline")) {
-            Write-Host "✓ CCometixLine 命令已不可用，卸载成功" -ForegroundColor Green
-        } else {
-            Write-Host "⚠ CCometixLine 命令仍可用，可能需要重启终端" -ForegroundColor Yellow
-        }
-
-    } catch {
-        Write-Host "✗ 回滚失败: $($_.Exception.Message)" -ForegroundColor Red
-    }
+    return Test-Step04Installed
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

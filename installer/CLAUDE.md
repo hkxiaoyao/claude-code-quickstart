@@ -10,7 +10,7 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 主安装：dot-source 所有模块 → 选择模式 → 拓扑排序执行 13 步 → 摘要 |
+| `Install-ClaudeEnv.ps1` | **7.0+** | 主安装：dot-source 所有模块 → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
 
 ---
 
@@ -39,7 +39,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 ## Install-ClaudeEnv.ps1
 
-**用途**：PS 7 主安装入口，协调全部 13 个步骤。
+**用途**：PS 7 主安装入口，协调全部 12 个步骤。
 
 ### 参数
 
@@ -57,7 +57,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 . core/Ui.ps1 → Process.ps1 → Profile.ps1 → Admin.ps1 → Net.ps1 → Bootstrap.ps1
 
 # 步骤模块（顺序无关，依赖由 Bootstrap.ps1 拓扑排序管理）
-. steps/Step01.Proxy.ps1 ... steps/Step13.GeminiCli.ps1
+. steps/Step01.NodeFnm.ps1 ... steps/Step12.GeminiCli.ps1
 ```
 
 > **重要**：使用 `$script:InstallerRoot = $PSScriptRoot` 固定根路径，防止被 dot-source 覆盖。
@@ -68,13 +68,13 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 ```powershell
 @{
-    StepId          = "Step07.ApiKey"       # 与 Bootstrap.ps1 依赖图 key 一致
+    StepId          = "Step06.ApiKey"       # 与 Bootstrap.ps1 依赖图 key 一致
     StepName        = "API Key 配置"
     Description     = "..."
-    TestFunction    = "Test-Step07Installed"
-    InstallFunction = "Install-Step07"
-    VerifyFunction  = "Verify-Step07"        # 空字符串 = 不验证
-    RollbackFunction = "Rollback-Step07"     # 空字符串 = 不回滚
+    TestFunction    = "Test-Step06Installed"
+    InstallFunction = "Install-Step06"
+    VerifyFunction  = "Verify-Step06"        # 空字符串 = 不验证
+    RollbackFunction = "Rollback-Step06"     # 空字符串 = 不回滚
     SkipIfInstalled = $false                 # false = 每次都重新配置
     IsOptional      = $false                 # true = 分阶段模式默认不勾选
 }
@@ -113,7 +113,7 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
-| Step12.CodexCli | OpenAI Codex CLI，多模型协作使用 |
-| Step13.GeminiCli | Google Gemini CLI，多模型协作使用 |
+| Step11.CodexCli | OpenAI Codex CLI，多模型协作使用 |
+| Step12.GeminiCli | Google Gemini CLI，多模型协作使用 |
 
 在 Staged 模式下，可选步骤**默认不勾选**。在 OneClick 模式下，**全部包含**。

@@ -168,19 +168,18 @@ class InstallState {
 ### 步骤依赖图（`Get-StepDependencies`）
 
 ```powershell
-"Step01.Proxy"       = @()
-"Step02.NodeFnm"     = @("Step01.Proxy")
-"Step03.Git"         = @("Step01.Proxy")
-"Step04.ClaudeCode"  = @("Step02.NodeFnm")
-"Step05.Ccline"      = @("Step04.ClaudeCode")
-"Step06.CcSwitch"    = @("Step04.ClaudeCode")
-"Step07.ApiKey"      = @("Step04.ClaudeCode")
-"Step08.ClaudeConfig"= @("Step07.ApiKey")
-"Step09.ClaudeMd"    = @("Step08.ClaudeConfig")
-"Step10.Mcp"         = @("Step08.ClaudeConfig")
-"Step11.CcgWorkflow" = @("Step03.Git", "Step08.ClaudeConfig")
-"Step12.CodexCli"    = @("Step02.NodeFnm")
-"Step13.GeminiCli"   = @("Step02.NodeFnm")
+"Step01.NodeFnm"     = @()
+"Step02.Git"         = @()
+"Step03.ClaudeCode"  = @("Step01.NodeFnm")
+"Step04.Ccline"      = @("Step03.ClaudeCode")
+"Step05.CcSwitch"    = @("Step03.ClaudeCode")
+"Step06.ApiKey"      = @("Step03.ClaudeCode")
+"Step07.ClaudeConfig"= @("Step06.ApiKey")
+"Step08.ClaudeMd"    = @("Step07.ClaudeConfig")
+"Step09.Mcp"         = @("Step07.ClaudeConfig")
+"Step10.CcgWorkflow" = @("Step01.NodeFnm", "Step07.ClaudeConfig")
+"Step11.CodexCli"    = @("Step01.NodeFnm")
+"Step12.GeminiCli"   = @("Step01.NodeFnm")
 ```
 
 ### 主要函数
@@ -189,9 +188,11 @@ class InstallState {
 |------|------|
 | `Save-InstallState / Load-InstallState` | JSON 持久化（原子写入） |
 | `Resume-Installation` | 加载状态并显示进度摘要 |
-| `Invoke-StepLifecycle` | 执行 Test → Install → Verify → Rollback 四阶段 |
+| `Invoke-StepLifecycle` | 执行 Test → Install → Verify 三阶段 |
 | `Test-StepDependencies` | 检查前置依赖是否 Success/Skipped |
 | `Get-ExecutionOrder` | Kahn 拓扑排序，返回有序步骤 ID 数组 |
+
+> **注意**：回滚功能已移除，安装失败时仅记录状态，用户可使用 `-Resume` 重试。
 
 ### `Invoke-StepLifecycle` 兼容性
 

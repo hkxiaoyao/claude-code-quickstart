@@ -191,7 +191,7 @@ function Load-InstallState {
 function Invoke-StepLifecycle {
     <#
     .SYNOPSIS
-    执行步骤生命周期（Test -> Install -> Verify -> Rollback on failure）
+    执行步骤生命周期（Test -> Install -> Verify）
     .PARAMETER StepId
     步骤 ID
     .PARAMETER StepName
@@ -202,8 +202,6 @@ function Invoke-StepLifecycle {
     安装函数名
     .PARAMETER VerifyFunction
     验证函数名（可选）
-    .PARAMETER RollbackFunction
-    回滚函数名（可选）
     .PARAMETER State
     安装状态对象
     .PARAMETER SkipIfInstalled
@@ -225,8 +223,6 @@ function Invoke-StepLifecycle {
         [string]$InstallFunction,
 
         [string]$VerifyFunction,
-
-        [string]$RollbackFunction,
 
         [Parameter(Mandatory = $true)]
         [InstallState]$State,
@@ -255,8 +251,8 @@ function Invoke-StepLifecycle {
         $stepResult.StartTime = Get-Date
         $State.CurrentStep = $StepId
 
-        # 保存状态
-        Save-InstallState -State $State
+        # 保存状态（使用 $null 赋值避免返回值污染）
+        $null = Save-InstallState -State $State
 
         # 1. 执行测试阶段
         Write-Host "  🔍 测试阶段: $TestFunction" -ForegroundColor Gray
@@ -322,27 +318,9 @@ function Invoke-StepLifecycle {
         $stepResult.EndTime = Get-Date
 
         Write-Host "  ✗ $StepName 执行失败: $($_.Exception.Message)" -ForegroundColor Red
-
-        # 尝试回滚（如果提供回滚函数）
-        if ($RollbackFunction) {
-            try {
-                Write-Host "  🔄 执行回滚: $RollbackFunction" -ForegroundColor Yellow
-                $rollbackResult = & $RollbackFunction
-                # 兼容 bool 和 hashtable 两种返回类型
-                $rollbackSuccess = if ($rollbackResult -is [bool]) { $rollbackResult } elseif ($rollbackResult) { [bool]$rollbackResult.Success } else { $false }
-                if ($rollbackSuccess) {
-                    Write-Host "  ✓ 回滚成功" -ForegroundColor Green
-                } else {
-                    $rollbackError = if ($rollbackResult -is [bool]) { "回滚函数返回失败" } elseif ($rollbackResult -and $rollbackResult.ErrorMessage) { $rollbackResult.ErrorMessage } else { "未知错误" }
-                    Write-Host "  ⚠ 回滚失败: $rollbackError" -ForegroundColor Yellow
-                }
-            } catch {
-                Write-Host "  ⚠ 回滚过程中发生错误: $($_.Exception.Message)" -ForegroundColor Yellow
-            }
-        }
     } finally {
-        # 保存状态
-        Save-InstallState -State $State
+        # 保存状态（使用 $null 赋值避免返回值污染）
+        $null = Save-InstallState -State $State
     }
 
     return $stepResult
@@ -358,19 +336,18 @@ function Get-StepDependencies {
     param()
 
     return @{
-        "Step01.Proxy" = @()
-        "Step02.NodeFnm" = @("Step01.Proxy")
-        "Step03.Git" = @("Step01.Proxy")
-        "Step04.ClaudeCode" = @("Step02.NodeFnm")
-        "Step05.Ccline" = @("Step04.ClaudeCode")
-        "Step06.CcSwitch" = @("Step04.ClaudeCode")
-        "Step07.ApiKey" = @("Step04.ClaudeCode")
-        "Step08.ClaudeConfig" = @("Step07.ApiKey")
-        "Step09.ClaudeMd" = @("Step08.ClaudeConfig")
-        "Step10.Mcp" = @("Step08.ClaudeConfig")
-        "Step11.CcgWorkflow" = @("Step02.NodeFnm", "Step08.ClaudeConfig")
-        "Step12.CodexCli" = @("Step02.NodeFnm")
-        "Step13.GeminiCli" = @("Step02.NodeFnm")
+        "Step01.NodeFnm" = @()
+        "Step02.Git" = @()
+        "Step03.ClaudeCode" = @("Step01.NodeFnm")
+        "Step04.Ccline" = @("Step03.ClaudeCode")
+        "Step05.CcSwitch" = @("Step03.ClaudeCode")
+        "Step06.ApiKey" = @("Step03.ClaudeCode")
+        "Step07.ClaudeConfig" = @("Step06.ApiKey")
+        "Step08.ClaudeMd" = @("Step07.ClaudeConfig")
+        "Step09.Mcp" = @("Step07.ClaudeConfig")
+        "Step10.CcgWorkflow" = @("Step01.NodeFnm", "Step07.ClaudeConfig")
+        "Step11.CodexCli" = @("Step01.NodeFnm")
+        "Step12.GeminiCli" = @("Step01.NodeFnm")
     }
 }
 
@@ -470,8 +447,8 @@ function Get-ExecutionOrder {
         $canExecute = $canExecute | Sort-Object
         $ordered += $canExecute
 
-        # 从剩余列表中移除
-        $remaining = $remaining | Where-Object { $_ -notin $canExecute }
+        # 从剩余列表中移除（@() 确保 StrictMode 下结果始终为数组）
+        $remaining = @($remaining | Where-Object { $_ -notin $canExecute })
     }
 
     return $ordered

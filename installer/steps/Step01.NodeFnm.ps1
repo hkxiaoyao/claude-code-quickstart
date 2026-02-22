@@ -1,4 +1,4 @@
-﻿# Step02.NodeFnm.ps1 - Node.js 通过 fnm 安装和配置
+﻿# Step01.NodeFnm.ps1 - Node.js 通过 fnm 安装和配置
 # 作者: 哈雷酱 (本小姐的 Node.js 管理杰作！)
 # 功能: 使用 fnm 安装和管理 Node.js，配置 $PROFILE 而不写入环境变量
 
@@ -17,10 +17,10 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $script:RequiredNodeVersion = "20"  # Node.js LTS 版本
 $script:FnmVersion = "latest"
 
-function Test-Step02Installed {
+function Test-Step01Installed {
     <#
     .SYNOPSIS
-    测试步骤 02 是否已完成（Node.js 和 fnm 安装）
+    测试步骤 01 是否已完成（Node.js 和 fnm 安装）
     .RETURNS
     测试结果对象
     #>
@@ -111,10 +111,10 @@ function Test-Step02Installed {
     return $result
 }
 
-function Install-Step02 {
+function Install-Step01 {
     <#
     .SYNOPSIS
-    执行步骤 02 安装（fnm + Node.js + $PROFILE 配置）
+    执行步骤 01 安装（fnm + Node.js + $PROFILE 配置）
     .RETURNS
     安装结果对象
     #>
@@ -188,29 +188,7 @@ function Install-Step02 {
         $result.Data["FnmVersion"] = $fnmVersion
         Write-UiSuccess "✓ fnm 验证成功 (版本: $fnmVersion)"
 
-        # 2. 使用 fnm 安装 Node.js
-        Write-UiInfo "🟢 使用 fnm 安装 Node.js LTS..."
-
-        try {
-            # 安装最新 LTS 版本
-            $installResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("install", "--lts") -TimeoutSeconds 300
-            if (-not $installResult.Success) {
-                throw "fnm 安装 Node.js 失败: $($installResult.Error)"
-            }
-
-            # 使用 LTS 版本
-            $useResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("use", "--install-if-missing", "lts-latest") -TimeoutSeconds 60
-            if (-not $useResult.Success) {
-                throw "fnm 切换到 LTS 版本失败: $($useResult.Error)"
-            }
-
-            Write-UiSuccess "✓ Node.js LTS 安装成功"
-
-        } catch {
-            throw "Node.js 安装过程失败: $($_.Exception.Message)"
-        }
-
-        # 3. 配置 PowerShell Profile
+        # 2. 配置 PowerShell Profile（在安装 Node.js 之前）
         Write-UiInfo "⚙️ 配置 PowerShell Profile..."
 
         $profilePath = $PROFILE
@@ -243,29 +221,54 @@ function Install-Step02 {
             $result.Data["ProfileConfigured"] = $false
         }
 
-        # 4. 重新加载环境并验证
-        Write-UiInfo "🔄 重新加载环境并验证安装..."
+        # 3. 重新加载 PowerShell Profile 以刷新当前会话环境
+        Write-UiInfo "🔄 重新加载 PowerShell Profile 以刷新环境..."
 
-        # 手动执行 fnm env 来设置当前会话的环境
         try {
-            $fnmEnvResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("env", "--use-on-cd") -SuppressOutput
-            if ($fnmEnvResult.Success -and $fnmEnvResult.Output) {
-                # 解析并应用环境变量
-                $envLines = $fnmEnvResult.Output -split "`n" | Where-Object { $_ -match '^\$env:' }
-                foreach ($line in $envLines) {
-                    if ($line -match '^\$env:(\w+)\s*=\s*"([^"]*)"') {
-                        $envName = $matches[1]
-                        $envValue = $matches[2]
-                        Set-Item -Path "env:$envName" -Value $envValue
-                    }
-                }
+            if (Test-Path $PROFILE) {
+                # 使用 dot-source 重新加载 Profile
+                . $PROFILE
+                Write-UiSuccess "✓ PowerShell Profile 已重新加载"
+            } else {
+                Write-UiWarn "⚠ PowerShell Profile 文件不存在"
             }
         } catch {
-            Write-UiWarn "⚠ 无法自动应用 fnm 环境变量，请重新启动 PowerShell"
+            Write-UiWarn "⚠ 重新加载 PowerShell Profile 时出错: $($_.Exception.Message)"
         }
 
-        # 验证 Node.js 和 npm
+        # 再次刷新 PATH
         Refresh-SessionPath
+
+        # 4. 使用 fnm 安装 Node.js（在 Profile 配置和刷新之后）
+        Write-UiInfo "🟢 使用 fnm 安装 Node.js LTS..."
+
+        try {
+            # 安装最新 LTS 版本
+            $installResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("install", "--lts") -TimeoutSeconds 300
+            if (-not $installResult.Success) {
+                throw "fnm 安装 Node.js 失败: $($installResult.Error)"
+            }
+
+            Write-UiSuccess "✓ Node.js LTS 安装成功"
+
+            # 使用 LTS 版本
+            Write-UiInfo "正在激活 Node.js LTS 版本..."
+            $useResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("use", "--install-if-missing", "lts-latest") -TimeoutSeconds 60
+            if (-not $useResult.Success) {
+                throw "fnm 切换到 LTS 版本失败: $($useResult.Error)"
+            }
+
+            Write-UiSuccess "✓ Node.js LTS 版本已激活"
+
+        } catch {
+            throw "Node.js 安装过程失败: $($_.Exception.Message)"
+        }
+
+        # 5. 再次刷新 PATH 确保 node 和 npm 可用
+        Refresh-SessionPath
+
+        # 6. 验证 Node.js 和 npm
+        Write-UiInfo "🔍 验证 Node.js 和 npm 安装..."
 
         if (Test-CommandAvailable -Command "node") {
             $nodeVersion = Get-CommandVersion -Command "node"
@@ -287,8 +290,8 @@ function Install-Step02 {
         Write-UiInfo "🌐 配置 npm 镜像源..."
         try {
             # 检查网络连通性决定是否使用镜像
-            $registryTest = Test-EndpointReachable -Endpoint "https://registry.npmjs.org" -TimeoutSeconds 5
-            if (-not $registryTest.Success) {
+            $registryTest = Test-EndpointReachable -Url "https://registry.npmjs.org" -TimeoutSeconds 5
+            if (-not $registryTest.Reachable) {
                 Write-UiInfo "npm 官方源连接失败，配置淘宝镜像源..."
                 $configResult = Invoke-ExternalCommand -Command "npm" -Arguments @("config", "set", "registry", "https://registry.npmmirror.com") -TimeoutSeconds 30
                 if ($configResult.Success) {
@@ -307,7 +310,7 @@ function Install-Step02 {
         $result.Success = $true
         $result.Message = "fnm 和 Node.js 安装配置完成"
 
-        Write-UiSuccess "✅ Step02 安装完成！"
+        Write-UiSuccess "✅ Step01 安装完成！"
         Write-UiInfo "💡 提示: 如果在新的 PowerShell 会话中 node 命令不可用，请重新启动 PowerShell"
 
     } catch {
@@ -318,10 +321,10 @@ function Install-Step02 {
     return $result
 }
 
-function Verify-Step02 {
+function Verify-Step01 {
     <#
     .SYNOPSIS
-    验证步骤 02 执行结果
+    验证步骤 01 执行结果
     .RETURNS
     验证结果对象
     #>
@@ -351,13 +354,27 @@ function Verify-Step02 {
         # 验证 Node.js
         if (Test-CommandAvailable -Command "node") {
             $nodeVersion = Get-CommandVersion -Command "node"
-            $versionNumber = $nodeVersion -replace '^v?(\d+)\..*$', '$1'
 
-            if ([int]$versionNumber -ge [int]$script:RequiredNodeVersion) {
-                Write-UiSuccess "✓ Node.js 验证通过 (版本: $nodeVersion)"
+            # 检查版本号是否有效
+            if ($nodeVersion -match '^\d+\.\d+') {
+                # 提取主版本号
+                $versionNumber = $nodeVersion -replace '^v?(\d+)\..*$', '$1'
+
+                # 验证提取的版本号是否为数字
+                if ($versionNumber -match '^\d+$') {
+                    if ([int]$versionNumber -ge [int]$script:RequiredNodeVersion) {
+                        Write-UiSuccess "✓ Node.js 验证通过 (版本: $nodeVersion)"
+                    } else {
+                        $verificationPassed = $false
+                        $issues += "Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:RequiredNodeVersion+)"
+                    }
+                } else {
+                    $verificationPassed = $false
+                    $issues += "无法解析 Node.js 版本号: $nodeVersion"
+                }
             } else {
                 $verificationPassed = $false
-                $issues += "Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:RequiredNodeVersion+)"
+                $issues += "无法获取有效的 Node.js 版本号 (返回: $nodeVersion)"
             }
         } else {
             $verificationPassed = $false
@@ -401,94 +418,5 @@ function Verify-Step02 {
 
     return $result
 }
-
-function Rollback-Step02 {
-    <#
-    .SYNOPSIS
-    回滚步骤 02（移除 fnm 和 Node.js）
-    .RETURNS
-    回滚结果对象
-    #>
-    param()
-
-    $result = @{
-        Success = $false
-        Message = ""
-        ErrorMessage = ""
-    }
-
-    try {
-        Write-UiInfo "🔄 回滚 fnm 和 Node.js 安装..."
-
-        $rollbackActions = @()
-
-        # 1. 从 PowerShell Profile 中移除 fnm 配置
-        try {
-            $profilePath = $PROFILE
-            if (Test-Path $profilePath) {
-                $removeSuccess = Remove-ManagedBlockFromFile -FilePath $profilePath
-                if ($removeSuccess) {
-                    $rollbackActions += "PowerShell Profile 配置已移除"
-                } else {
-                    $rollbackActions += "PowerShell Profile 配置移除失败"
-                }
-            }
-        } catch {
-            $rollbackActions += "PowerShell Profile 处理异常: $($_.Exception.Message)"
-        }
-
-        # 2. 尝试卸载 fnm（如果通过 winget 安装）
-        try {
-            if (Test-CommandAvailable -Command "winget") {
-                $uninstallResult = Invoke-ExternalCommand -Command "winget" -Arguments @("uninstall", "Schniz.fnm") -TimeoutSeconds 60
-                if ($uninstallResult.Success) {
-                    $rollbackActions += "fnm 已通过 winget 卸载"
-                } else {
-                    $rollbackActions += "winget 卸载 fnm 失败，可能需要手动清理"
-                }
-            }
-        } catch {
-            $rollbackActions += "fnm 卸载异常: $($_.Exception.Message)"
-        }
-
-        # 3. 清理 fnm 目录
-        try {
-            $fnmDir = "$env:LOCALAPPDATA\fnm"
-            if (Test-Path $fnmDir) {
-                Remove-Item $fnmDir -Recurse -Force
-                $rollbackActions += "fnm 本地目录已清理"
-            }
-        } catch {
-            $rollbackActions += "fnm 目录清理失败: $($_.Exception.Message)"
-        }
-
-        # 4. 清理环境变量（当前会话）
-        try {
-            $pathsToRemove = @("fnm", "node", "npm")
-            $currentPath = $env:PATH -split ';'
-            $newPath = $currentPath | Where-Object {
-                $path = $_
-                -not ($pathsToRemove | Where-Object { $path -like "*$_*" })
-            }
-            $env:PATH = $newPath -join ';'
-            $rollbackActions += "当前会话环境变量已清理"
-        } catch {
-            $rollbackActions += "环境变量清理异常: $($_.Exception.Message)"
-        }
-
-        $result.Success = $true
-        $result.Message = "fnm 和 Node.js 回滚完成: $($rollbackActions -join '; ')"
-
-        Write-UiSuccess "✓ 回滚操作完成"
-        Write-UiInfo "💡 提示: 完全清理可能需要重新启动 PowerShell 或重启系统"
-
-    } catch {
-        $result.ErrorMessage = "fnm 和 Node.js 回滚失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
-    }
-
-    return $result
-}
-
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
 # 所有函数在 dot-source 后自动可用

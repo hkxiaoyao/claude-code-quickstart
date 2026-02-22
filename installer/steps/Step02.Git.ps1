@@ -1,4 +1,4 @@
-﻿# Step03.Git.ps1 - Git 安装和基础配置
+﻿# Step02.Git.ps1 - Git 安装和基础配置
 # 作者: 哈雷酱 (本小姐的版本控制杰作！)
 # 功能: 安装 Git 并进行基础配置（user.name/email）
 
@@ -15,10 +15,10 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 # 全局配置
 $script:MinGitVersion = [Version]"2.30.0"  # 最低 Git 版本要求
 
-function Test-Step03Installed {
+function Test-Step02Installed {
     <#
     .SYNOPSIS
-    测试步骤 03 是否已完成（Git 安装和配置）
+    测试步骤 02 是否已完成（Git 安装和配置）
     .RETURNS
     测试结果对象
     #>
@@ -136,10 +136,10 @@ function Test-Step03Installed {
     return $result
 }
 
-function Install-Step03 {
+function Install-Step02 {
     <#
     .SYNOPSIS
-    执行步骤 03 安装（Git 安装 + 基础配置）
+    执行步骤 02 安装（Git 安装 + 基础配置）
     .RETURNS
     安装结果对象
     #>
@@ -384,7 +384,7 @@ function Install-Step03 {
         $result.Success = $true
         $result.Message = "Git 安装和配置完成"
 
-        Write-UiSuccess "✅ Step03 安装完成！"
+        Write-UiSuccess "✅ Step02 安装完成！"
 
     } catch {
         $result.ErrorMessage = "Git 安装和配置失败: $($_.Exception.Message)"
@@ -394,10 +394,10 @@ function Install-Step03 {
     return $result
 }
 
-function Verify-Step03 {
+function Verify-Step02 {
     <#
     .SYNOPSIS
-    验证步骤 03 执行结果
+    验证步骤 02 执行结果
     .RETURNS
     验证结果对象
     #>
@@ -478,109 +478,6 @@ function Verify-Step03 {
 
     } catch {
         $result.ErrorMessage = "Git 验证过程失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
-    }
-
-    return $result
-}
-
-function Rollback-Step03 {
-    <#
-    .SYNOPSIS
-    回滚步骤 03（移除 Git 配置，可选卸载 Git）
-    .RETURNS
-    回滚结果对象
-    #>
-    param()
-
-    $result = @{
-        Success = $false
-        Message = ""
-        ErrorMessage = ""
-    }
-
-    try {
-        Write-UiInfo "🔄 回滚 Git 安装和配置..."
-
-        $rollbackActions = @()
-
-        # 询问回滚范围
-        $options = @(
-            "仅清除 Git 全局配置",
-            "清除配置并卸载 Git",
-            "取消回滚操作"
-        )
-        $choice = Show-SingleSelectMenu -Title "选择回滚范围：" -Options $options
-
-        if ($choice -eq 2) {
-            $result.Success = $true
-            $result.Message = "用户取消回滚操作"
-            Write-UiInfo "回滚操作已取消"
-            return $result
-        }
-
-        # 1. 清除 Git 全局配置
-        try {
-            Write-UiInfo "清除 Git 全局配置..."
-
-            $configsToRemove = @(
-                "user.name",
-                "user.email",
-                "init.defaultBranch",
-                "core.autocrlf",
-                "core.safecrlf",
-                "pull.rebase",
-                "core.editor"
-            )
-
-            foreach ($configKey in $configsToRemove) {
-                try {
-                    $removeResult = Invoke-ExternalCommand -Command "git" -Arguments @("config", "--global", "--unset", $configKey) -TimeoutSeconds 30
-                    if ($removeResult.Success) {
-                        $rollbackActions += "已移除配置: $configKey"
-                    } else {
-                        $rollbackActions += "配置移除失败: $configKey"
-                    }
-                } catch {
-                    $rollbackActions += "配置移除异常: $configKey - $($_.Exception.Message)"
-                }
-            }
-
-        } catch {
-            $rollbackActions += "Git 配置清除异常: $($_.Exception.Message)"
-        }
-
-        # 2. 卸载 Git（如果用户选择）
-        if ($choice -eq 1) {
-            try {
-                Write-UiInfo "卸载 Git..."
-
-                if (Test-CommandAvailable -Command "winget") {
-                    $uninstallResult = Invoke-ExternalCommand -Command "winget" -Arguments @("uninstall", "Git.Git") -TimeoutSeconds 120
-                    if ($uninstallResult.Success) {
-                        $rollbackActions += "Git 已通过 winget 卸载"
-                    } else {
-                        $rollbackActions += "winget 卸载 Git 失败，可能需要手动卸载"
-                    }
-                } else {
-                    $rollbackActions += "winget 不可用，请手动卸载 Git"
-                }
-
-            } catch {
-                $rollbackActions += "Git 卸载异常: $($_.Exception.Message)"
-            }
-        }
-
-        $result.Success = $true
-        $result.Message = "Git 回滚完成: $($rollbackActions -join '; ')"
-
-        Write-UiSuccess "✓ 回滚操作完成"
-        if ($choice -eq 1) {
-            Write-UiInfo "💡 提示: Git 卸载可能需要重新启动系统才能完全生效"
-        }
-
-    } catch {
-        $result.ErrorMessage = "Git 回滚失败: $($_.Exception.Message)"
         Write-UiError "✗ $($result.ErrorMessage)"
     }
 

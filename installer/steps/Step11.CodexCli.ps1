@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-Step12Installed {
+function Test-Step11Installed {
     <#
     .SYNOPSIS
     检测 Codex CLI 是否已安装
@@ -52,7 +52,7 @@ function Test-Step12Installed {
     return $result
 }
 
-function Install-Step12 {
+function Install-Step11 {
     <#
     .SYNOPSIS
     安装 Codex CLI
@@ -108,7 +108,7 @@ function Install-Step12 {
     return $result
 }
 
-function Verify-Step12 {
+function Verify-Step11 {
     <#
     .SYNOPSIS
     验证 Codex CLI 安装
@@ -149,59 +149,6 @@ function Verify-Step12 {
     }
     catch {
         $result.ErrorMessage = "验证 Codex CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
-    }
-
-    return $result
-}
-
-function Rollback-Step12 {
-    <#
-    .SYNOPSIS
-    回滚 Codex CLI 安装
-    .RETURNS
-    包含 Success 字段的结果对象
-    #>
-
-    $result = @{
-        Success      = $false
-        ErrorMessage = ""
-        Data         = @{}
-    }
-
-    try {
-        Write-UiInfo "回滚 Codex CLI 安装..."
-
-        # 检查是否已安装
-        if (-not (Test-CommandAvailable -Command "codex")) {
-            Write-UiInfo "Codex CLI 未安装，无需回滚"
-            $result.Success = $true
-            return $result
-        }
-
-        # 卸载全局包
-        Write-UiInfo "正在卸载 Codex CLI..."
-        $uninstallOut = Invoke-ExternalCommand -Command "npm" -Arguments @("uninstall", "-g", "codex-cli")
-
-        if ($uninstallOut.ExitCode -ne 0) {
-            Write-UiWarn "npm 卸载可能失败，但继续执行"
-        }
-
-        # 刷新 PATH
-        Refresh-SessionPath
-
-        # 验证卸载
-        Start-Sleep -Seconds 2
-        if (Test-CommandAvailable -Command "codex") {
-            Write-UiWarn "codex 命令仍然可用，可能需要手动清理"
-        } else {
-            Write-UiSuccess "✓ Codex CLI 已成功卸载"
-        }
-
-        $result.Success = $true
-    }
-    catch {
-        $result.ErrorMessage = "回滚 Codex CLI 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 

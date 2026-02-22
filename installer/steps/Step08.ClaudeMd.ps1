@@ -253,7 +253,7 @@ TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
 - 禁止截断输出
 '@
 
-function Test-Step09Installed {
+function Test-Step08Installed {
     <#
     .SYNOPSIS
     检测 CLAUDE.md 是否已配置
@@ -288,7 +288,7 @@ function Test-Step09Installed {
     }
 }
 
-function Install-Step09 {
+function Install-Step08 {
     <#
     .SYNOPSIS
     安装 CLAUDE.md 配置
@@ -340,7 +340,7 @@ function Install-Step09 {
     }
 }
 
-function Verify-Step09 {
+function Verify-Step08 {
     <#
     .SYNOPSIS
     验证 CLAUDE.md 配置
@@ -397,41 +397,6 @@ function Verify-Step09 {
     }
     catch {
         Write-UiError "验证 CLAUDE.md 配置失败: $($_.Exception.Message)"
-        return $false
-    }
-}
-
-function Rollback-Step09 {
-    <#
-    .SYNOPSIS
-    回滚 CLAUDE.md 配置
-    #>
-
-    try {
-        Write-UiInfo "回滚 CLAUDE.md 配置..."
-
-        $claudeMdPath = Get-ClaudeMdPath
-        if (Test-Path $claudeMdPath) {
-            # 查找最新的备份文件
-            $claudeMdDir = Split-Path $claudeMdPath -Parent
-            $backupFiles = Get-ChildItem "$claudeMdDir\CLAUDE.md.backup.*" -ErrorAction SilentlyContinue |
-                          Sort-Object LastWriteTime -Descending
-
-            if ($backupFiles.Count -gt 0) {
-                $latestBackup = $backupFiles[0]
-                Copy-Item $latestBackup.FullName $claudeMdPath -Force
-                Write-UiInfo "已从备份恢复: $($latestBackup.Name)"
-            } else {
-                Remove-Item $claudeMdPath -Force
-                Write-UiInfo "已删除 CLAUDE.md 文件（无备份可恢复）"
-            }
-        }
-
-        Write-UiSuccess "✓ CLAUDE.md 配置回滚完成"
-        return $true
-    }
-    catch {
-        Write-UiError "回滚 CLAUDE.md 配置失败: $($_.Exception.Message)"
         return $false
     }
 }

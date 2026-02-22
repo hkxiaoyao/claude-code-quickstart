@@ -2,7 +2,7 @@
 
 > Windows 10/11 平台的 Claude Code 开发环境**自动化安装器**
 
-一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 13 个步骤，**全程自动化，支持断点续传**。
+一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，支持断点续传**。
 
 ---
 
@@ -133,7 +133,7 @@ pwsh -File ".\Install-ClaudeEnv.built.ps1" -OneClick
 pwsh -File ".\installer\Install-ClaudeEnv.ps1" -OneClick
 ```
 
-自动按依赖顺序安装全部 13 个步骤（含可选的 Codex CLI 和 Gemini CLI）。
+自动按依赖顺序安装全部 12 个步骤（含可选的 Codex CLI 和 Gemini CLI）。
 
 ### 分阶段安装
 
@@ -175,19 +175,18 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps
 
 | # | 步骤 | 说明 | 可选 |
 |---|------|------|:----:|
-| 01 | 代理配置检测 | 评估网络环境，识别代理配置 | — |
-| 02 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | — |
-| 03 | Git | 安装 Git，配置中文支持 | — |
-| 04 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | — |
-| 05 | ccline | 安装 ccline 状态栏工具 | — |
-| 06 | cc-switch | 安装 cc-switch 版本切换工具 | — |
-| 07 | API Key 配置 | 配置 AI 供应商 API Key | — |
-| 08 | Claude 基础配置 | 写入语言/模型/权限/状态栏配置 | — |
-| 09 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | — |
-| 10 | MCP Server | 配置 MCP 插件服务器 | — |
-| 11 | CCG 工作流 | 安装 Claude Code Generator 工作流 | — |
-| 12 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | ✓ |
-| 13 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | ✓ |
+| 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | — |
+| 02 | Git | 安装 Git，配置中文支持 | — |
+| 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | — |
+| 04 | ccline | 安装 ccline 状态栏工具 | — |
+| 05 | cc-switch | 安装 cc-switch 版本切换工具 | — |
+| 06 | API Key 配置 | 配置 AI 供应商 API Key | — |
+| 07 | Claude 基础配置 | 写入语言/模型/权限/状态栏配置 | — |
+| 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | — |
+| 09 | MCP Server | 配置 MCP 插件服务器 | — |
+| 10 | CCG 工作流 | 安装 Claude Code Generator 工作流 | — |
+| 11 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | ✓ |
+| 12 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | ✓ |
 
 ---
 
@@ -232,10 +231,10 @@ claude-code-quickstart/
 │   │   ├── Net.ps1               # 网络检测与代理配置
 │   │   └── Bootstrap.ps1         # 步骤状态模型与调度引擎
 │   └── steps/                    # 安装步骤模块
-│       ├── Step01.Proxy.ps1
-│       ├── Step02.NodeFnm.ps1
+│       ├── Step01.NodeFnm.ps1
+│       ├── Step02.Git.ps1
 │       ├── ...
-│       └── Step13.GeminiCli.ps1
+│       └── Step12.GeminiCli.ps1
 └── test-syntax.ps1               # 语法全量校验工具
 ```
 
@@ -296,7 +295,7 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
 
 **Q：想重新配置 API Key？**
 
-Step07（API Key 配置）的 `SkipIfInstalled` 为 `false`，每次安装都会重新运行。直接 `-Staged` 模式只勾选 Step07 即可：
+Step06（API Key 配置）的 `SkipIfInstalled` 为 `false`，每次安装都会重新运行。直接 `-Staged` 模式只勾选 Step06 即可：
 
 ```powershell
 # 构建后的单文件版本

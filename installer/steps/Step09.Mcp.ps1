@@ -118,7 +118,7 @@ $script:McpServers = @{
     }
 }
 
-function Test-Step10Installed {
+function Test-Step09Installed {
     <#
     .SYNOPSIS
     检测 MCP Server 是否已安装配置
@@ -154,7 +154,7 @@ function Test-Step10Installed {
     }
 }
 
-function Install-Step10 {
+function Install-Step09 {
     <#
     .SYNOPSIS
     安装 MCP Server 配置
@@ -372,7 +372,7 @@ function Install-Step10 {
     }
 }
 
-function Verify-Step10 {
+function Verify-Step09 {
     <#
     .SYNOPSIS
     验证 MCP Server 配置
@@ -455,66 +455,6 @@ function Verify-Step10 {
     }
     catch {
         Write-UiError "验证 MCP Server 配置失败: $($_.Exception.Message)"
-        return $false
-    }
-}
-
-function Rollback-Step10 {
-    <#
-    .SYNOPSIS
-    回滚 MCP Server 配置
-    #>
-
-    try {
-        Write-UiInfo "回滚 MCP Server 配置..."
-
-        $settingsPath = Get-ClaudeSettingsPath
-        if (Test-Path $settingsPath) {
-            # 备份现有文件
-            $backupPath = "$settingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-            Copy-Item $settingsPath $backupPath -Force
-            Write-UiInfo "已备份现有配置到: $backupPath"
-
-            # 读取并移除 MCP 配置
-            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
-
-            # 移除 MCP Server 配置
-            if ($settings.ContainsKey("mcpServers")) {
-                $settings.Remove("mcpServers")
-                Write-UiInfo "已移除 MCP Server 配置"
-            }
-
-            # 移除 MCP 相关权限
-            if ($settings.ContainsKey("permissions") -and $settings.permissions.ContainsKey("allow")) {
-                $mcpPermissions = @("mcp")
-                foreach ($permission in $mcpPermissions) {
-                    $settings.permissions.allow = $settings.permissions.allow | Where-Object { $_ -ne $permission }
-                }
-                Write-UiInfo "已移除 MCP 相关权限"
-            }
-
-            # 移除 API Key（谨慎操作）
-            if ($settings.ContainsKey("env")) {
-                $apiKeyNames = $script:McpServers.Values | Where-Object { $_.RequiresApiKey } | ForEach-Object { $_.ApiKeyName }
-                foreach ($keyName in $apiKeyNames) {
-                    if ($settings.env.ContainsKey($keyName)) {
-                        $settings.env.Remove($keyName)
-                        Write-UiInfo "已移除 API Key: $keyName"
-                    }
-                }
-            }
-
-            # 写回文件
-            $tempPath = "$settingsPath.tmp"
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
-            Move-Item $tempPath $settingsPath -Force
-        }
-
-        Write-UiSuccess "✓ MCP Server 配置回滚完成"
-        return $true
-    }
-    catch {
-        Write-UiError "回滚 MCP Server 配置失败: $($_.Exception.Message)"
         return $false
     }
 }

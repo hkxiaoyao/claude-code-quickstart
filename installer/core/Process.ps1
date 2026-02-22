@@ -353,7 +353,7 @@ function Invoke-NpmGlobalInstall {
 function Test-CommandAvailable {
     <#
     .SYNOPSIS
-    检测命令是否可用
+    检测命令是否可用（验证实际可执行性）
     .PARAMETER Command
     要检测的命令名
     .RETURNS
@@ -365,11 +365,38 @@ function Test-CommandAvailable {
     )
 
     try {
-        # 使用 Get-Command 检测命令
-        $null = Get-Command $Command -ErrorAction Stop
-        return $true
+        # 先用 Get-Command 检测命令路径
+        $cmdInfo = Get-Command $Command -ErrorAction Stop
+
+        # 如果是外部命令（Application），验证文件是否真实存在
+        if ($cmdInfo.CommandType -eq 'Application') {
+            $exePath = $cmdInfo.Source
+            if (-not (Test-Path $exePath -PathType Leaf)) {
+                # PATH 中有记录但文件不存在
+                return $false
+            }
+        }
+
+        # 通过实际执行验证命令可用性（最终验证）
+        try {
+            $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+            return $result.Success
+        } catch {
+            # 尝试 -v 参数
+            try {
+                $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+                return $result.Success
+            } catch {
+                # 如果是 PowerShell 内置命令（Cmdlet/Function），Get-Command 成功即可用
+                if ($cmdInfo.CommandType -in @('Cmdlet', 'Function', 'Alias')) {
+                    return $true
+                }
+                return $false
+            }
+        }
+
     } catch {
-        # 如果 Get-Command 失败，尝试直接执行 --version 或 -v
+        # Get-Command 失败，尝试直接执行验证
         try {
             $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
             return $result.Success
@@ -473,16 +500,30 @@ function Refresh-SessionPath {
             Write-Host "警告: 无法读取用户级 PATH" -ForegroundColor Yellow
         }
 
-        # 合并 PATH
+        # 合并 PATH（保留当前进程中的 PATH，避免覆盖 fnm 等工具设置的路径）
+        $currentPath = $env:PATH -split ';' | Where-Object { $_ -and $_.Trim() }
         $newPath = @()
+
+        # 先添加当前进程的 PATH（包含 fnm use 设置的 Node.js 路径）
+        if ($currentPath) { $newPath += $currentPath }
+
+        # 再添加系统级和用户级 PATH
         if ($systemPath) { $newPath += $systemPath -split ';' }
         if ($userPath) { $newPath += $userPath -split ';' }
 
-        # 去重并过滤空值
-        $newPath = $newPath | Where-Object { $_ -and $_.Trim() } | Select-Object -Unique
+        # 去重并过滤空值（保持顺序，优先使用当前进程的路径）
+        $seen = @{}
+        $uniquePath = @()
+        foreach ($path in $newPath) {
+            $trimmedPath = $path.Trim()
+            if ($trimmedPath -and -not $seen.ContainsKey($trimmedPath.ToLower())) {
+                $seen[$trimmedPath.ToLower()] = $true
+                $uniquePath += $trimmedPath
+            }
+        }
 
         # 更新当前会话的 PATH
-        $env:PATH = $newPath -join ';'
+        $env:PATH = $uniquePath -join ';'
 
         Write-Host "✓ PATH 环境变量已刷新" -ForegroundColor Green
 

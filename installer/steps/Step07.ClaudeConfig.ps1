@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Profile.ps1"
 
-function Test-Step08Installed {
+function Test-Step07Installed {
     <#
     .SYNOPSIS
     检测 Claude Code 配置是否已完成
@@ -60,10 +60,10 @@ function Test-Step08Installed {
     return $result
 }
 
-function Install-Step08 {
+function Install-Step07 {
     <#
     .SYNOPSIS
-    安装 Claude Code 配置（在 Step07 基础上补全 settings.json）
+    安装 Claude Code 配置（在 Step06 基础上补全 settings.json）
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -80,7 +80,7 @@ function Install-Step08 {
         $settingsPath = Get-ClaudeSettingsPath
         $settings = @{}
 
-        # 读取现有配置（Step07 已写入 env.ANTHROPIC_AUTH_TOKEN）
+        # 读取现有配置（Step06 已写入 env.ANTHROPIC_AUTH_TOKEN）
         if (Test-Path $settingsPath) {
             try {
                 $existingContent = Get-Content $settingsPath -Raw
@@ -94,7 +94,7 @@ function Install-Step08 {
             }
         }
 
-        # 补全 env 配置（不覆盖 Step07 已写入的 ANTHROPIC_AUTH_TOKEN）
+        # 补全 env 配置（不覆盖 Step06 已写入的 ANTHROPIC_AUTH_TOKEN）
         if (-not $settings.ContainsKey("env")) {
             $settings["env"] = @{}
         }
@@ -141,7 +141,7 @@ function Install-Step08 {
             "deny" = @()
         }
 
-        # statusLine 配置（若 Step05 安装了 ccline 会在那步写入，这里提供占位）
+        # statusLine 配置（若 Step04 安装了 ccline 会在那步写入，这里提供占位）
         if (-not $settings.ContainsKey("statusLine")) {
             $settings["statusLine"] = @{
                 "type"    = "disabled"
@@ -177,7 +177,7 @@ function Install-Step08 {
     return $result
 }
 
-function Verify-Step08 {
+function Verify-Step07 {
     <#
     .SYNOPSIS
     验证 Claude Code 配置
@@ -199,9 +199,9 @@ function Verify-Step08 {
 
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
 
-        # 验证 env.ANTHROPIC_AUTH_TOKEN 存在（Step07 责任）
+        # 验证 env.ANTHROPIC_AUTH_TOKEN 存在（Step06 责任）
         if (-not $settings.env -or [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_AUTH_TOKEN)) {
-            throw "env.ANTHROPIC_AUTH_TOKEN 未配置（请先运行 Step07）"
+            throw "env.ANTHROPIC_AUTH_TOKEN 未配置（请先运行 Step06）"
         }
 
         # 验证 language 配置
@@ -223,66 +223,6 @@ function Verify-Step08 {
     }
     catch {
         $result.ErrorMessage = "验证 Claude Code 配置失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
-    }
-
-    return $result
-}
-
-function Rollback-Step08 {
-    <#
-    .SYNOPSIS
-    回滚 Claude Code 配置（移除 Step08 新增的配置键）
-    .RETURNS
-    包含 Success 字段的结果对象
-    #>
-
-    $result = @{
-        Success      = $false
-        ErrorMessage = ""
-        Data         = @{}
-    }
-
-    try {
-        Write-UiInfo "回滚 Claude Code 配置..."
-
-        $settingsPath = Get-ClaudeSettingsPath
-        if (Test-Path $settingsPath) {
-            # 备份现有文件
-            $backupPath = "$settingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-            Copy-Item $settingsPath $backupPath -Force
-            Write-UiInfo "已备份现有配置到: $backupPath"
-
-            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
-
-            # 移除 Step08 新增的配置键（保留 Step07 写入的 env.ANTHROPIC_AUTH_TOKEN）
-            $step08Keys = @("language", "model", "permissions", "statusLine")
-            foreach ($key in $step08Keys) {
-                if ($settings.ContainsKey($key)) {
-                    $settings.Remove($key)
-                    Write-UiInfo "已移除配置项: $key"
-                }
-            }
-
-            # 移除 Step08 在 env 中新增的超时配置（保留 Step07 的 AUTH_TOKEN 和 BASE_URL）
-            $step08EnvKeys = @("BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "MAX_THINKING_TOKENS")
-            if ($settings.ContainsKey("env")) {
-                foreach ($key in $step08EnvKeys) {
-                    $settings["env"].Remove($key)
-                }
-            }
-
-            # 原子写入
-            $tempPath = "$settingsPath.tmp"
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
-            Move-Item $tempPath $settingsPath -Force
-        }
-
-        Write-UiSuccess "✓ Claude Code 配置回滚完成"
-        $result.Success = $true
-    }
-    catch {
-        $result.ErrorMessage = "回滚 Claude Code 配置失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 

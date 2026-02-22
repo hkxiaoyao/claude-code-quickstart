@@ -111,7 +111,16 @@ function Get-ManagedBlockContent {
     }
 
     try {
-        $lines = Get-Content $FilePath -Encoding UTF8
+        $lines = Get-Content $FilePath -Encoding UTF8 -ErrorAction SilentlyContinue
+
+        # 处理空文件或读取失败的情况
+        if ($null -eq $lines) {
+            $lines = @()
+        } elseif ($lines -isnot [array]) {
+            # 单行文件会返回字符串而不是数组
+            $lines = @($lines)
+        }
+
         $inBlock = $false
         $lineNumber = 0
 
@@ -182,6 +191,7 @@ function Set-ManagedBlockInFile {
         [string]$FilePath,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string[]]$Content,
 
         [string]$StartMarker = $script:ManagedBlockStartMarker,
@@ -222,31 +232,42 @@ function Set-ManagedBlockInFile {
         $blockInfo = Get-ManagedBlockContent -FilePath $FilePath -StartMarker $StartMarker -EndMarker $EndMarker
 
         # 构建新的文件内容
-        $newContent = @()
+        $newContent = [System.Collections.ArrayList]::new()
 
         # 添加标记块之前的内容
-        $newContent += $blockInfo.BeforeBlock
+        if ($blockInfo.BeforeBlock -and $blockInfo.BeforeBlock.Count -gt 0) {
+            foreach ($line in $blockInfo.BeforeBlock) {
+                $null = $newContent.Add($line)
+            }
+        }
 
         # 如果没有找到标记块且需要追加
         if (-not $blockInfo.Found -and $AppendIfNoBlock) {
             # 如果文件不为空，添加空行分隔
-            if ($blockInfo.BeforeBlock.Count -gt 0) {
-                $newContent += ""
+            if ($newContent.Count -gt 0) {
+                $null = $newContent.Add("")
             }
         }
 
         # 添加标记块
-        $newContent += $StartMarker
-        $newContent += $Content
-        $newContent += $EndMarker
+        $null = $newContent.Add($StartMarker)
+        if ($Content -and $Content.Count -gt 0) {
+            foreach ($line in $Content) {
+                $null = $newContent.Add($line)
+            }
+        }
+        $null = $newContent.Add($EndMarker)
 
         # 如果找到了标记块，添加标记块之后的内容
-        if ($blockInfo.Found) {
-            $newContent += $blockInfo.AfterBlock
+        if ($blockInfo.Found -and $blockInfo.AfterBlock -and $blockInfo.AfterBlock.Count -gt 0) {
+            foreach ($line in $blockInfo.AfterBlock) {
+                $null = $newContent.Add($line)
+            }
         }
 
-        # 原子写入文件
-        $success = Write-FileAtomically -FilePath $FilePath -Content $newContent
+        # 转换为数组并原子写入文件
+        $contentArray = $newContent.ToArray()
+        $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
             Write-Host "✓ 标记块已更新: $FilePath" -ForegroundColor Green
@@ -280,6 +301,7 @@ function Write-FileAtomically {
         [string]$FilePath,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string[]]$Content,
 
         [string]$Encoding = "UTF8"
@@ -288,10 +310,15 @@ function Write-FileAtomically {
     $tempFile = $null
 
     try {
-        # 验证 Content 参数
-        if ($null -eq $Content -or $Content.Count -eq 0) {
-            Write-Host "内容为空，无法写入文件" -ForegroundColor Yellow
-            return $false
+        # 验证 Content 参数（允许空数组，因为可能是空文件）
+        if ($null -eq $Content) {
+            Write-Host "内容为 null，使用空数组" -ForegroundColor Yellow
+            $Content = @()
+        }
+
+        # 确保 Content 是数组类型
+        if ($Content -isnot [array]) {
+            $Content = @($Content)
         }
 
         # 确保目标目录存在
@@ -303,8 +330,13 @@ function Write-FileAtomically {
         # 生成临时文件路径
         $tempFile = "$FilePath.tmp_$(Get-Random)"
 
-        # 写入临时文件
-        $Content | Out-File -FilePath $tempFile -Encoding $Encoding -Force
+        # 写入临时文件（处理空数组的情况）
+        if ($Content.Count -eq 0) {
+            # 创建空文件
+            New-Item -Path $tempFile -ItemType File -Force | Out-Null
+        } else {
+            $Content | Out-File -FilePath $tempFile -Encoding $Encoding -Force
+        }
 
         # 验证临时文件写入成功
         if (-not (Test-Path $tempFile)) {
@@ -378,12 +410,23 @@ function Remove-ManagedBlockFromFile {
         }
 
         # 构建新内容（移除标记块）
-        $newContent = @()
-        $newContent += $blockInfo.BeforeBlock
-        $newContent += $blockInfo.AfterBlock
+        $newContent = [System.Collections.ArrayList]::new()
 
-        # 原子写入
-        $success = Write-FileAtomically -FilePath $FilePath -Content $newContent
+        if ($blockInfo.BeforeBlock -and $blockInfo.BeforeBlock.Count -gt 0) {
+            foreach ($line in $blockInfo.BeforeBlock) {
+                $null = $newContent.Add($line)
+            }
+        }
+
+        if ($blockInfo.AfterBlock -and $blockInfo.AfterBlock.Count -gt 0) {
+            foreach ($line in $blockInfo.AfterBlock) {
+                $null = $newContent.Add($line)
+            }
+        }
+
+        # 转换为数组并原子写入
+        $contentArray = $newContent.ToArray()
+        $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
             Write-Host "✓ 标记块已移除: $FilePath" -ForegroundColor Green

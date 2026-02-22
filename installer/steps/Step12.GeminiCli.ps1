@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-Step13Installed {
+function Test-Step12Installed {
     <#
     .SYNOPSIS
     检测 Gemini CLI 是否已安装
@@ -52,7 +52,7 @@ function Test-Step13Installed {
     return $result
 }
 
-function Install-Step13 {
+function Install-Step12 {
     <#
     .SYNOPSIS
     安装 Gemini CLI
@@ -108,7 +108,7 @@ function Install-Step13 {
     return $result
 }
 
-function Verify-Step13 {
+function Verify-Step12 {
     <#
     .SYNOPSIS
     验证 Gemini CLI 安装
@@ -149,59 +149,6 @@ function Verify-Step13 {
     }
     catch {
         $result.ErrorMessage = "验证 Gemini CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
-    }
-
-    return $result
-}
-
-function Rollback-Step13 {
-    <#
-    .SYNOPSIS
-    回滚 Gemini CLI 安装
-    .RETURNS
-    包含 Success 字段的结果对象
-    #>
-
-    $result = @{
-        Success      = $false
-        ErrorMessage = ""
-        Data         = @{}
-    }
-
-    try {
-        Write-UiInfo "回滚 Gemini CLI 安装..."
-
-        # 检查是否已安装
-        if (-not (Test-CommandAvailable -Command "gemini")) {
-            Write-UiInfo "Gemini CLI 未安装，无需回滚"
-            $result.Success = $true
-            return $result
-        }
-
-        # 卸载全局包
-        Write-UiInfo "正在卸载 Gemini CLI..."
-        $uninstallOut = Invoke-ExternalCommand -Command "npm" -Arguments @("uninstall", "-g", "gemini-cli")
-
-        if ($uninstallOut.ExitCode -ne 0) {
-            Write-UiWarn "npm 卸载可能失败，但继续执行"
-        }
-
-        # 刷新 PATH
-        Refresh-SessionPath
-
-        # 验证卸载
-        Start-Sleep -Seconds 2
-        if (Test-CommandAvailable -Command "gemini") {
-            Write-UiWarn "gemini 命令仍然可用，可能需要手动清理"
-        } else {
-            Write-UiSuccess "✓ Gemini CLI 已成功卸载"
-        }
-
-        $result.Success = $true
-    }
-    catch {
-        $result.ErrorMessage = "回滚 Gemini CLI 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 

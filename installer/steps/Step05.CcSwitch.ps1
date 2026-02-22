@@ -1,4 +1,4 @@
-﻿# Step06: CC-Switch 安装 - Claude Code 环境安装器
+﻿# Step05: CC-Switch 安装 - Claude Code 环境安装器
 # 作者: 哈雷酱 (本小姐的 CC-Switch 安装杰作！)
 # 功能: CC-Switch GitHub Release 下载 + MSI 静默安装
 
@@ -16,7 +16,7 @@ $script:CcSwitchRepo = "anthropics/cc-switch"
 $script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
 $script:TempDownloadDir = "$env:TEMP\CcSwitchInstall"
 
-function Test-Step06Installed {
+function Test-Step05Installed {
     <#
     .SYNOPSIS
     检测 CC-Switch 是否已安装
@@ -83,7 +83,7 @@ function Test-Step06Installed {
     }
 }
 
-function Install-Step06 {
+function Install-Step05 {
     <#
     .SYNOPSIS
     安装 CC-Switch
@@ -100,7 +100,7 @@ function Install-Step06 {
         Write-Host "1. 检查前置条件..." -ForegroundColor Gray
 
         if (-not (Test-CommandAvailable -Command "claude")) {
-            throw "Claude Code 未安装，请先完成 Step04"
+            throw "Claude Code 未安装，请先完成 Step03"
         }
 
         Write-Host "✓ 前置条件检查完成" -ForegroundColor Green
@@ -109,7 +109,7 @@ function Install-Step06 {
         Write-Host ""
         Write-Host "2. 检查 CC-Switch 安装状态..." -ForegroundColor Gray
 
-        if (Test-Step06Installed) {
+        if (Test-Step05Installed) {
             Write-Host "✓ CC-Switch 已安装" -ForegroundColor Green
 
             # 询问是否重新安装
@@ -192,7 +192,7 @@ function Install-Step06 {
         # 等待安装完成
         Start-Sleep -Seconds 3
 
-        if (-not (Test-Step06Installed)) {
+        if (-not (Test-Step05Installed)) {
             Write-Host "⚠ CC-Switch 安装验证失败，但安装过程成功" -ForegroundColor Yellow
             Write-Host "  可能需要重启系统或重新登录才能完全生效" -ForegroundColor Gray
         } else {
@@ -469,7 +469,7 @@ function Install-CcSwitchPackage {
     }
 }
 
-function Verify-Step06 {
+function Verify-Step05 {
     <#
     .SYNOPSIS
     验证 CC-Switch 安装
@@ -478,85 +478,7 @@ function Verify-Step06 {
     #>
     param()
 
-    return Test-Step06Installed
-}
-
-function Rollback-Step06 {
-    <#
-    .SYNOPSIS
-    回滚 CC-Switch 安装
-    #>
-    param()
-
-    Write-Host "回滚 CC-Switch 安装..." -ForegroundColor Yellow
-
-    try {
-        # 查找已安装的 CC-Switch
-        $uninstallKeys = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        )
-
-        $ccSwitchItems = @()
-        foreach ($keyPath in $uninstallKeys) {
-            try {
-                $items = Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
-                    $_.DisplayName -like "*CC-Switch*" -or
-                    $_.DisplayName -like "*Claude Code Switch*" -or
-                    $_.Publisher -like "*Anthropic*"
-                }
-                $ccSwitchItems += $items
-            } catch { }
-        }
-
-        if ($ccSwitchItems.Count -eq 0) {
-            Write-Host "未找到已安装的 CC-Switch" -ForegroundColor Gray
-            return
-        }
-
-        foreach ($item in $ccSwitchItems) {
-            Write-Host "找到 CC-Switch 安装: $($item.DisplayName)" -ForegroundColor Yellow
-
-            if ($item.UninstallString) {
-                Write-Host "尝试卸载..." -ForegroundColor Gray
-
-                try {
-                    # 解析卸载命令
-                    $uninstallCmd = $item.UninstallString
-                    if ($uninstallCmd -match "msiexec") {
-                        # MSI 卸载
-                        $productCode = $item.PSChildName
-                        $arguments = @("/x", $productCode, "/quiet", "/norestart")
-                        $result = Invoke-ExternalCommand -Command "msiexec" -Arguments $arguments -TimeoutSeconds 180
-
-                        if ($result.Success) {
-                            Write-Host "✓ CC-Switch 卸载成功" -ForegroundColor Green
-                        } else {
-                            Write-Host "⚠ CC-Switch 卸载失败" -ForegroundColor Yellow
-                        }
-                    } else {
-                        Write-Host "⚠ 不支持的卸载方式，请手动卸载" -ForegroundColor Yellow
-                        Write-Host "  卸载命令: $uninstallCmd" -ForegroundColor Gray
-                    }
-                } catch {
-                    Write-Host "⚠ 卸载过程出错: $($_.Exception.Message)" -ForegroundColor Yellow
-                }
-            } else {
-                Write-Host "⚠ 未找到卸载信息，请手动卸载" -ForegroundColor Yellow
-            }
-        }
-
-        # 清理临时文件
-        try {
-            if (Test-Path $script:TempDownloadDir) {
-                Remove-Item $script:TempDownloadDir -Recurse -Force
-            }
-        } catch { }
-
-    } catch {
-        Write-Host "✗ 回滚失败: $($_.Exception.Message)" -ForegroundColor Red
-    }
+    return Test-Step05Installed
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

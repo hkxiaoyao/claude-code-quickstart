@@ -36,7 +36,7 @@ $script:ApiProviders = @{
     }
 }
 
-function Test-Step07Installed {
+function Test-Step06Installed {
     <#
     .SYNOPSIS
     检测 API Key 是否已配置
@@ -86,7 +86,7 @@ function Test-Step07Installed {
     return $result
 }
 
-function Install-Step07 {
+function Install-Step06 {
     <#
     .SYNOPSIS
     安装 API Key 配置（供应商选择 + Key 输入 + 写入 settings.json）
@@ -211,7 +211,7 @@ function Install-Step07 {
     return $result
 }
 
-function Verify-Step07 {
+function Verify-Step06 {
     <#
     .SYNOPSIS
     验证 API Key 配置
@@ -258,63 +258,6 @@ function Verify-Step07 {
     }
     catch {
         $result.ErrorMessage = "验证 API Key 配置失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
-    }
-
-    return $result
-}
-
-function Rollback-Step07 {
-    <#
-    .SYNOPSIS
-    回滚 API Key 配置
-    .RETURNS
-    包含 Success 字段的结果对象
-    #>
-
-    $result = @{
-        Success      = $false
-        ErrorMessage = ""
-        Data         = @{}
-    }
-
-    try {
-        Write-UiInfo "回滚 API Key 配置..."
-
-        $settingsPath = Get-ClaudeSettingsPath
-        if (Test-Path $settingsPath) {
-            # 备份现有文件
-            $backupPath = "$settingsPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-            Copy-Item $settingsPath $backupPath -Force
-            Write-UiInfo "已备份现有配置到: $backupPath"
-
-            # 读取并移除 API Key 相关字段
-            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable
-
-            if ($settings.ContainsKey("env")) {
-                $settings["env"].Remove("ANTHROPIC_AUTH_TOKEN")
-                $settings["env"].Remove("ANTHROPIC_BASE_URL")
-                # 移除供应商标记
-                foreach ($key in @("zhipu", "minimax", "moonshot")) {
-                    $settings["env"].Remove($key)
-                }
-            }
-            # 移除供应商顶层标记
-            foreach ($key in @("zhipu", "minimax", "moonshot")) {
-                $settings.Remove($key)
-            }
-
-            # 原子写入
-            $tempPath = "$settingsPath.tmp"
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
-            Move-Item $tempPath $settingsPath -Force
-        }
-
-        Write-UiSuccess "✓ API Key 配置回滚完成"
-        $result.Success = $true
-    }
-    catch {
-        $result.ErrorMessage = "回滚 API Key 配置失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 
