@@ -181,6 +181,10 @@ function Build-SingleFileScript {
     # 约束：不适用于 here-string 内含有 `. ` 开头的普通文本行（当前源文件中不存在此情况）。
     $dotSourcePattern = '^\s*\.\s+'
 
+    # $scriptRoot 计算行匹配模式（单文件模式下不需要，且 irm|iex 时会失败）
+    # 匹配形如: $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+    $scriptRootPattern = '^\s*\$scriptRoot\s*=\s*Split-Path\s+.*\$MyInvocation\.MyCommand\.Path'
+
     # 逐文件读取并拼接
     foreach ($relPath in $FileOrder) {
         $fullPath = Join-Path $InstallerRoot $relPath
@@ -211,6 +215,10 @@ function Build-SingleFileScript {
             }
             # 剥离 #Requires 行（已在头部统一声明）
             if ($line -match '^\s*#Requires\s') {
+                continue
+            }
+            # 剥离 $scriptRoot 计算行（单文件模式下不需要，且 irm|iex 时会失败）
+            if ($line -match $scriptRootPattern) {
                 continue
             }
             $buffer.Add($line)
