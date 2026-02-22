@@ -384,7 +384,8 @@ function Test-StepDependencies {
                 if ($depResult.Status -eq [StepStatus]::Failed) {
                     $result.CanExecute = $false
                     $result.FailedDependencies += $depStepId
-                } elseif ($depResult.Status -ne [StepStatus]::Success) {
+                } elseif ($depResult.Status -ne [StepStatus]::Success -and
+                      $depResult.Status -ne [StepStatus]::Skipped) {
                     $result.CanExecute = $false
                     $result.MissingDependencies += $depStepId
                 }

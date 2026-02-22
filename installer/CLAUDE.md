@@ -85,8 +85,8 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 | 函数 | 职责 |
 |------|------|
 | `Select-InstallMode` | 交互菜单选择 OneClick / Staged |
-| `Select-StagedSteps` | 多选菜单，必选步骤预勾选 |
-| `Invoke-AllSteps` | 拓扑排序 → 依赖检查 → `Invoke-StepLifecycle` |
+| `Invoke-StagedMode` | 单选迭代式分阶段安装（循环选择 → 依赖检查 → 执行 → 返回） |
+| `Invoke-AllSteps` | 拓扑排序 → 依赖检查 → `Invoke-StepLifecycle`（OneClick 模式使用） |
 | `Show-FinalSummary` | 调用 `Show-InstallSummary` 展示结果表格 |
 | `Main` | 总入口；处理 `-ListSteps` / `-Resume` / 模式选择 |
 
@@ -97,14 +97,21 @@ Main()
   ├── [if -ListSteps] Show-StepList → exit
   ├── Load-InstallState 或 Resume-Installation
   ├── Select-InstallMode（或读取参数）
-  ├── Select-StagedSteps（Staged 模式）
-  ├── Invoke-AllSteps
-  │   ├── Get-ExecutionOrder  # 拓扑排序
-  │   └── foreach stepId:
-  │       ├── Test-StepDependencies  # 前置依赖检查
-  │       └── Invoke-StepLifecycle   # Test → Install → Verify → Rollback
-  └── Show-FinalSummary
-      └── Save-InstallState (IsCompleted)
+  ├── [if OneClick]
+  │   ├── Invoke-AllSteps（全部步骤）
+  │   │   ├── Get-ExecutionOrder  # 拓扑排序
+  │   │   └── foreach stepId:
+  │   │       ├── Test-StepDependencies  # 前置依赖检查
+  │   │       └── Invoke-StepLifecycle   # Test → Install → Verify
+  │   └── Show-FinalSummary
+  └── [if Staged]
+      └── Invoke-StagedMode（迭代式单选）
+          ├── 构建步骤列表（带状态标签 PASS/FAIL/LOCK/空）
+          ├── Show-SingleSelectMenu → 用户选择一个步骤
+          ├── Esc → 退出循环 → Show-FinalSummary
+          ├── Test-StepDependencies → 依赖检查
+          ├── 依赖未满足 → 提示 → 回到选择
+          └── Invoke-StepLifecycle → 展示结果 → 回到选择
 ```
 
 ---
@@ -116,4 +123,4 @@ Main()
 | Step11.CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | Step12.GeminiCli | Google Gemini CLI，多模型协作使用 |
 
-在 Staged 模式下，可选步骤**默认不勾选**。在 OneClick 模式下，**全部包含**。
+在 Staged 模式下，用户通过**单选迭代式菜单**逐个选择步骤执行，每次执行后返回菜单。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，**全部包含**。
