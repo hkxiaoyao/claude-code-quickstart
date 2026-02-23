@@ -68,7 +68,7 @@ function Install-Ccline {
     #>
     param()
 
-    Write-Host "=== Step 05: CCometixLine 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== CCometixLine 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     $stepResult = @{

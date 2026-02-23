@@ -96,7 +96,7 @@ function Install-CcSwitch {
     #>
     param()
 
-    Write-Host "=== Step 06: CC-Switch 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== CC-Switch 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     $result = @{
