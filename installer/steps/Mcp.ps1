@@ -1,4 +1,4 @@
-﻿# MCP Server 安装步骤 - Claude Code 环境安装器
+﻿# MCP Server 安装步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的专业 MCP 管理！)
 # 功能: MCP Server 安装、配置和 API Key 管理
 

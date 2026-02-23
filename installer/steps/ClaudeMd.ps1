@@ -1,4 +1,4 @@
-# CLAUDE.md 配置步骤 - Claude Code 环境安装器
+# CLAUDE.md 配置步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的完美文档管理！)
 # 功能: 用户级 CLAUDE.md 配置文件写入 + rules/ 拆分文件管理
 

@@ -1,4 +1,4 @@
-# Claude Code 常用配置步骤 - Claude Code 环境安装器
+# Claude Code 常用配置步骤 - CCQ
 # 功能: 声明式字段管理，仅补缺失项，不覆盖 ApiKey/Ccline/用户已有配置
 
 #Requires -Version 5.1

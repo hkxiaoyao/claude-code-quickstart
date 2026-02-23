@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Manage-ClaudeEnv.ps1 - Claude Code 环境管理器（分组安装入口）
+# Manage-ClaudeEnv.ps1 - CCQ（分组安装入口）
 # 功能: 两级分组安装（基础环境 / 进阶扩展），支持一键、多选、断点续传
 
 param(
@@ -491,7 +491,7 @@ function Show-FinalSummary {
     )
 
     Write-Host ""
-    Show-AsciiBanner -Title "CCQ - 安装完成"
+    Show-CcqLogo -Subtitle "安装完成"
 
     # 仅展示本次执行计划中涉及的步骤
     $summaryItems = @()
@@ -596,10 +596,9 @@ function Main {
         }
 
         # 欢迎横幅
-        Show-AsciiBanner -Title "CCQ 环境管理器 v2.0"
+        Show-CcqLogo -Subtitle "Claude Code Quickstart"
 
-        Write-UiInfo "欢迎使用 CCQ 环境管理器！"
-        Write-UiInfo "支持基础环境一键安装和进阶扩展灵活选配"
+        Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
         Write-Host ""
 
         # 加载安装状态
@@ -674,7 +673,7 @@ function Main {
 
             if ($topChoice -eq -1) {
                 Write-Host ""
-                Write-UiInfo "退出环境管理器"
+                Write-UiInfo "退出 CCQ"
                 break
             }
 
@@ -743,10 +742,10 @@ function Main {
         }
 
     } catch {
-        Write-UiError "管理器运行中发生严重错误: $($_.Exception.Message)"
+        Write-UiError "CCQ 运行中发生严重错误: $($_.Exception.Message)"
         Write-Host ""
         Show-ErrorDetails `
-            -FriendlyMessage "环境管理器遇到未预期的错误，请查看技术详情" `
+            -FriendlyMessage "CCQ 遇到未预期的错误，请查看技术详情" `
             -TechnicalDetails "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
         exit 1
     }

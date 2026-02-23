@@ -1,4 +1,4 @@
-# CCG Workflow 安装步骤 - Claude Code 环境安装器
+# CCG Workflow 安装步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的专业工作流管理！)
 # 功能: 通过官方 npx ccg-workflow@latest init 安装 CCG Workflow
 

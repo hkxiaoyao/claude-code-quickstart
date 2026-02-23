@@ -1,4 +1,4 @@
-﻿# CcSwitch.ps1 - CC-Switch 安装 - Claude Code 环境安装器
+﻿# CcSwitch.ps1 - CC-Switch 安装 - CCQ
 # 作者: 哈雷酱 (本小姐的 CC-Switch 安装杰作！)
 # 功能: CC-Switch GitHub Release 下载 + MSI 静默安装
 

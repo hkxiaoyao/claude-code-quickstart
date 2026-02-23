@@ -1,4 +1,4 @@
-﻿# TUI 组件库 - Claude Code 环境安装器
+﻿# TUI 组件库 - CCQ
 # 作者: 哈雷酱 (本小姐的杰作！)
 # 功能: 提供终端用户界面组件，包括彩色输出、菜单、进度条等
 
@@ -91,9 +91,10 @@ $script:AnsiColors = @{
     Reset = "$script:EscapeChar[0m"
     Bold = "$script:EscapeChar[1m"
 
-    # 主色调：青色（标题、重点）
-    Cyan = "$script:EscapeChar[36m"
-    BrightCyan = "$script:EscapeChar[96m"
+    # 主色调：Claude 官方橙色（标题、重点）
+    # 使用 24-bit RGB 颜色（Windows Terminal / PS 7+ 支持）
+    Primary = "$script:EscapeChar[38;2;217;119;87m"        # Claude 主色 #D97757
+    BrightPrimary = "$script:EscapeChar[38;2;232;148;106m" # Claude 亮色 #E8946A
 
     # 成功：亮绿色
     Green = "$script:EscapeChar[32m"
@@ -132,7 +133,7 @@ function Write-UiInfo {
     $Message = Convert-EmojiToText -Text $Message
 
     if ($script:SupportsAnsi) {
-        $coloredMessage = "$($script:AnsiColors.Cyan)$Message$($script:AnsiColors.Reset)"
+        $coloredMessage = "$($script:AnsiColors.Primary)$Message$($script:AnsiColors.Reset)"
     } else {
         $coloredMessage = $Message
     }
@@ -358,6 +359,39 @@ function Show-AsciiBanner {
 
     Write-UiInfo $emptyLine
     Write-UiInfo $bottomBorder
+    Write-Host ""
+}
+
+function Show-CcqLogo {
+    <#
+    .SYNOPSIS
+    显示 CCQ ASCII Art Logo + 副标题
+    .PARAMETER Subtitle
+    Logo 下方的副标题文字（可选）
+    #>
+    param(
+        [string]$Subtitle = ""
+    )
+
+    $logoLines = @(
+        "  ██████╗  ██████╗  ██████╗ "
+        " ██╔════╝ ██╔════╝ ██╔═══██╗"
+        " ██║      ██║      ██║   ██║"
+        " ██║      ██║      ██║▄▄ ██║"
+        "  ╚██████╗ ╚██████╗ ╚██████╔╝"
+        "  ╚═════╝  ╚═════╝  ╚══▀▀═╝ "
+    )
+
+    Write-Host ""
+    foreach ($line in $logoLines) {
+        Write-UiInfo $line
+    }
+
+    if ($Subtitle) {
+        $Subtitle = Convert-EmojiToText -Text $Subtitle
+        Write-Host ""
+        Write-UiInfo "  $Subtitle"
+    }
     Write-Host ""
 }
 

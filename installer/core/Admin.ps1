@@ -1,4 +1,4 @@
-﻿# 管理员权限管理 - Claude Code 环境安装器
+﻿# 管理员权限管理 - CCQ
 # 功能: 管理员检测、自提权、步骤权限断言
 
 #Requires -Version 5.1

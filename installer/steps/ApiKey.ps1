@@ -1,4 +1,4 @@
-﻿# API Key 配置步骤 - Claude Code 环境安装器
+﻿# API Key 配置步骤 - CCQ
 # 功能: 供应商选择（智谱 GLM / MiniMax / Kimi / 自定义）、API Key 输入、settings.json 写入
 # 更新: 2026-02-22 - 更新供应商配置，添加 ~/.claude.json 配置
 

@@ -1,4 +1,4 @@
-﻿# Ccline.ps1 - CCometixLine 安装 - Claude Code 环境安装器
+﻿# Ccline.ps1 - CCometixLine 安装 - CCQ
 # 作者: 哈雷酱 (本小姐的状态栏配置杰作！)
 # 功能: CCometixLine 安装 + statusLine 配置写入
 

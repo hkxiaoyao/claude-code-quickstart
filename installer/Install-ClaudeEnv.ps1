@@ -1,5 +1,5 @@
 ﻿#Requires -Version 7.0
-# Install-ClaudeEnv.ps1 - Claude Code 环境安装器主脚本
+# Install-ClaudeEnv.ps1 - CCQ 主安装脚本
 # 作者: 哈雷酱 (本小姐的架构设计杰作！)
 # 功能: PS7+ 主安装脚本，提供一键和分阶段安装模式，支持断点续传
 
@@ -427,7 +427,7 @@ function Show-FinalSummary {
     )
 
     Write-Host ""
-    Show-AsciiBanner -Title "Claude Code 环境安装完成"
+    Show-CcqLogo -Subtitle "环境安装完成"
 
     # 构建摘要表格
     $summaryItems = @()
@@ -530,10 +530,9 @@ function Main {
         }
 
         # ── 欢迎横幅
-        Show-AsciiBanner -Title "Claude Code 环境安装器 v1.0"
+        Show-CcqLogo -Subtitle "Claude Code Quickstart"
 
-        Write-UiInfo "欢迎使用 Claude Code 环境安装器！"
-        Write-UiInfo "此脚本将自动安装和配置完整的 Claude Code 开发环境"
+        Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
         Write-Host ""
 
         # ── 加载安装状态（支持断点续传）

@@ -1,4 +1,4 @@
-﻿# Bootstrap-ClaudeEnv.ps1 - Claude Code 环境安装器引导脚本
+﻿# Bootstrap-ClaudeEnv.ps1 - CCQ 引导脚本
 # 作者: 哈雷酱 (本小姐的引导脚本杰作！)
 # 功能: PS5 兼容的引导脚本，安装前置条件并引导用户运行主安装脚本
 
@@ -348,7 +348,7 @@ function Show-CompletionMessage {
     )
 
     Write-Host ""
-    Show-AsciiBanner -Title "Claude Code 环境安装器 - 引导完成"
+    Show-CcqLogo -Subtitle "引导完成"
 
     Write-UiSuccess "🎉 引导脚本执行完成！"
     Write-Host ""
@@ -392,9 +392,8 @@ function Main {
 
     try {
         # 显示欢迎信息
-        Show-AsciiBanner -Title "Claude Code 环境安装器 - 引导脚本"
+        Show-CcqLogo -Subtitle "Claude Code Quickstart - 引导脚本"
 
-        Write-UiInfo "欢迎使用 Claude Code 环境安装器！"
         Write-UiInfo "此引导脚本将为您准备安装环境..."
         Write-Host ""
 

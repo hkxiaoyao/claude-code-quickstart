@@ -1,4 +1,4 @@
-﻿# Codex CLI 安装步骤 - Claude Code 环境安装器
+﻿# Codex CLI 安装步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的专业 CLI 管理！)
 # 功能: Codex CLI npm 全局安装
 
