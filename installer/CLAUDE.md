@@ -1,7 +1,7 @@
 # installer/ — 安装器入口层
 
 > 面包屑：[根目录](../CLAUDE.md) › installer/
-> 生成时间：2026-02-20 15:24:29
+> 生成时间：2026-02-23 (架构重构后更新)
 
 ---
 
@@ -10,8 +10,8 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 全量安装：dot-source 所有模块 → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
-| `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（Step01-04）/ 进阶扩展（Step05-12）两级分组 |
+| `Install-ClaudeEnv.ps1` | **7.0+** | 全量安装：动态加载 Registry → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
+| `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（NodeFnm~ApiKey）/ 进阶扩展（Ccline~GeminiCli）两级分组 |
 
 ---
 
@@ -54,31 +54,48 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 ### 加载顺序
 
 ```powershell
-# 核心模块（顺序敏感）
-. core/Ui.ps1 → Process.ps1 → Profile.ps1 → Admin.ps1 → Net.ps1 → Bootstrap.ps1
+# 核心模块（顺序敏感：Registry 在 Bootstrap 之前）
+. core/Ui.ps1 → Process.ps1 → Profile.ps1 → Admin.ps1 → Net.ps1 → Registry.ps1 → Bootstrap.ps1
 
-# 步骤模块（顺序无关，依赖由 Bootstrap.ps1 拓扑排序管理）
-. steps/Step01.NodeFnm.ps1 ... steps/Step12.GeminiCli.ps1
+# 步骤模块（从 Registry 动态加载，按 Order 字段排序）
+$stepFiles = Get-StepFiles
+foreach ($stepFile in $stepFiles) {
+    . "$script:InstallerRoot\$stepFile"
+}
 ```
 
 > **重要**：使用 `$script:InstallerRoot = $PSScriptRoot` 固定根路径，防止被 dot-source 覆盖。
 
-### 步骤注册表（`$script:StepRegistry`）
+### 步骤注册表（从 `core/Registry.ps1` 动态加载）
 
-每条记录的字段：
+**v1.2.0 架构变更**：步骤注册表已迁移到共享模块 `core/Registry.ps1`，消除 Install/Manage 之间的重复定义。
+
+每条记录的字段（示例）：
 
 ```powershell
 @{
-    StepId          = "Step04.ApiKey"       # 与 Bootstrap.ps1 依赖图 key 一致
+    StepId          = "ApiKey"              # 语义化 ID（无数字前缀）
     StepName        = "API Key 配置"
-    Description     = "..."
-    TestFunction    = "Test-Step04Installed"
-    InstallFunction = "Install-Step04"
-    VerifyFunction  = "Verify-Step04"        # 空字符串 = 不验证
-    RollbackFunction = "Rollback-Step04"     # 空字符串 = 不回滚
-    SkipIfInstalled = $false                 # false = 每次都重新配置
-    IsOptional      = $false                 # true = 分阶段模式默认不勾选
+    Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json"
+    StepFile        = "steps/ApiKey.ps1"    # 相对 installer/ 的路径
+    TestFunction    = "Test-ApiKeyInstalled"
+    InstallFunction = "Install-ApiKey"
+    VerifyFunction  = "Verify-ApiKey"
+    SkipIfInstalled = $true                 # true = 已安装时跳过
+    IsOptional      = $false                # false = 必选步骤
+    Order           = 40                    # 拓扑排序 tie-break 权重
+    Dependencies    = @("ClaudeCode")       # 前置依赖 StepId 数组
+    Group           = "Basic"               # Basic / Advanced
+    LegacyIds       = @("Step04.ApiKey")    # 旧 StepId（用于状态迁移）
 }
+```
+
+**加载方式**：
+
+```powershell
+. "$script:InstallerRoot\core\Registry.ps1"
+$script:StepRegistry = Get-StepRegistry
+$script:StepGroups = Get-StepGroups  # Manage-ClaudeEnv.ps1 使用
 ```
 
 ### 核心函数
@@ -121,8 +138,8 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
-| Step11.CodexCli | OpenAI Codex CLI，多模型协作使用 |
-| Step12.GeminiCli | Google Gemini CLI，多模型协作使用 |
+| CodexCli | OpenAI Codex CLI，多模型协作使用 |
+| GeminiCli | Google Gemini CLI，多模型协作使用 |
 
 在 Staged 模式下，用户通过**单选迭代式菜单**逐个选择步骤执行，每次执行后返回菜单。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，**全部包含**。
 
@@ -146,8 +163,8 @@ Main()
 
 | 分组 | 步骤 | 安装模式 |
 |------|------|----------|
-| **基础环境** | Step01-04（Node.js, Git, Claude Code, API Key） | 仅一键安装 |
-| **进阶扩展** | Step05-12（ccline, cc-switch, 配置, MCP, 工作流, 多模型） | 一键或多选 |
+| **基础环境** | NodeFnm, Git, ClaudeCode, ApiKey | 仅一键安装 |
+| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, GeminiCli | 一键或多选 |
 
 ### 核心函数
 
@@ -171,15 +188,15 @@ Main()
   ├── [if -Resume] Resume-Installation
   │
   ├── [CLI 模式]（-Group 参数）
-  │   ├── Basic → Invoke-GroupedInstall(Step01-04) → Show-FinalSummary
-  │   ├── Advanced/OneClick → Invoke-GroupedInstall(Step05-12) → Show-FinalSummary
+  │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary
+  │   ├── Advanced/OneClick → Invoke-GroupedInstall(进阶步骤) → Show-FinalSummary
   │   └── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
   │
   └── [交互模式]（无 -Group 参数） while($true):
       ├── Select-TopLevelAction
-      ├── [基础环境] → Invoke-GroupedInstall(Step01-04) → Show-FinalSummary
+      ├── [基础环境] → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary
       ├── [进阶扩展] → Select-AdvancedAction
-      │   ├── [一键] → Invoke-GroupedInstall(Step05-12)
+      │   ├── [一键] → Invoke-GroupedInstall(进阶步骤)
       │   ├── [可选] → Show-AdvancedSelectMenu → Invoke-GroupedInstall
       │   └── [Esc] → 回到顶层
       └── [Esc] → 退出

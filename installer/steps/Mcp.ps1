@@ -896,7 +896,7 @@ function Write-McpEnvFile {
 # 主要函数
 # ============================================================
 
-function Test-Step09Installed {
+function Test-McpInstalled {
     <#
     .SYNOPSIS
     检测 MCP Server 是否已安装配置（支持 stdio/http/software）
@@ -956,7 +956,7 @@ function Test-Step09Installed {
     }
 }
 
-function Install-Step09 {
+function Install-Mcp {
     <#
     .SYNOPSIS
     安装 MCP Server 配置（管道模式：依赖 → 预安装 → 凭据 → 软件 → 配置）
@@ -1304,7 +1304,7 @@ function Install-Step09 {
     }
 }
 
-function Verify-Step09 {
+function Verify-Mcp {
     <#
     .SYNOPSIS
     验证 MCP Server 配置（stdio/http/software 多类型）

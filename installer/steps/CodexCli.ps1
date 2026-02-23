@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-Step11Installed {
+function Test-CodexCliInstalled {
     <#
     .SYNOPSIS
     检测 Codex CLI 是否已安装
@@ -52,7 +52,7 @@ function Test-Step11Installed {
     return $result
 }
 
-function Install-Step11 {
+function Install-CodexCli {
     <#
     .SYNOPSIS
     安装 Codex CLI
@@ -125,7 +125,7 @@ function Install-Step11 {
     return $result
 }
 
-function Verify-Step11 {
+function Verify-CodexCli {
     <#
     .SYNOPSIS
     验证 Codex CLI 安装

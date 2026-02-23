@@ -133,7 +133,7 @@ pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
-将 12 个步骤分为**基础环境**（Step 01-04）和**进阶扩展**（Step 05-12）两组：
+将 12 个步骤分为**基础环境**和**进阶扩展**两组：
 - **基础环境**：Node.js、Git、Claude Code、API Key — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
@@ -276,12 +276,13 @@ claude-code-quickstart/
 │   │   ├── Profile.ps1           # $PROFILE 安全编辑
 │   │   ├── Admin.ps1             # 管理员权限管理
 │   │   ├── Net.ps1               # 网络检测与代理配置
+│   │   ├── Registry.ps1          # 共享步骤注册表（元数据、分组、依赖）
 │   │   └── Bootstrap.ps1         # 步骤状态模型与调度引擎
-│   └── steps/                    # 安装步骤模块
-│       ├── Step01.NodeFnm.ps1
-│       ├── Step02.Git.ps1
+│   └── steps/                    # 安装步骤模块（语义化命名）
+│       ├── NodeFnm.ps1
+│       ├── Git.ps1
 │       ├── ...
-│       └── Step12.GeminiCli.ps1
+│       └── GeminiCli.ps1
 └── test-syntax.ps1               # 语法全量校验工具
 ```
 
@@ -344,7 +345,7 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
 
 **Q：想重新配置 API Key？**
 
-Step04（API Key 配置）的 `SkipIfInstalled` 为 `false`，每次安装都会重新运行。直接 `-Staged` 模式只勾选 Step04 即可：
+API Key 配置步骤的 `SkipIfInstalled` 为 `true`，若已检测到配置则自动跳过。使用 `-Staged` 模式手动选择该步骤即可重新配置：
 
 ```powershell
 # 构建后的单文件版本

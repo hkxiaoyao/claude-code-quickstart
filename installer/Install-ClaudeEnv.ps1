@@ -23,148 +23,19 @@ $script:InstallerRoot = $PSScriptRoot
 . "$script:InstallerRoot\core\Profile.ps1"
 . "$script:InstallerRoot\core\Admin.ps1"
 . "$script:InstallerRoot\core\Net.ps1"
+. "$script:InstallerRoot\core\Registry.ps1"
 . "$script:InstallerRoot\core\Bootstrap.ps1"
 
-# ─── Dot-source 所有步骤模块（顺序无强制要求，依赖由 Bootstrap 管理）──────
+# ─── Dot-source 所有步骤模块（从 Registry 动态加载）──────────────────────────
 
-. "$script:InstallerRoot\steps\Step01.NodeFnm.ps1"
-. "$script:InstallerRoot\steps\Step02.Git.ps1"
-. "$script:InstallerRoot\steps\Step03.ClaudeCode.ps1"
-. "$script:InstallerRoot\steps\Step04.ApiKey.ps1"
-. "$script:InstallerRoot\steps\Step05.Ccline.ps1"
-. "$script:InstallerRoot\steps\Step06.CcSwitch.ps1"
-. "$script:InstallerRoot\steps\Step07.ClaudeConfig.ps1"
-. "$script:InstallerRoot\steps\Step08.ClaudeMd.ps1"
-. "$script:InstallerRoot\steps\Step09.Mcp.ps1"
-. "$script:InstallerRoot\steps\Step10.CcgWorkflow.ps1"
-. "$script:InstallerRoot\steps\Step11.CodexCli.ps1"
-. "$script:InstallerRoot\steps\Step12.GeminiCli.ps1"
+$stepFiles = Get-StepFiles
+foreach ($stepFile in $stepFiles) {
+    . "$script:InstallerRoot\$stepFile"
+}
 
-# ─── 步骤注册表 ─────────────────────────────────────────────────────────────
-# 每条记录定义一个安装步骤的完整元数据
+# ─── 步骤注册表（从共享 Registry 获取，消除重复定义）─────────────────────────
 
-$script:StepRegistry = @(
-    @{
-        StepId          = "Step01.NodeFnm"
-        StepName        = "Node.js (fnm)"
-        Description     = "通过 fnm 安装 Node.js，为 npm 包安装提供运行时支持"
-        TestFunction    = "Test-Step01Installed"
-        InstallFunction = "Install-Step01"
-        VerifyFunction  = "Verify-Step01"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step02.Git"
-        StepName        = "Git"
-        Description     = "安装 Git 版本控制系统"
-        TestFunction    = "Test-Step02Installed"
-        InstallFunction = "Install-Step02"
-        VerifyFunction  = "Verify-Step02"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step03.ClaudeCode"
-        StepName        = "Claude Code"
-        Description     = "通过 npm 全局安装 Claude Code CLI"
-        TestFunction    = "Test-Step03Installed"
-        InstallFunction = "Install-Step03"
-        VerifyFunction  = "Verify-Step03"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step04.ApiKey"
-        StepName        = "API Key 配置"
-        Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
-        TestFunction    = "Test-Step04Installed"
-        InstallFunction = "Install-Step04"
-        VerifyFunction  = "Verify-Step04"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step05.Ccline"
-        StepName        = "ccline"
-        Description     = "安装 ccline 命令行工具"
-        TestFunction    = "Test-Step05Installed"
-        InstallFunction = "Install-Step05"
-        VerifyFunction  = "Verify-Step05"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step06.CcSwitch"
-        StepName        = "cc-switch"
-        Description     = "安装 cc-switch，用于切换 Claude Code 版本"
-        TestFunction    = "Test-Step06Installed"
-        InstallFunction = "Install-Step06"
-        VerifyFunction  = "Verify-Step06"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step07.ClaudeConfig"
-        StepName        = "Claude 基础配置"
-        Description     = "写入 Claude Code 常用配置（语言、模型、权限、超时、归因等）"
-        TestFunction    = "Test-Step07Installed"
-        InstallFunction = "Install-Step07"
-        VerifyFunction  = "Verify-Step07"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step08.ClaudeMd"
-        StepName        = "CLAUDE.md 配置"
-        Description     = "创建全局 CLAUDE.md 配置文件，定义 Claude Code 工作规范"
-        TestFunction    = "Test-Step08Installed"
-        InstallFunction = "Install-Step08"
-        VerifyFunction  = "Verify-Step08"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step09.Mcp"
-        StepName        = "MCP Server 配置"
-        Description     = "配置 MCP (Model Context Protocol) 插件服务器"
-        TestFunction    = "Test-Step09Installed"
-        InstallFunction = "Install-Step09"
-        VerifyFunction  = "Verify-Step09"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step10.CcgWorkflow"
-        StepName        = "CCG 工作流"
-        Description     = "安装 Claude Code Generator 工作流脚本和 Slash Commands"
-        TestFunction    = "Test-Step10Installed"
-        InstallFunction = "Install-Step10"
-        VerifyFunction  = "Verify-Step10"
-        SkipIfInstalled = $true
-        IsOptional      = $false
-    },
-    @{
-        StepId          = "Step11.CodexCli"
-        StepName        = "Codex CLI [可选]"
-        Description     = "安装 OpenAI Codex CLI（多模型协作可选工具）"
-        TestFunction    = "Test-Step11Installed"
-        InstallFunction = "Install-Step11"
-        VerifyFunction  = "Verify-Step11"
-        SkipIfInstalled = $true
-        IsOptional      = $true
-    },
-    @{
-        StepId          = "Step12.GeminiCli"
-        StepName        = "Gemini CLI [可选]"
-        Description     = "安装 Google Gemini CLI（多模型协作可选工具）"
-        TestFunction    = "Test-Step12Installed"
-        InstallFunction = "Install-Step12"
-        VerifyFunction  = "Verify-Step12"
-        SkipIfInstalled = $true
-        IsOptional      = $true
-    }
-)
+$script:StepRegistry = Get-StepRegistry
 
 # ─── 安装模式选择 ────────────────────────────────────────────────────────────
 
@@ -230,7 +101,7 @@ function Invoke-StagedMode {
         for ($i = 0; $i -lt $script:StepRegistry.Count; $i++) {
             $step = $script:StepRegistry[$i]
             $stepId = $step.StepId
-            $stepNum = $stepId -replace '^Step(\d+)\..*', '$1'
+            $stepNum = $i + 1
 
             # 确定状态标签
             $tag = "[    ]"
@@ -289,10 +160,10 @@ function Invoke-StagedMode {
         $registryIndex = $stepMap[$selectedIndex]
         $stepConfig = $script:StepRegistry[$registryIndex]
         $stepId = $stepConfig.StepId
-        $stepNum = $stepId -replace '^Step(\d+)\..*', '$1'
+        $stepNum = $registryIndex + 1
 
         Write-Host ""
-        Write-UiInfo "━━━ Step$($stepNum): $($stepConfig.StepName) ━━━"
+        Write-UiInfo "━━━ 步骤 $($stepNum)/$($script:StepRegistry.Count): $($stepConfig.StepName) ━━━"
 
         # ── 检查依赖状态并展示
         $depCheck = Test-StepDependencies -StepId $stepId -State $State
@@ -338,7 +209,7 @@ function Invoke-StagedMode {
         Write-UiInfo "  状态: 依赖已满足，可以执行"
 
         $confirmIndex = Show-SingleSelectMenu `
-            -Title "  确认执行 Step$($stepNum): $($stepConfig.StepName)？" `
+            -Title "  确认执行 步骤 $($stepNum): $($stepConfig.StepName)？" `
             -Options @("是，执行", "否，返回")
 
         if ($confirmIndex -ne 0) {
@@ -371,17 +242,17 @@ function Invoke-StagedMode {
             ([StepStatus]::Success) {
                 $results.Success++
                 Write-Host ""
-                Write-UiSuccess "Step$($stepNum): $($stepConfig.StepName) 执行成功！"
+                Write-UiSuccess "步骤 $($stepNum): $($stepConfig.StepName) 执行成功！"
             }
             ([StepStatus]::Skipped) {
                 $results.Skipped++
                 Write-Host ""
-                Write-UiInfo "Step$($stepNum): $($stepConfig.StepName) 已安装，跳过"
+                Write-UiInfo "步骤 $($stepNum): $($stepConfig.StepName) 已安装，跳过"
             }
             ([StepStatus]::Failed) {
                 $results.Failed++
                 Write-Host ""
-                Write-UiError "Step$($stepNum): $($stepConfig.StepName) 执行失败"
+                Write-UiError "步骤 $($stepNum): $($stepConfig.StepName) 执行失败"
                 if ($stepResult.ErrorDetails) {
                     Show-ErrorDetails `
                         -FriendlyMessage "步骤执行失败" `
@@ -609,16 +480,16 @@ function Show-FinalSummary {
         Write-UiInfo "快速开始："
         Write-UiInfo "  claude          - 启动 Claude Code"
         Write-UiInfo "  claude --help   - 查看帮助信息"
-        if ($State.StepResults.ContainsKey("Step06.CcSwitch") -and
-            $State.StepResults["Step06.CcSwitch"].Status -eq [StepStatus]::Success) {
+        if ($State.StepResults.ContainsKey("CcSwitch") -and
+            $State.StepResults["CcSwitch"].Status -eq [StepStatus]::Success) {
             Write-UiInfo "  cc-switch       - 切换 Claude Code 版本"
         }
-        if ($State.StepResults.ContainsKey("Step11.CodexCli") -and
-            $State.StepResults["Step11.CodexCli"].Status -eq [StepStatus]::Success) {
+        if ($State.StepResults.ContainsKey("CodexCli") -and
+            $State.StepResults["CodexCli"].Status -eq [StepStatus]::Success) {
             Write-UiInfo "  codex --help    - Codex CLI 帮助"
         }
-        if ($State.StepResults.ContainsKey("Step12.GeminiCli") -and
-            $State.StepResults["Step12.GeminiCli"].Status -eq [StepStatus]::Success) {
+        if ($State.StepResults.ContainsKey("GeminiCli") -and
+            $State.StepResults["GeminiCli"].Status -eq [StepStatus]::Success) {
             Write-UiInfo "  gemini --help   - Gemini CLI 帮助"
         }
     } else {

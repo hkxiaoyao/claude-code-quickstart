@@ -202,6 +202,63 @@ function Load-InstallState {
                 $state.GlobalData = ConvertTo-HashtableDeep $stateData.GlobalData
             }
 
+            # ── 迁移旧 StepId 到新格式 ──────────────────────────────────────
+            $legacyMap = Get-LegacyStepIdMap
+            $migratedResults = @{}
+            $needsSave = $false
+
+            foreach ($oldId in @($state.StepResults.Keys)) {
+                if ($legacyMap.ContainsKey($oldId)) {
+                    $newId = $legacyMap[$oldId]
+
+                    # 检测键冲突
+                    if ($migratedResults.ContainsKey($newId)) {
+                        Write-Host "  ⚠ 检测到键冲突: $oldId → $newId（新键已存在）" -ForegroundColor Yellow
+
+                        # 冲突解决策略：优先保留 Success 状态，或优先保留较新的 EndTime
+                        $existing = $migratedResults[$newId]
+                        $migrating = $state.StepResults[$oldId]
+
+                        if ($existing.Status -eq [StepStatus]::Success) {
+                            Write-Host "    保留现有成功状态，跳过旧键迁移" -ForegroundColor Gray
+                            continue
+                        } elseif ($migrating.EndTime -gt $existing.EndTime) {
+                            Write-Host "    旧键时间戳更新，覆盖现有状态" -ForegroundColor Gray
+                        } else {
+                            Write-Host "    保留现有状态，跳过旧键迁移" -ForegroundColor Gray
+                            continue
+                        }
+                    }
+
+                    $stepResult = $state.StepResults[$oldId]
+                    $stepResult.StepId = $newId
+                    $migratedResults[$newId] = $stepResult
+                    $needsSave = $true
+                    Write-Host "  迁移步骤状态: $oldId → $newId" -ForegroundColor Yellow
+                } else {
+                    $migratedResults[$oldId] = $state.StepResults[$oldId]
+                }
+            }
+
+            $state.StepResults = $migratedResults
+
+            # 迁移 CurrentStep
+            if ($state.CurrentStep -and $legacyMap.ContainsKey($state.CurrentStep)) {
+                $state.CurrentStep = $legacyMap[$state.CurrentStep]
+                $needsSave = $true
+            }
+
+            # 保存迁移后的状态
+            if ($needsSave) {
+                $saveResult = Save-InstallState -State $state
+                if ($saveResult) {
+                    Write-Host "  状态文件已自动迁移到新格式" -ForegroundColor Green
+                } else {
+                    Write-Host "  ⚠ 状态迁移成功但保存失败（仅内存生效）" -ForegroundColor Yellow
+                    Write-Host "  下次启动将重新尝试迁移" -ForegroundColor Gray
+                }
+            }
+
             Write-Host "✓ 安装状态加载成功 (ID: $($state.InstallationId))" -ForegroundColor Green
             return $state
 
@@ -381,30 +438,7 @@ function Invoke-StepLifecycle {
     return $stepResult
 }
 
-function Get-StepDependencies {
-    <#
-    .SYNOPSIS
-    获取步骤依赖关系定义
-    .RETURNS
-    步骤依赖关系哈希表
-    #>
-    param()
-
-    return @{
-        "Step01.NodeFnm" = @()
-        "Step02.Git" = @()
-        "Step03.ClaudeCode" = @("Step01.NodeFnm")
-        "Step04.ApiKey" = @("Step03.ClaudeCode")
-        "Step05.Ccline" = @("Step03.ClaudeCode")
-        "Step06.CcSwitch" = @("Step03.ClaudeCode")
-        "Step07.ClaudeConfig" = @("Step03.ClaudeCode")
-        "Step08.ClaudeMd" = @("Step07.ClaudeConfig")
-        "Step09.Mcp" = @("Step03.ClaudeCode")
-        "Step10.CcgWorkflow" = @("Step01.NodeFnm")
-        "Step11.CodexCli" = @("Step01.NodeFnm")
-        "Step12.GeminiCli" = @("Step01.NodeFnm")
-    }
-}
+# Get-StepDependencies 已迁移到 Registry.ps1，由入口脚本 dot-source Registry.ps1 提供
 
 function Test-StepDependencies {
     <#
@@ -499,8 +533,13 @@ function Get-ExecutionOrder {
             break
         }
 
-        # 按步骤编号数值排序（保持注册顺序语义）
-        $canExecute = $canExecute | Sort-Object { [int]($_ -replace '^Step(\d+)\..*', '$1') }
+        # 使用 Registry 的 Order 字段进行确定性 tie-break 排序
+        $registry = Get-StepRegistry
+        $orderMap = @{}
+        foreach ($step in $registry) {
+            $orderMap[$step.StepId] = $step.Order
+        }
+        $canExecute = $canExecute | Sort-Object { if ($orderMap.ContainsKey($_)) { $orderMap[$_] } else { [int]::MaxValue } }
         $ordered += $canExecute
 
         # 从剩余列表中移除（@() 确保 StrictMode 下结果始终为数组）

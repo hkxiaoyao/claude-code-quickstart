@@ -1,7 +1,7 @@
 # installer/core/ — 核心基础库
 
 > 面包屑：[根目录](../../CLAUDE.md) › [installer/](../CLAUDE.md) › core/
-> 生成时间：2026-02-20 15:24:29
+> 生成时间：2026-02-23 (架构重构后更新)
 
 所有核心模块通过 **dot-source** 加载（非 Module），无 `Export-ModuleMember`，函数在调用方作用域内直接可用。
 
@@ -16,7 +16,8 @@
 | `Profile.ps1` | 526 | `$PROFILE` 安全编辑：备份、标记块读写、原子写入 |
 | `Admin.ps1` | 137 | 管理员权限检测与自提权 |
 | `Net.ps1` | 270 | 网络连通性检测、代理快照、健康评估 |
-| `Bootstrap.ps1` | 653 | 步骤状态模型、生命周期调度、拓扑排序、恢复逻辑 |
+| `Registry.ps1` | 280 | **共享步骤注册表**：元数据、分组、依赖、迁移映射（消除 DRY 违规） |
+| `Bootstrap.ps1` | 617 | 步骤状态模型、生命周期调度、拓扑排序、恢复逻辑 |
 
 ---
 
@@ -141,6 +142,26 @@ $script:KeyEndpoints = @{
 
 ---
 
+## Registry.ps1
+
+### 职责
+
+**v1.2.0 新增**：共享步骤注册表，消除 `Install-ClaudeEnv.ps1` 与 `Manage-ClaudeEnv.ps1` 之间的重复定义。
+
+### 主要函数
+
+| 函数 | 返回 | 职责 |
+|------|------|------|
+| `Get-StepRegistry` | `hashtable[]` | 返回完整注册表数组（含 Order、Dependencies、Group、LegacyIds） |
+| `Get-StepGroups` | `hashtable` | 从注册表动态派生 Basic/Advanced 分组 |
+| `Get-StepDependencies` | `hashtable` | 提取 StepId → 依赖数组映射 |
+| `Get-LegacyStepIdMap` | `hashtable` | 旧 → 新 StepId 映射（状态迁移用） |
+| `Get-StepFiles` | `string[]` | 按 Order 排序的步骤文件路径数组 |
+
+> **加载顺序**：Registry.ps1 必须在 Bootstrap.ps1 之前加载（Bootstrap 的 `Get-ExecutionOrder` 和 `Load-InstallState` 依赖 Registry 函数）。
+
+---
+
 ## Bootstrap.ps1
 
 ### 数据模型
@@ -165,32 +186,32 @@ class InstallState {
 }
 ```
 
-### 步骤依赖图（`Get-StepDependencies`）
+### 步骤依赖图（由 `Registry.ps1` 的 `Get-StepDependencies` 提供）
 
 ```powershell
-"Step01.NodeFnm"     = @()
-"Step02.Git"         = @()
-"Step03.ClaudeCode"  = @("Step01.NodeFnm")
-"Step04.ApiKey"      = @("Step03.ClaudeCode")
-"Step05.Ccline"      = @("Step03.ClaudeCode")
-"Step06.CcSwitch"    = @("Step03.ClaudeCode")
-"Step07.ClaudeConfig"= @("Step03.ClaudeCode")
-"Step08.ClaudeMd"    = @("Step07.ClaudeConfig")
-"Step09.Mcp"         = @("Step03.ClaudeCode")
-"Step10.CcgWorkflow" = @("Step01.NodeFnm")
-"Step11.CodexCli"    = @("Step01.NodeFnm")
-"Step12.GeminiCli"   = @("Step01.NodeFnm")
+"NodeFnm"      = @()
+"Git"           = @()
+"ClaudeCode"    = @("NodeFnm")
+"ApiKey"        = @("ClaudeCode")
+"Ccline"        = @("ClaudeCode")
+"CcSwitch"      = @("ClaudeCode")
+"ClaudeConfig"  = @("ClaudeCode")
+"ClaudeMd"      = @("ClaudeConfig")
+"Mcp"           = @("ClaudeCode")
+"CcgWorkflow"   = @("NodeFnm")
+"CodexCli"      = @("NodeFnm")
+"GeminiCli"     = @("NodeFnm")
 ```
 
 ### 主要函数
 
 | 函数 | 职责 |
 |------|------|
-| `Save-InstallState / Load-InstallState` | JSON 持久化（原子写入） |
+| `Save-InstallState / Load-InstallState` | JSON 持久化（原子写入），Load 含旧 StepId 自动迁移 |
 | `Resume-Installation` | 加载状态并显示进度摘要 |
 | `Invoke-StepLifecycle` | 执行 Test → Install → Verify 三阶段 |
 | `Test-StepDependencies` | 检查前置依赖是否 Success/Skipped |
-| `Get-ExecutionOrder` | Kahn 拓扑排序，返回有序步骤 ID 数组 |
+| `Get-ExecutionOrder` | Kahn 拓扑排序 + Registry Order 字段 tie-break |
 
 > **注意**：回滚功能已移除，安装失败时仅记录状态，用户可使用 `-Resume` 重试。
 

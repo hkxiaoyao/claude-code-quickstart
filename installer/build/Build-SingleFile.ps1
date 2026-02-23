@@ -29,30 +29,23 @@ function Get-MainInstallerBuildOrder {
     返回主安装脚本构建时需要按顺序拼接的文件路径数组
     .RETURNS
     string[] - 相对于 installer/ 目录的文件路径数组
-    .NOTES
-    ⚠️  新增步骤文件（如 Step13.*.ps1）时，必须同步更新此函数，否则产物将缺失该步骤！
     #>
-    return @(
+    # 核心模块（顺序敏感：Registry 在 Bootstrap 之前）
+    $coreFiles = @(
         'core/Ui.ps1'
         'core/Process.ps1'
         'core/Profile.ps1'
         'core/Admin.ps1'
         'core/Net.ps1'
+        'core/Registry.ps1'
         'core/Bootstrap.ps1'
-        'steps/Step01.NodeFnm.ps1'
-        'steps/Step02.Git.ps1'
-        'steps/Step03.ClaudeCode.ps1'
-        'steps/Step04.ApiKey.ps1'
-        'steps/Step05.Ccline.ps1'
-        'steps/Step06.CcSwitch.ps1'
-        'steps/Step07.ClaudeConfig.ps1'
-        'steps/Step08.ClaudeMd.ps1'
-        'steps/Step09.Mcp.ps1'
-        'steps/Step10.CcgWorkflow.ps1'
-        'steps/Step11.CodexCli.ps1'
-        'steps/Step12.GeminiCli.ps1'
-        'Install-ClaudeEnv.ps1'
     )
+
+    # 步骤文件从 Registry 动态获取
+    . "$PSScriptRoot\..\core\Registry.ps1"
+    $stepFiles = Get-StepFiles
+
+    return @($coreFiles + $stepFiles + @('Install-ClaudeEnv.ps1'))
 }
 
 function Get-ManageBuildOrder {
@@ -61,30 +54,23 @@ function Get-ManageBuildOrder {
     返回分组管理入口脚本构建时需要按顺序拼接的文件路径数组
     .RETURNS
     string[] - 相对于 installer/ 目录的文件路径数组
-    .NOTES
-    ⚠️  新增步骤文件（如 Step13.*.ps1）时，必须同步更新此函数，否则产物将缺失该步骤！
     #>
-    return @(
+    # 核心模块（顺序敏感：Registry 在 Bootstrap 之前）
+    $coreFiles = @(
         'core/Ui.ps1'
         'core/Process.ps1'
         'core/Profile.ps1'
         'core/Admin.ps1'
         'core/Net.ps1'
+        'core/Registry.ps1'
         'core/Bootstrap.ps1'
-        'steps/Step01.NodeFnm.ps1'
-        'steps/Step02.Git.ps1'
-        'steps/Step03.ClaudeCode.ps1'
-        'steps/Step04.ApiKey.ps1'
-        'steps/Step05.Ccline.ps1'
-        'steps/Step06.CcSwitch.ps1'
-        'steps/Step07.ClaudeConfig.ps1'
-        'steps/Step08.ClaudeMd.ps1'
-        'steps/Step09.Mcp.ps1'
-        'steps/Step10.CcgWorkflow.ps1'
-        'steps/Step11.CodexCli.ps1'
-        'steps/Step12.GeminiCli.ps1'
-        'Manage-ClaudeEnv.ps1'
     )
+
+    # 步骤文件从 Registry 动态获取
+    . "$PSScriptRoot\..\core\Registry.ps1"
+    $stepFiles = Get-StepFiles
+
+    return @($coreFiles + $stepFiles + @('Manage-ClaudeEnv.ps1'))
 }
 
 function Get-ScriptParamBlockInfo {

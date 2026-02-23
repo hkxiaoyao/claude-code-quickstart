@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-Step12Installed {
+function Test-GeminiCliInstalled {
     <#
     .SYNOPSIS
     检测 Gemini CLI 是否已安装
@@ -52,7 +52,7 @@ function Test-Step12Installed {
     return $result
 }
 
-function Install-Step12 {
+function Install-GeminiCli {
     <#
     .SYNOPSIS
     安装 Gemini CLI
@@ -125,7 +125,7 @@ function Install-Step12 {
     return $result
 }
 
-function Verify-Step12 {
+function Verify-GeminiCli {
     <#
     .SYNOPSIS
     验证 Gemini CLI 安装

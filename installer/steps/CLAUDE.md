@@ -1,17 +1,17 @@
 # installer/steps/ — 安装步骤模块
 
 > 面包屑：[根目录](../../CLAUDE.md) › [installer/](../CLAUDE.md) › steps/
-> 生成时间：2026-02-20 15:24:29
+> 生成时间：2026-02-23 (架构重构后更新)
 
 ---
 
 ## 步骤契约（HC-2）
 
-每个步骤文件**必须**实现三个函数：
+每个步骤文件**必须**实现三个函数（函数名使用语义化命名，无数字前缀）：
 
 ```powershell
 # 检测是否已安装/已完成
-function Test-StepXXInstalled {
+function Test-<StepId>Installed {
     return @{
         IsInstalled = [bool]
         Version     = [string]   # 版本号，不适用时为 ""
@@ -21,7 +21,7 @@ function Test-StepXXInstalled {
 }
 
 # 执行安装
-function Install-StepXX {
+function Install-<StepId> {
     return @{
         Success      = [bool]
         ErrorMessage = [string]
@@ -30,7 +30,7 @@ function Install-StepXX {
 }
 
 # 验证安装结果（可选，不需要时返回 @{Success=$true}）
-function Verify-StepXX {
+function Verify-<StepId> {
     return @{ Success = [bool]; ErrorMessage = [string] }
 }
 ```
@@ -42,26 +42,26 @@ function Verify-StepXX {
 
 ## 步骤总览
 
-| 步骤 | 名称 | 可选 | SkipIfInstalled | 主要依赖 | 分组 |
-|------|------|:----:|:---------------:|---------|------|
-| Step01 | Node.js (fnm) | — | ✓ | 无 | 基础 |
-| Step02 | Git | — | ✓ | 无 | 基础 |
-| Step03 | Claude Code | — | ✓ | Step01 | 基础 |
-| Step04 | API Key 配置 | — | — | Step03 | 基础 |
-| Step05 | ccline | — | ✓ | Step03 | 进阶 |
-| Step06 | cc-switch | — | ✓ | Step03 | 进阶 |
-| Step07 | Claude 基础配置 | — | ✓ | Step03 | 进阶 |
-| Step08 | CLAUDE.md 配置 | — | ✓ | Step07 | 进阶 |
-| Step09 | MCP Server 配置 | — | ✓ | Step03 | 进阶 |
-| Step10 | CCG 工作流 | — | ✓ | Step01 | 进阶 |
-| Step11 | Codex CLI | **✓** | ✓ | Step01 | 进阶 |
-| Step12 | Gemini CLI | **✓** | ✓ | Step01 | 进阶 |
+| StepId | 名称 | 文件 | 可选 | SkipIfInstalled | 主要依赖 | 分组 |
+|--------|------|------|:----:|:---------------:|---------|------|
+| NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | 无 | 基础 |
+| Git | Git | `Git.ps1` | — | ✓ | 无 | 基础 |
+| ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | NodeFnm | 基础 |
+| ApiKey | API Key 配置 | `ApiKey.ps1` | — | ✓ | ClaudeCode | 基础 |
+| Ccline | ccline | `Ccline.ps1` | — | ✓ | ClaudeCode | 进阶 |
+| CcSwitch | cc-switch | `CcSwitch.ps1` | — | ✓ | ClaudeCode | 进阶 |
+| ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ClaudeCode | 进阶 |
+| ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ClaudeConfig | 进阶 |
+| Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | ClaudeCode | 进阶 |
+| CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | NodeFnm | 进阶 |
+| CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | NodeFnm | 进阶 |
+| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | NodeFnm | 进阶 |
 
 ---
 
-## Step01 — Node.js (fnm)
+## NodeFnm — Node.js (fnm)
 
-**文件**：`Step01.NodeFnm.ps1`（493 行）
+**文件**：`NodeFnm.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
 
 **安装流程**：
@@ -73,27 +73,27 @@ function Verify-StepXX {
 
 ---
 
-## Step02 — Git
+## Git — Git
 
-**文件**：`Step02.Git.ps1`
+**文件**：`Git.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
 **安装流程**：`winget install Git.Git` → 配置 4 项 Git 推荐设置 → 写入 Git Bash UTF-8（Python + PowerShell wrapper）→ 验证 `git --version` / `git config --list --global`
 
 ---
 
-## Step03 — Claude Code
+## ClaudeCode — Claude Code
 
-**文件**：`Step03.ClaudeCode.ps1`（454 行）
+**文件**：`ClaudeCode.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
 **安装流程**：`npm install -g @anthropic-ai/claude-code` → 验证 `claude --version`
 
 ---
 
-## Step04 — API Key 配置（HC-12 关键）
+## ApiKey — API Key 配置（HC-12 关键）
 
-**文件**：`Step04.ApiKey.ps1`（约 330 行）
+**文件**：`ApiKey.ps1`
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
 
 ### 支持的 AI 供应商
@@ -170,7 +170,7 @@ $script:ApiProviders = @{
 }
 ```
 
-此配置用于标记 Claude Code 环境已完成初始化，由 Step04 自动创建。如果文件已存在，将合并写入，保留用户已有字段。
+此配置用于标记 Claude Code 环境已完成初始化，由 ApiKey 步骤自动创建。如果文件已存在，将合并写入，保留用户已有字段。
 
 ### 自定义供应商流程
 
@@ -183,9 +183,9 @@ $script:ApiProviders = @{
 
 ---
 
-## Step05 — ccline
+## Ccline — ccline
 
-**文件**：`Step05.Ccline.ps1`（295 行）
+**文件**：`Ccline.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
 **包名**：`@cometix/ccline`（scoped package）
@@ -213,23 +213,23 @@ $script:ApiProviders = @{
 
 ---
 
-## Step06 — cc-switch
+## CcSwitch — cc-switch
 
-**文件**：`Step06.CcSwitch.ps1`（562 行）
+**文件**：`CcSwitch.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
 
 **安装**：npm 全局安装 cc-switch + 写入 `$PROFILE`。
 
 ---
 
-## Step07 — Claude 基础配置
+## ClaudeConfig — Claude 基础配置
 
-**文件**：`Step07.ClaudeConfig.ps1`
-**配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 Step04 同一文件）
+**文件**：`ClaudeConfig.ps1`
+**配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 ApiKey 同一文件）
 
-**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 Step07 自有字段，不覆盖 Step04（API Key/Base URL/modelMapping）、Step05（statusLine）或用户自定义配置。
+**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（API Key/Base URL/modelMapping）、Ccline（statusLine）或用户自定义配置。
 
-**Step07 管辖的 env 字段**：
+**ClaudeConfig 管辖的 env 字段**：
 
 | 字段 | 默认值 | 写入策略 |
 |------|--------|----------|
@@ -242,7 +242,7 @@ $script:ApiProviders = @{
 | `DISABLE_INSTALLATION_CHECKS` | `1` | 仅补缺失 |
 | `MAX_THINKING_TOKENS` | `31999` | 仅补缺失 |
 
-**其他 Step07 管辖字段**：
+**其他 ClaudeConfig 管辖字段**：
 
 | 字段 | 默认值 | 写入策略 |
 |------|--------|----------|
@@ -251,15 +251,15 @@ $script:ApiProviders = @{
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
-**Step07 不触碰的字段**：`statusLine`（Step05）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Step09）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（Step04）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（Step10）
+**ClaudeConfig 不触碰的字段**：`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（CcgWorkflow）
 
-> **注意**：statusLine 配置完全由 Step05（ccline）负责，Step07 不触碰 statusLine 字段。
+> **注意**：statusLine 配置完全由 Ccline 步骤负责，ClaudeConfig 不触碰 statusLine 字段。
 
 ---
 
-## Step08 — CLAUDE.md 配置
+## ClaudeMd — CLAUDE.md 配置
 
-**文件**：`Step08.ClaudeMd.ps1`
+**文件**：`ClaudeMd.ps1`
 **目标**：`$env:USERPROFILE\.claude\CLAUDE.md` + `$env:USERPROFILE\.claude\rules\`
 
 **功能**：生成全局 Claude Code 工作规范。主文件 ~80 行（确保在 token 截断限制内完整可见），详细内容拆分到 `rules/` 目录（Claude Code 无条件加载）。
@@ -272,13 +272,13 @@ $script:ApiProviders = @{
 
 **写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用备份 + 原子覆写。
 
-**检测条件**：`Test-Step08Installed` 检查主文件 3 个关键标识 + 3 个 rules 文件存在性。
+**检测条件**：`Test-ClaudeMdInstalled` 检查主文件 3 个关键标识 + 3 个 rules 文件存在性。
 
 ---
 
-## Step09 — MCP Server 配置
+## Mcp — MCP Server 配置
 
-**文件**：`Step09.Mcp.ps1`（533 行）
+**文件**：`Mcp.ps1`
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
 
 **功能**：在 settings.json 中写入 `mcpServers` 配置块，支持多个 MCP 插件服务器。
@@ -286,10 +286,10 @@ $script:ApiProviders = @{
 
 ---
 
-## Step10 — CCG 工作流
+## CcgWorkflow — CCG 工作流
 
-**文件**：`Step10.CcgWorkflow.ps1`（约 369 行）
-**依赖**：Step01.NodeFnm + Step07.ClaudeConfig
+**文件**：`CcgWorkflow.ps1`
+**依赖**：NodeFnm + ClaudeConfig
 
 **功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎。
 
@@ -305,15 +305,15 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - `~/.claude/bin/codeagent-wrapper.exe` — 核心二进制
 
 **关键机制**：
-- `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Step09 的 MCP 配置
+- `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Mcp 步骤的 MCP 配置
 - 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
 - 安装后立即调用 `Refresh-SessionPath`
 
 ---
 
-## Step11 — Codex CLI（可选）
+## CodexCli — Codex CLI（可选）
 
-**文件**：`Step11.CodexCli.ps1`（212 行）
+**文件**：`CodexCli.ps1`
 
 ```powershell
 # 正确调用方式（无 -DisplayName 参数）
@@ -322,9 +322,9 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
 
 ---
 
-## Step12 — Gemini CLI（可选）
+## GeminiCli — Gemini CLI（可选）
 
-**文件**：`Step12.GeminiCli.ps1`（212 行）
+**文件**：`GeminiCli.ps1`
 
 ```powershell
 # 正确调用方式（无 -DisplayName 参数）
@@ -335,7 +335,7 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "gemini-cli"
 
 ## 新增步骤模板
 
-添加 Step13+ 时遵循此模板：
+添加新步骤时遵循此模板：
 
 ```powershell
 #Requires -Version 5.1
@@ -345,7 +345,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-Step13Installed {
+function Test-<StepId>Installed {
     $result = @{ IsInstalled = $false; Version = ""; Data = @{}; Message = "" }
     try {
         # 检测逻辑
@@ -356,7 +356,7 @@ function Test-Step13Installed {
     return $result
 }
 
-function Install-Step13 {
+function Install-<StepId> {
     $result = @{ Success = $false; ErrorMessage = ""; Data = @{} }
     try {
         # 安装逻辑
@@ -368,7 +368,7 @@ function Install-Step13 {
     return $result
 }
 
-function Verify-Step13 {
+function Verify-<StepId> {
     $result = @{ Success = $false; ErrorMessage = "" }
     try {
         # 验证逻辑
@@ -378,17 +378,6 @@ function Verify-Step13 {
     }
     return $result
 }
-
-function Rollback-Step13 {
-    $result = @{ Success = $false; ErrorMessage = "" }
-    try {
-        # 回滚逻辑
-        $result.Success = $true
-    } catch {
-        $result.ErrorMessage = $_.Exception.Message
-    }
-    return $result
-}
 ```
 
-在 `Install-ClaudeEnv.ps1` 和 `Manage-ClaudeEnv.ps1` 的 `$script:StepRegistry` 中注册，并在 `Bootstrap.ps1` 的 `Get-StepDependencies` 中声明依赖。
+在 `core/Registry.ps1` 的 `Get-StepRegistry` 中注册新步骤条目（含 StepId、函数名、依赖、分组、Order 等），依赖关系和分组信息均从 Registry 自动派生，无需额外维护。

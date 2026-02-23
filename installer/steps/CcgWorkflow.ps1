@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$env:USERPROFILE\.claude"
 
-function Test-Step10Installed {
+function Test-CcgWorkflowInstalled {
     <#
     .SYNOPSIS
     检测 CCG Workflow 是否已安装（基于官方目录结构判定）
@@ -85,7 +85,7 @@ function Test-Step10Installed {
     return $result
 }
 
-function Install-Step10 {
+function Install-CcgWorkflow {
     <#
     .SYNOPSIS
     通过官方 npx ccg-workflow@latest init 安装 CCG Workflow
@@ -108,7 +108,7 @@ function Install-Step10 {
         # 验证 Node.js
         $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
         if (-not $nodeDetails.Available) {
-            $errorMsg = "未找到 node 命令，请检查 Node.js 安装 (Step01)"
+            $errorMsg = "未找到 node 命令，请检查 Node.js 安装 (NodeFnm)"
             if ($nodeDetails.ErrorMessage) {
                 $errorMsg += "`n  错误详情: $($nodeDetails.ErrorMessage)"
             }
@@ -118,7 +118,7 @@ function Install-Step10 {
         # 验证 npm
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
         if (-not $npmDetails.Available) {
-            $errorMsg = "未找到 npm 命令，请检查 Node.js 安装 (Step01)"
+            $errorMsg = "未找到 npm 命令，请检查 Node.js 安装 (NodeFnm)"
             if ($npmDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
             }
@@ -131,7 +131,7 @@ function Install-Step10 {
         # 验证 npx
         $npxDetails = Test-CommandAvailable -Command "npx" -ReturnDetails
         if (-not $npxDetails.Available) {
-            $errorMsg = "未找到 npx 命令，请检查 Node.js 安装 (Step01)"
+            $errorMsg = "未找到 npx 命令，请检查 Node.js 安装 (NodeFnm)"
             if ($npxDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npxDetails.ResolvedPath)"
             }
@@ -214,7 +214,7 @@ function Install-Step10 {
     return $result
 }
 
-function Verify-Step10 {
+function Verify-CcgWorkflow {
     <#
     .SYNOPSIS
     验证 CCG Workflow 安装结果

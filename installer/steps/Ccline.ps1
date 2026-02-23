@@ -1,4 +1,4 @@
-﻿# Step05: CCometixLine 安装 - Claude Code 环境安装器
+﻿# Ccline.ps1 - CCometixLine 安装 - Claude Code 环境安装器
 # 作者: 哈雷酱 (本小姐的状态栏配置杰作！)
 # 功能: CCometixLine 安装 + statusLine 配置写入
 
@@ -15,7 +15,7 @@ $script:CclinePackage = "@cometix/ccline"
 $script:ClaudeConfigDir = "$env:USERPROFILE\.claude"
 $script:ClaudeSettingsFile = "$script:ClaudeConfigDir\settings.json"
 
-function Test-Step05Installed {
+function Test-CclineInstalled {
     <#
     .SYNOPSIS
     检测 CCometixLine 是否已安装并配置
@@ -59,7 +59,7 @@ function Test-Step05Installed {
     }
 }
 
-function Install-Step05 {
+function Install-Ccline {
     <#
     .SYNOPSIS
     安装 CCometixLine 并配置状态栏
@@ -84,7 +84,7 @@ function Install-Step05 {
         # 验证 Claude Code
         $claudeDetails = Test-CommandAvailable -Command "claude" -ReturnDetails
         if (-not $claudeDetails.Available) {
-            $errorMsg = "Claude Code 未安装，请先完成 Step03"
+            $errorMsg = "Claude Code 未安装，请先完成 ClaudeCode 步骤"
             if ($claudeDetails.ErrorMessage) {
                 $errorMsg += "`n  错误详情: $($claudeDetails.ErrorMessage)"
             }
@@ -94,7 +94,7 @@ function Install-Step05 {
         # 验证 npm
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
         if (-not $npmDetails.Available) {
-            $errorMsg = "npm 未安装，请先完成 Step01"
+            $errorMsg = "npm 未安装，请先完成 NodeFnm 步骤"
             if ($npmDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
             }
@@ -311,7 +311,7 @@ function Install-Step05 {
     }
 }
 
-function Verify-Step05 {
+function Verify-Ccline {
     <#
     .SYNOPSIS
     验证 CCometixLine 安装和配置
@@ -320,7 +320,7 @@ function Verify-Step05 {
     #>
     param()
 
-    return Test-Step05Installed
+    return Test-CclineInstalled
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

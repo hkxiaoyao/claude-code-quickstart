@@ -1,4 +1,4 @@
-﻿# Step03.ClaudeCode.ps1 - Claude Code npm 全局安装
+﻿# ClaudeCode.ps1 - Claude Code npm 全局安装
 # 作者: 哈雷酱 (本小姐的 Claude Code 安装杰作！)
 # 功能: 通过 npm 全局安装 Claude Code CLI 工具
 
@@ -16,7 +16,7 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $script:ClaudeCodePackage = "@anthropic-ai/claude-code"
 $script:MinNodeVersion = "18"
 
-function Test-Step03Installed {
+function Test-ClaudeCodeInstalled {
     <#
     .SYNOPSIS
     测试步骤 03 是否已完成（Claude Code 安装）
@@ -112,7 +112,7 @@ function Test-Step03Installed {
     return $result
 }
 
-function Install-Step03 {
+function Install-ClaudeCode {
     <#
     .SYNOPSIS
     执行步骤 03 安装（Claude Code npm 全局安装）
@@ -148,7 +148,7 @@ function Install-Step03 {
             Write-UiInfo "💡 请尝试以下操作之一："
             Write-UiInfo "   1. 重新启动 PowerShell 后运行: pwsh -File installer/Install-ClaudeEnv.ps1 -Resume"
             Write-UiInfo "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器"
-            throw "Node.js 未安装或不可用，请先完成 Step01 并重新启动 PowerShell"
+            throw "Node.js 未安装或不可用，请先完成 NodeFnm 步骤并重新启动 PowerShell"
         }
 
         # 验证 npm
@@ -161,7 +161,7 @@ function Install-Step03 {
             if ($npmDetails.ErrorMessage) {
                 Write-UiInfo "  错误详情: $($npmDetails.ErrorMessage)"
             }
-            throw "npm 未安装，请先完成 Step01 并重新启动 PowerShell"
+            throw "npm 未安装，请先完成 NodeFnm 步骤并重新启动 PowerShell"
         }
 
         $nodeVersion = Get-CommandVersion -Command "node"
@@ -300,7 +300,7 @@ function Install-Step03 {
         $result.Success = $true
         $result.Message = "Claude Code 安装完成"
 
-        Write-UiSuccess "✅ Step03 安装完成！"
+        Write-UiSuccess "✅ ClaudeCode 安装完成！"
         Write-UiInfo "💡 提示: Claude Code 现在可以通过 'claude' 命令使用"
 
     } catch {
@@ -311,7 +311,7 @@ function Install-Step03 {
     return $result
 }
 
-function Verify-Step03 {
+function Verify-ClaudeCode {
     <#
     .SYNOPSIS
     验证步骤 03 执行结果

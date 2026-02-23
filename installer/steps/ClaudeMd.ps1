@@ -231,7 +231,7 @@ function Get-ClaudeRulesDir {
 # 步骤生命周期函数
 # ============================================================
 
-function Test-Step08Installed {
+function Test-ClaudeMdInstalled {
     <#
     .SYNOPSIS
     检测 CLAUDE.md 及 rules 文件是否已配置
@@ -296,7 +296,7 @@ function Test-Step08Installed {
     }
 }
 
-function Install-Step08 {
+function Install-ClaudeMd {
     <#
     .SYNOPSIS
     安装 CLAUDE.md 配置 + rules 拆分文件
@@ -383,7 +383,7 @@ function Install-Step08 {
     return $result
 }
 
-function Verify-Step08 {
+function Verify-ClaudeMd {
     <#
     .SYNOPSIS
     验证 CLAUDE.md 配置及 rules 文件

@@ -1,0 +1,279 @@
+# Registry.ps1 - 共享步骤注册表模块
+# 功能: 统一管理步骤元数据、分组定义、依赖关系和迁移映射
+#        消除 Install-ClaudeEnv.ps1 与 Manage-ClaudeEnv.ps1 之间的重复定义
+
+#Requires -Version 7.0
+
+Set-StrictMode -Version Latest
+
+function Get-StepRegistry {
+    <#
+    .SYNOPSIS
+    返回步骤注册表数组（含 Order 字段用于拓扑排序 tie-break）
+    .RETURNS
+    hashtable[] - 每条记录包含步骤的完整元数据
+    #>
+    param()
+
+    return @(
+        @{
+            StepId          = "NodeFnm"
+            StepName        = "Node.js (fnm)"
+            Description     = "通过 fnm 安装 Node.js，为 npm 包安装提供运行时支持"
+            StepFile        = "steps/NodeFnm.ps1"
+            TestFunction    = "Test-NodeFnmInstalled"
+            InstallFunction = "Install-NodeFnm"
+            VerifyFunction  = "Verify-NodeFnm"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 10
+            Dependencies    = @()
+            Group           = "Basic"
+            LegacyIds       = @("Step01.NodeFnm")
+        },
+        @{
+            StepId          = "Git"
+            StepName        = "Git"
+            Description     = "安装 Git 版本控制系统"
+            StepFile        = "steps/Git.ps1"
+            TestFunction    = "Test-GitInstalled"
+            InstallFunction = "Install-Git"
+            VerifyFunction  = "Verify-Git"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 20
+            Dependencies    = @()
+            Group           = "Basic"
+            LegacyIds       = @("Step02.Git")
+        },
+        @{
+            StepId          = "ClaudeCode"
+            StepName        = "Claude Code"
+            Description     = "通过 npm 全局安装 Claude Code CLI"
+            StepFile        = "steps/ClaudeCode.ps1"
+            TestFunction    = "Test-ClaudeCodeInstalled"
+            InstallFunction = "Install-ClaudeCode"
+            VerifyFunction  = "Verify-ClaudeCode"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 30
+            Dependencies    = @("NodeFnm")
+            Group           = "Basic"
+            LegacyIds       = @("Step03.ClaudeCode")
+        },
+        @{
+            StepId          = "ApiKey"
+            StepName        = "API Key 配置"
+            Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
+            StepFile        = "steps/ApiKey.ps1"
+            TestFunction    = "Test-ApiKeyInstalled"
+            InstallFunction = "Install-ApiKey"
+            VerifyFunction  = "Verify-ApiKey"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 40
+            Dependencies    = @("ClaudeCode")
+            Group           = "Basic"
+            LegacyIds       = @("Step04.ApiKey")
+        },
+        @{
+            StepId          = "Ccline"
+            StepName        = "ccline"
+            Description     = "安装 ccline 状态栏增强工具"
+            StepFile        = "steps/Ccline.ps1"
+            TestFunction    = "Test-CclineInstalled"
+            InstallFunction = "Install-Ccline"
+            VerifyFunction  = "Verify-Ccline"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 50
+            Dependencies    = @("ClaudeCode")
+            Group           = "Advanced"
+            LegacyIds       = @("Step05.Ccline")
+        },
+        @{
+            StepId          = "CcSwitch"
+            StepName        = "cc-switch"
+            Description     = "安装 cc-switch，用于切换 Claude Code 版本"
+            StepFile        = "steps/CcSwitch.ps1"
+            TestFunction    = "Test-CcSwitchInstalled"
+            InstallFunction = "Install-CcSwitch"
+            VerifyFunction  = "Verify-CcSwitch"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 60
+            Dependencies    = @("ClaudeCode")
+            Group           = "Advanced"
+            LegacyIds       = @("Step06.CcSwitch")
+        },
+        @{
+            StepId          = "ClaudeConfig"
+            StepName        = "Claude 基础配置"
+            Description     = "写入 Claude Code 常用配置（语言、模型、权限、超时、归因等）"
+            StepFile        = "steps/ClaudeConfig.ps1"
+            TestFunction    = "Test-ClaudeConfigInstalled"
+            InstallFunction = "Install-ClaudeConfig"
+            VerifyFunction  = "Verify-ClaudeConfig"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 70
+            Dependencies    = @("ClaudeCode")
+            Group           = "Advanced"
+            LegacyIds       = @("Step07.ClaudeConfig")
+        },
+        @{
+            StepId          = "ClaudeMd"
+            StepName        = "CLAUDE.md 配置"
+            Description     = "创建全局 CLAUDE.md 配置文件，定义 Claude Code 工作规范"
+            StepFile        = "steps/ClaudeMd.ps1"
+            TestFunction    = "Test-ClaudeMdInstalled"
+            InstallFunction = "Install-ClaudeMd"
+            VerifyFunction  = "Verify-ClaudeMd"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 80
+            Dependencies    = @("ClaudeConfig")
+            Group           = "Advanced"
+            LegacyIds       = @("Step08.ClaudeMd")
+        },
+        @{
+            StepId          = "Mcp"
+            StepName        = "MCP Server 配置"
+            Description     = "配置 MCP (Model Context Protocol) 插件服务器"
+            StepFile        = "steps/Mcp.ps1"
+            TestFunction    = "Test-McpInstalled"
+            InstallFunction = "Install-Mcp"
+            VerifyFunction  = "Verify-Mcp"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 90
+            Dependencies    = @("ClaudeCode")
+            Group           = "Advanced"
+            LegacyIds       = @("Step09.Mcp")
+        },
+        @{
+            StepId          = "CcgWorkflow"
+            StepName        = "CCG 工作流"
+            Description     = "安装 Claude Code Generator 工作流脚本和 Slash Commands"
+            StepFile        = "steps/CcgWorkflow.ps1"
+            TestFunction    = "Test-CcgWorkflowInstalled"
+            InstallFunction = "Install-CcgWorkflow"
+            VerifyFunction  = "Verify-CcgWorkflow"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 100
+            Dependencies    = @("NodeFnm")
+            Group           = "Advanced"
+            LegacyIds       = @("Step10.CcgWorkflow")
+        },
+        @{
+            StepId          = "CodexCli"
+            StepName        = "Codex CLI [可选]"
+            Description     = "安装 OpenAI Codex CLI（多模型协作可选工具）"
+            StepFile        = "steps/CodexCli.ps1"
+            TestFunction    = "Test-CodexCliInstalled"
+            InstallFunction = "Install-CodexCli"
+            VerifyFunction  = "Verify-CodexCli"
+            SkipIfInstalled = $true
+            IsOptional      = $true
+            Order           = 110
+            Dependencies    = @("NodeFnm")
+            Group           = "Advanced"
+            LegacyIds       = @("Step11.CodexCli")
+        },
+        @{
+            StepId          = "GeminiCli"
+            StepName        = "Gemini CLI [可选]"
+            Description     = "安装 Google Gemini CLI（多模型协作可选工具）"
+            StepFile        = "steps/GeminiCli.ps1"
+            TestFunction    = "Test-GeminiCliInstalled"
+            InstallFunction = "Install-GeminiCli"
+            VerifyFunction  = "Verify-GeminiCli"
+            SkipIfInstalled = $true
+            IsOptional      = $true
+            Order           = 120
+            Dependencies    = @("NodeFnm")
+            Group           = "Advanced"
+            LegacyIds       = @("Step12.GeminiCli")
+        }
+    )
+}
+
+function Get-StepGroups {
+    <#
+    .SYNOPSIS
+    返回 Basic/Advanced 分组定义
+    .RETURNS
+    hashtable - 分组名称 → 分组配置
+    #>
+    param()
+
+    $registry = Get-StepRegistry
+
+    $basicIds = @($registry | Where-Object { $_.Group -eq "Basic" } | ForEach-Object { $_.StepId })
+    $advancedIds = @($registry | Where-Object { $_.Group -eq "Advanced" } | ForEach-Object { $_.StepId })
+
+    return @{
+        Basic = @{
+            Label       = "基础环境"
+            Description = "Claude Code 最小可用环境"
+            InstallMode = "OneClickOnly"
+            StepIds     = $basicIds
+        }
+        Advanced = @{
+            Label       = "进阶扩展"
+            Description = "增强工具、配置优化、多模型协作"
+            InstallMode = "OneClickOrSelect"
+            StepIds     = $advancedIds
+        }
+    }
+}
+
+function Get-StepDependencies {
+    <#
+    .SYNOPSIS
+    从注册表提取步骤依赖关系哈希表
+    .RETURNS
+    hashtable - StepId → 依赖 StepId 数组
+    #>
+    param()
+
+    $registry = Get-StepRegistry
+    $dependencies = @{}
+    foreach ($step in $registry) {
+        $dependencies[$step.StepId] = $step.Dependencies
+    }
+    return $dependencies
+}
+
+function Get-LegacyStepIdMap {
+    <#
+    .SYNOPSIS
+    返回旧→新 StepId 映射（用于 install-state.json 自动迁移）
+    .RETURNS
+    hashtable - 旧 StepId → 新 StepId
+    #>
+    param()
+
+    $registry = Get-StepRegistry
+    $map = @{}
+    foreach ($step in $registry) {
+        foreach ($legacyId in $step.LegacyIds) {
+            $map[$legacyId] = $step.StepId
+        }
+    }
+    return $map
+}
+
+function Get-StepFiles {
+    <#
+    .SYNOPSIS
+    返回步骤文件相对路径列表（相对于 installer/ 目录，按 Order 排序）
+    .RETURNS
+    string[] - 步骤文件路径数组
+    #>
+    param()
+
+    $registry = Get-StepRegistry
+    return @($registry | Sort-Object { $_.Order } | ForEach-Object { $_.StepFile })
+}

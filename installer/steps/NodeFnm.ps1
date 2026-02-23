@@ -1,4 +1,4 @@
-﻿# Step01.NodeFnm.ps1 - Node.js 通过 fnm 安装和配置
+﻿# NodeFnm.ps1 - Node.js 通过 fnm 安装和配置
 # 作者: 哈雷酱 (本小姐的 Node.js 管理杰作！)
 # 功能: 使用 fnm 安装和管理 Node.js，配置 $PROFILE 而不写入环境变量
 
@@ -17,7 +17,7 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 $script:RequiredNodeVersion = "20"  # Node.js LTS 版本
 $script:FnmVersion = "latest"
 
-function Test-Step01Installed {
+function Test-NodeFnmInstalled {
     <#
     .SYNOPSIS
     测试步骤 01 是否已完成（Node.js 和 fnm 安装）
@@ -111,7 +111,7 @@ function Test-Step01Installed {
     return $result
 }
 
-function Install-Step01 {
+function Install-NodeFnm {
     <#
     .SYNOPSIS
     执行步骤 01 安装（fnm + Node.js + $PROFILE 配置）
@@ -377,7 +377,7 @@ function Install-Step01 {
         $result.Success = $true
         $result.Message = "fnm 和 Node.js 安装配置完成"
 
-        Write-UiSuccess "✅ Step01 安装完成！"
+        Write-UiSuccess "✅ NodeFnm 安装完成！"
         Write-UiInfo "💡 提示: 如果在新的 PowerShell 会话中 node 命令不可用，请重新启动 PowerShell"
 
     } catch {
@@ -388,7 +388,7 @@ function Install-Step01 {
     return $result
 }
 
-function Verify-Step01 {
+function Verify-NodeFnm {
     <#
     .SYNOPSIS
     验证步骤 01 执行结果

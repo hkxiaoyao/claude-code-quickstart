@@ -1,5 +1,5 @@
 # Claude Code 常用配置步骤 - Claude Code 环境安装器
-# 功能: 声明式字段管理，仅补缺失项，不覆盖 Step04/Step05/用户已有配置
+# 功能: 声明式字段管理，仅补缺失项，不覆盖 ApiKey/Ccline/用户已有配置
 
 #Requires -Version 5.1
 
@@ -44,7 +44,7 @@ $script:Step07BasePermissions = @(
 
 # ─── Test / Install / Verify ─────────────────────────────────────────────────
 
-function Test-Step07Installed {
+function Test-ClaudeConfigInstalled {
     <#
     .SYNOPSIS
     检测 Step07 自有字段是否已配置（不检测 Step04 的 ANTHROPIC_AUTH_TOKEN）
@@ -123,7 +123,7 @@ function Test-Step07Installed {
     return $result
 }
 
-function Install-Step07 {
+function Install-ClaudeConfig {
     <#
     .SYNOPSIS
     写入 Claude Code 常用配置（读取 -> 补缺失 -> 原子写入）
@@ -240,7 +240,7 @@ function Install-Step07 {
     return $result
 }
 
-function Verify-Step07 {
+function Verify-ClaudeConfig {
     <#
     .SYNOPSIS
     验证 Step07 自有字段（不验证 Step04 的 ANTHROPIC_AUTH_TOKEN）

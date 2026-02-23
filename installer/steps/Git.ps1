@@ -1,4 +1,4 @@
-﻿# Step02.Git.ps1 - Git 安装和基础配置
+﻿# Git.ps1 - Git 安装和基础配置
 # 作者: 哈雷酱 (本小姐的版本控制杰作！)
 # 功能: 安装 Git 并配置基础环境
 
@@ -15,7 +15,7 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 # 全局配置
 $script:MinGitVersion = [Version]"2.30.0"  # 最低 Git 版本要求
 
-function Test-Step02Installed {
+function Test-GitInstalled {
     <#
     .SYNOPSIS
     测试步骤 02 是否已完成（Git 安装和配置）
@@ -108,7 +108,7 @@ function Test-Step02Installed {
     return $result
 }
 
-function Install-Step02 {
+function Install-Git {
     <#
     .SYNOPSIS
     执行步骤 02 安装（Git 安装 + 基础配置）
@@ -286,7 +286,7 @@ function Install-Step02 {
         $result.Success = $true
         $result.Message = "Git 安装和配置完成"
 
-        Write-UiSuccess "✅ Step02 安装完成！"
+        Write-UiSuccess "✅ Git 安装完成！"
 
     } catch {
         $result.ErrorMessage = "Git 安装和配置失败: $($_.Exception.Message)"
@@ -296,7 +296,7 @@ function Install-Step02 {
     return $result
 }
 
-function Verify-Step02 {
+function Verify-Git {
     <#
     .SYNOPSIS
     验证步骤 02 执行结果

@@ -55,7 +55,7 @@ $script:ApiProviders = @{
     }
 }
 
-function Test-Step04Installed {
+function Test-ApiKeyInstalled {
     <#
     .SYNOPSIS
     检测 API Key 是否已配置，并识别当前供应商
@@ -157,7 +157,7 @@ function Resolve-CurrentProvider {
     return $null
 }
 
-function Install-Step04 {
+function Install-ApiKey {
     <#
     .SYNOPSIS
     安装 API Key 配置（供应商选择 + Key 输入 + 写入 settings.json）
@@ -364,7 +364,7 @@ function Install-Step04 {
     return $result
 }
 
-function Verify-Step04 {
+function Verify-ApiKey {
     <#
     .SYNOPSIS
     验证 API Key 配置
