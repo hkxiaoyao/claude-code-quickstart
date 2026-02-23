@@ -106,7 +106,7 @@ function Test-NetworkPrerequisites {
         }
     }
 
-    $reachableCount = ($endpointResults.Values | Where-Object { $_.Reachable }).Count
+    $reachableCount = @($endpointResults.Values | Where-Object { $_.Reachable }).Count
     $totalCount = $endpointResults.Count
 
     # 评级：全部可达=绿，部分可达=黄，全部不通=红

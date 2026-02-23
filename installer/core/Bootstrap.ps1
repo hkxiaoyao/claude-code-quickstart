@@ -572,8 +572,8 @@ function Resume-Installation {
         Write-Host "  当前步骤: $($state.CurrentStep)" -ForegroundColor Gray
 
         # 显示步骤状态
-        $completedSteps = ($state.StepResults.Values | Where-Object { $_.Status -eq [StepStatus]::Success }).Count
-        $failedSteps = ($state.StepResults.Values | Where-Object { $_.Status -eq [StepStatus]::Failed }).Count
+        $completedSteps = @($state.StepResults.Values | Where-Object { $_.Status -eq [StepStatus]::Success }).Count
+        $failedSteps = @($state.StepResults.Values | Where-Object { $_.Status -eq [StepStatus]::Failed }).Count
         $totalSteps = $state.StepResults.Count
 
         Write-Host "  步骤进度: $completedSteps/$totalSteps 完成, $failedSteps 失败" -ForegroundColor Gray

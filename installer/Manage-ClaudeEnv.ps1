@@ -393,10 +393,10 @@ function Show-AdvancedSelectMenu {
         }
     }
 
-    $selectedIndices = Show-MultiSelectMenu `
+    $selectedIndices = @(Show-MultiSelectMenu `
         -Title "进阶扩展 - 选择要安装的组件：" `
         -Options $options `
-        -DefaultSelected $defaultSelected
+        -DefaultSelected $defaultSelected)
 
     if ($selectedIndices.Count -eq 0) {
         return @()
@@ -638,7 +638,7 @@ function Main {
                     # 进阶：多选模式
                     Write-UiInfo "进阶扩展可选安装模式"
                     Write-Host ""
-                    $selectedIds = Show-AdvancedSelectMenu
+                    $selectedIds = @(Show-AdvancedSelectMenu)
                     if ($selectedIds.Count -gt 0) {
                         $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state
                         if ($results.Total -gt 0) {
@@ -722,7 +722,7 @@ function Main {
                 elseif ($advChoice -eq 1) {
                     # 可选安装
                     Write-Host ""
-                    $selectedIds = Show-AdvancedSelectMenu
+                    $selectedIds = @(Show-AdvancedSelectMenu)
 
                     if ($selectedIds.Count -gt 0) {
                         $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state

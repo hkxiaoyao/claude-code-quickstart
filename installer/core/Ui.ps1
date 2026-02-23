@@ -543,7 +543,7 @@ function Show-MultiSelectMenu {
         Write-Host ""
 
         for ($i = 0; $i -lt $Options.Count; $i++) {
-            $checked = if ($selectedItems.ContainsKey($i)) { "[x]" } else { "[ ]" }
+            $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
             Write-Host "  $($i + 1). $checked $($Options[$i])"
         }
 
@@ -577,7 +577,7 @@ function Show-MultiSelectMenu {
 
     function Show-Menu {
         for ($i = 0; $i -lt $Options.Count; $i++) {
-            $checked = if ($selectedItems.ContainsKey($i)) { "[x]" } else { "[ ]" }
+            $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
 
             if ($i -eq $selectedIndex) {
                 Write-UiSuccess "  ► $checked $($Options[$i])"
