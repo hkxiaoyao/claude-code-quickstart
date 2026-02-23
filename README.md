@@ -341,7 +341,7 @@ pwsh -File ".\Install-ClaudeEnv.built.ps1" -Resume
 pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
 ```
 
-> **注意**：v1.1.0 版本已移除自动回滚功能，安装失败时仅记录状态。使用 `-Resume` 重试失败步骤即可。
+> **注意**：v1.2.0 版本已完成架构重构，步骤文件和函数名采用语义化命名。旧版状态文件会自动迁移，用户无需手动操作。安装失败时使用 `-Resume` 重试失败步骤即可。
 
 **Q：想重新配置 API Key？**
 
