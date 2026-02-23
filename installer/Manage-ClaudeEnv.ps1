@@ -5,9 +5,9 @@
 param(
     [switch]$Resume,
     [switch]$ListSteps,
-    [ValidateSet("Basic", "Advanced")]
+    [ValidateSet("Basic", "Advanced", "")]
     [string]$Group = "",
-    [ValidateSet("OneClick", "Select")]
+    [ValidateSet("OneClick", "Select", "")]
     [string]$Mode = "",
     [switch]$Staged
 )
