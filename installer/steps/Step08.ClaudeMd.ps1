@@ -257,11 +257,32 @@ function Test-Step08Installed {
             return $false
         }
 
-        # 检查 rules 文件存在性
+        # 检查 rules 文件存在性和内容完整性
         $rulesDir = Get-ClaudeRulesDir
-        foreach ($fileName in $script:RulesTemplates.Keys) {
+
+        # 每个 rules 文件的关键标识（与 Verify 对齐）
+        $rulesValidation = @{
+            'ccg-multimodel.md' = '# 多模型协作'
+            'ccg-tools.md'      = '# 工具速查与知识获取'
+            'ccg-workflow.md'   = '# 工作流增强'
+        }
+
+        foreach ($fileName in $rulesValidation.Keys) {
             $rulePath = Join-Path $rulesDir $fileName
+
+            # 检查文件存在
             if (-not (Test-Path $rulePath)) {
+                return $false
+            }
+
+            # 检查文件内容标识
+            $ruleContent = Get-Content $rulePath -Raw -ErrorAction SilentlyContinue
+            if ([string]::IsNullOrWhiteSpace($ruleContent)) {
+                return $false
+            }
+
+            $keyMarker = $rulesValidation[$fileName]
+            if ($ruleContent -notmatch [regex]::Escape($keyMarker)) {
                 return $false
             }
         }
@@ -304,7 +325,11 @@ function Install-Step08 {
         }
 
         Write-UiInfo "写入 CLAUDE.md 配置..."
-        $null = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
+        $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
+
+        if (-not $writeResult) {
+            throw "CLAUDE.md 写入失败"
+        }
 
         $lineCount = ($script:ClaudeMdTemplate -split "`n").Count
         Write-UiSuccess "CLAUDE.md 已写入 ($lineCount 行)"
@@ -327,7 +352,12 @@ function Install-Step08 {
                 Write-UiInfo "已备份: $fileName"
             }
 
-            $null = Write-FileAtomically -FilePath $rulePath -Content $ruleContent
+            $ruleWriteResult = Write-FileAtomically -FilePath $rulePath -Content $ruleContent
+
+            if (-not $ruleWriteResult) {
+                throw "rules/$fileName 写入失败"
+            }
+
             Write-UiInfo "已写入: rules/$fileName"
         }
 

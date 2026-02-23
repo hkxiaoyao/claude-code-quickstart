@@ -11,7 +11,7 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\..\core\Ui.ps1"
 
 # 配置
-$script:CclinePackage = "ccline"
+$script:CclinePackage = "@cometix/ccline"
 $script:ClaudeConfigDir = "$env:USERPROFILE\.claude"
 $script:ClaudeSettingsFile = "$script:ClaudeConfigDir\settings.json"
 
@@ -34,7 +34,9 @@ function Test-Step04Installed {
         if (Test-Path $script:ClaudeSettingsFile) {
             try {
                 $settings = Get-Content $script:ClaudeSettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($settings.statusLine -and $settings.statusLine.enabled -eq $true) {
+                if ($settings.statusLine -and
+                    $settings.statusLine.type -eq "command" -and
+                    $settings.statusLine.command -eq "ccline") {
                     Write-Host "检测到已安装和配置的 CCometixLine:" -ForegroundColor Green
                     Write-Host "  版本: $(Get-CommandVersion -Command 'ccline')" -ForegroundColor Gray
                     Write-Host "  状态栏: 已启用" -ForegroundColor Gray
@@ -66,7 +68,7 @@ function Install-Step04 {
     #>
     param()
 
-    Write-Host "=== Step 05: CCometixLine 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== Step 04: CCometixLine 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     try {
@@ -167,30 +169,32 @@ function Install-Step04 {
             try {
                 $existingContent = Get-Content $script:ClaudeSettingsFile -Raw -Encoding UTF8
                 if ($existingContent.Trim()) {
-                    $settings = $existingContent | ConvertFrom-Json -AsHashtable
+                    $settings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                    if (-not $settings) {
+                        throw "配置文件解析结果为空"
+                    }
                     Write-Host "✓ 读取现有配置文件" -ForegroundColor Green
                 }
             } catch {
-                Write-Host "⚠ 现有配置文件格式错误，将创建新配置" -ForegroundColor Yellow
-                $settings = @{}
+                throw "无法解析现有 settings.json，已停止写入以避免覆盖用户配置: $($_.Exception.Message)"
             }
         }
 
-        # 配置状态栏
+        # 配置状态栏（Claude Code 官方 schema）
         $settings["statusLine"] = @{
-            enabled = $true
-            command = "ccline"
-            refreshInterval = 5000
-            position = "right"
-            showGitBranch = $true
-            showWorkingDirectory = $true
-            showTimestamp = $false
+            "type"    = "command"
+            "command" = "ccline"
+            "padding" = 0
         }
 
-        # 写入配置文件
+        # 写入配置文件（使用原子操作）
         try {
             $settingsJson = $settings | ConvertTo-Json -Depth 10 -Compress:$false
-            $settingsJson | Out-File -FilePath $script:ClaudeSettingsFile -Encoding UTF8 -Force
+            $writeResult = Write-FileAtomically -FilePath $script:ClaudeSettingsFile -Content $settingsJson
+
+            if (-not $writeResult) {
+                throw "Write-FileAtomically 返回失败"
+            }
 
             Write-Host "✓ 状态栏配置已写入: $script:ClaudeSettingsFile" -ForegroundColor Green
 
@@ -213,7 +217,9 @@ function Install-Step04 {
 
             # 验证配置文件
             $verifySettings = Get-Content $script:ClaudeSettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($verifySettings.statusLine -and $verifySettings.statusLine.enabled -eq $true) {
+            if ($verifySettings.statusLine -and
+                $verifySettings.statusLine.type -eq "command" -and
+                $verifySettings.statusLine.command -eq "ccline") {
                 Write-Host "✓ 状态栏配置验证成功" -ForegroundColor Green
             } else {
                 throw "状态栏配置验证失败"
@@ -223,28 +229,74 @@ function Install-Step04 {
             Write-Host "⚠ 状态栏功能测试失败: $($_.Exception.Message)" -ForegroundColor Yellow
         }
 
-        # 7. 使用提示
+        # 7. 执行 ccline patch
         Write-Host ""
-        Write-Host "7. 使用提示..." -ForegroundColor Gray
+        Write-Host "7. 执行 ccline patch..." -ForegroundColor Gray
+
+        $patchApplied = $false
+        $claudeCliPath = $null
+        try {
+            # 获取 npm 全局 node_modules 路径（比 prefix 拼接更稳健）
+            $npmRoot = (& npm root -g 2>$null | Select-Object -First 1)
+            if ($npmRoot) { $npmRoot = $npmRoot.Trim() }
+            if (-not $npmRoot -or -not (Test-Path $npmRoot)) {
+                throw "无法获取 npm 全局 node_modules 路径"
+            }
+
+            # 构建 Claude Code cli.js 路径
+            $claudeCliPath = Join-Path $npmRoot "@anthropic-ai\claude-code\cli.js"
+            if (-not (Test-Path $claudeCliPath)) {
+                throw "Claude Code cli.js 文件不存在: $claudeCliPath"
+            }
+
+            Write-Host "  Claude Code cli.js 路径: $claudeCliPath" -ForegroundColor Gray
+
+            # 执行 ccline --patch（路径含空格时显式加引号，因 Invoke-ExternalCommand 使用 -join ' ' 拼接参数）
+            $claudeCliArg = if ($claudeCliPath -match "\s") { "`"$claudeCliPath`"" } else { $claudeCliPath }
+            $patchResult = Invoke-ExternalCommand -Command "ccline" -Arguments @("--patch", $claudeCliArg) -TimeoutSeconds 30
+            if ($patchResult.Success) {
+                $patchApplied = $true
+                Write-Host "✓ ccline patch 执行成功" -ForegroundColor Green
+            } else {
+                Write-Host "⚠ ccline patch 执行失败，但不影响基本功能" -ForegroundColor Yellow
+                Write-Host "  错误信息: $($patchResult.Error)" -ForegroundColor Gray
+                Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
+            }
+        } catch {
+            Write-Host "⚠ ccline patch 执行失败: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  状态栏功能可能受限，但不影响基本使用" -ForegroundColor Gray
+            if ($claudeCliPath) {
+                Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
+            }
+        }
+
+        # 8. 使用提示
+        Write-Host ""
+        Write-Host "8. 使用提示..." -ForegroundColor Gray
         Write-Host "  CCometixLine 状态栏已配置完成" -ForegroundColor Cyan
-        Write-Host "  状态栏将在 Claude Code 中显示以下信息:" -ForegroundColor Gray
-        Write-Host "    - Git 分支信息" -ForegroundColor Gray
-        Write-Host "    - 当前工作目录" -ForegroundColor Gray
-        Write-Host "    - 刷新间隔: 5秒" -ForegroundColor Gray
+        Write-Host "  状态栏将在 Claude Code 中自动显示自定义信息" -ForegroundColor Gray
         Write-Host ""
         Write-Host "  基本命令:" -ForegroundColor Gray
         Write-Host "    ccline --version       # 查看版本" -ForegroundColor Gray
         Write-Host "    ccline --help          # 查看帮助" -ForegroundColor Gray
+        Write-Host "    ccline --patch <path>  # Patch Claude Code" -ForegroundColor Gray
 
         Write-Host ""
         Write-Host "✓ CCometixLine 安装和配置完成" -ForegroundColor Green
+
+        $resultMessage = if ($patchApplied) {
+            "CCometixLine 安装、状态栏配置和 patch 全部成功"
+        } else {
+            "CCometixLine 安装和状态栏配置成功，但 ccline patch 未完成，请按提示手动执行"
+        }
 
         return @{
             Success = $true
             CclineVersion = $cclineVersion
             ConfigFile = $script:ClaudeSettingsFile
             StatusLineEnabled = $true
-            Message = "CCometixLine 安装和状态栏配置成功"
+            PatchApplied = $patchApplied
+            Message = $resultMessage
         }
 
     } catch {

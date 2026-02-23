@@ -194,19 +194,51 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps
 
 安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude Code：
 
-| 供应商 | 模型系列 | 获取 Key |
-|--------|---------|---------|
-| **智谱 GLM** | GLM-4 系列 | [open.bigmodel.cn](https://open.bigmodel.cn) |
-| **MiniMax** | abab6.5 系列 | [platform.minimaxi.com](https://platform.minimaxi.com) |
-| **Kimi (月之暗面)** | moonshot-v1 系列 | [platform.moonshot.cn](https://platform.moonshot.cn) |
+| 供应商 | 最新模型系列 | 模型映射（2026-02 更新） | 获取 Key |
+|--------|------------|------------------------|---------|
+| **智谱 GLM** | GLM-5, GLM-4.7, GLM-4-Plus | 服务端自动路由（无需配置） | [open.bigmodel.cn](https://open.bigmodel.cn) |
+| **MiniMax** | M2.5, M2.1, abab6.5 | opus/sonnet/haiku → MiniMax-M2.5 | [platform.minimaxi.com](https://platform.minimaxi.com) |
+| **Kimi (月之暗面)** | K2.5, K2-turbo, moonshot-v1 | opus/sonnet/haiku → kimi-k2.5 | [platform.moonshot.cn](https://platform.moonshot.cn) |
+| **自定义供应商** | 自定义 | 可自定义模型映射 | 手动输入 Base URL 和 API Key |
 
-API Key 写入 `~/.claude/settings.json`：
+API Key 和模型映射写入 `~/.claude/settings.json`：
 
+**智谱 GLM（服务端自动路由）**：
 ```json
 {
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "your-api-key",
-    "ANTHROPIC_BASE_URL": "https://api.xxx.com/v1/"
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic"
+  }
+}
+```
+
+**MiniMax（统一使用 M2.5）**：
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "your-api-key",
+    "ANTHROPIC_BASE_URL": "https://api.minimaxi.com/anthropic"
+  },
+  "modelMapping": {
+    "opus": "MiniMax-M2.5",
+    "sonnet": "MiniMax-M2.5",
+    "haiku": "MiniMax-M2.5"
+  }
+}
+```
+
+**Kimi（统一使用 K2.5）**：
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "your-api-key",
+    "ANTHROPIC_BASE_URL": "https://api.moonshot.cn/anthropic"
+  },
+  "modelMapping": {
+    "opus": "kimi-k2.5",
+    "sonnet": "kimi-k2.5",
+    "haiku": "kimi-k2.5"
   }
 }
 ```
