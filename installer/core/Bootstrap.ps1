@@ -202,7 +202,7 @@ function Load-InstallState {
                 $state.GlobalData = ConvertTo-HashtableDeep $stateData.GlobalData
             }
 
-            # ── 迁移旧 StepId 到新格式 ──────────────────────────────────────
+            # ── 迁移旧 StepId 到新格式（静默执行）──────────────────────────────
             $legacyMap = Get-LegacyStepIdMap
             $migratedResults = @{}
             $needsSave = $false
@@ -213,19 +213,15 @@ function Load-InstallState {
 
                     # 检测键冲突
                     if ($migratedResults.ContainsKey($newId)) {
-                        Write-Host "  ⚠ 检测到键冲突: $oldId → $newId（新键已存在）" -ForegroundColor Yellow
-
                         # 冲突解决策略：优先保留 Success 状态，或优先保留较新的 EndTime
                         $existing = $migratedResults[$newId]
                         $migrating = $state.StepResults[$oldId]
 
                         if ($existing.Status -eq [StepStatus]::Success) {
-                            Write-Host "    保留现有成功状态，跳过旧键迁移" -ForegroundColor Gray
                             continue
                         } elseif ($migrating.EndTime -gt $existing.EndTime) {
-                            Write-Host "    旧键时间戳更新，覆盖现有状态" -ForegroundColor Gray
+                            # 覆盖现有状态
                         } else {
-                            Write-Host "    保留现有状态，跳过旧键迁移" -ForegroundColor Gray
                             continue
                         }
                     }
@@ -234,7 +230,6 @@ function Load-InstallState {
                     $stepResult.StepId = $newId
                     $migratedResults[$newId] = $stepResult
                     $needsSave = $true
-                    Write-Host "  迁移步骤状态: $oldId → $newId" -ForegroundColor Yellow
                 } else {
                     $migratedResults[$oldId] = $state.StepResults[$oldId]
                 }
@@ -248,15 +243,9 @@ function Load-InstallState {
                 $needsSave = $true
             }
 
-            # 保存迁移后的状态
+            # 静默保存迁移后的状态
             if ($needsSave) {
-                $saveResult = Save-InstallState -State $state
-                if ($saveResult) {
-                    Write-Host "  状态文件已自动迁移到新格式" -ForegroundColor Green
-                } else {
-                    Write-Host "  ⚠ 状态迁移成功但保存失败（仅内存生效）" -ForegroundColor Yellow
-                    Write-Host "  下次启动将重新尝试迁移" -ForegroundColor Gray
-                }
+                $null = Save-InstallState -State $state
             }
 
             Write-Host "✓ 安装状态加载成功 (ID: $($state.InstallationId))" -ForegroundColor Green

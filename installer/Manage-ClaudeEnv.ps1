@@ -67,7 +67,36 @@ function Get-GroupStatus {
         $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
         if (-not $stepConfig) { continue }
 
-        $testResult = & $stepConfig.TestFunction
+        # 静默检测：抑制 TestFunction 的所有输出
+        $testResult = $null
+        try {
+            # 保存原始 Preference 设置
+            $originalVerbose = $VerbosePreference
+            $originalDebug = $DebugPreference
+            $originalInfo = $InformationPreference
+            $originalWarning = $WarningPreference
+
+            # 设置为静默模式
+            $VerbosePreference = 'SilentlyContinue'
+            $DebugPreference = 'SilentlyContinue'
+            $InformationPreference = 'SilentlyContinue'
+            $WarningPreference = 'SilentlyContinue'
+
+            # 调用 TestFunction 并抑制所有输出流（不使用 Out-Null 以保留返回值）
+            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null *>&1 |
+                Where-Object { $_ -isnot [string] -and $_ -isnot [System.Management.Automation.InformationRecord] } |
+                Select-Object -First 1
+
+            # 恢复原始设置
+            $VerbosePreference = $originalVerbose
+            $DebugPreference = $originalDebug
+            $InformationPreference = $originalInfo
+            $WarningPreference = $originalWarning
+        } catch {
+            # 忽略检测错误，视为未安装
+            $testResult = $null
+        }
+
         $isInstalled = if ($testResult -is [bool]) { $testResult }
                        elseif ($testResult) { [bool]$testResult.IsInstalled }
                        else { $false }
@@ -226,10 +255,11 @@ function Invoke-GroupedInstall {
     $orderedStepIds = Get-ExecutionOrder -StepIds $closure.FinalPlan
 
     $results = @{
-        Total   = $orderedStepIds.Count
-        Success = 0
-        Failed  = 0
-        Skipped = 0
+        Total           = $orderedStepIds.Count
+        Success         = 0
+        Failed          = 0
+        Skipped         = 0
+        ExecutedStepIds = $orderedStepIds
     }
 
     $stepIndex = 0
@@ -301,6 +331,10 @@ function Show-AdvancedSelectMenu {
     #>
     param()
 
+    Write-Host ""
+    Write-UiInfo "正在检测进阶扩展组件状态..."
+    Write-Host ""
+
     $advancedGroup = $script:StepGroups["Advanced"]
     $options = @()
     $stepIdMap = @()
@@ -313,8 +347,36 @@ function Show-AdvancedSelectMenu {
 
         $stepNum = $i + 1
 
-        # 获取安装状态
-        $testResult = & $stepConfig.TestFunction
+        # 静默获取安装状态
+        $testResult = $null
+        try {
+            # 保存原始 Preference 设置
+            $originalVerbose = $VerbosePreference
+            $originalDebug = $DebugPreference
+            $originalInfo = $InformationPreference
+            $originalWarning = $WarningPreference
+
+            # 设置为静默模式
+            $VerbosePreference = 'SilentlyContinue'
+            $DebugPreference = 'SilentlyContinue'
+            $InformationPreference = 'SilentlyContinue'
+            $WarningPreference = 'SilentlyContinue'
+
+            # 调用 TestFunction 并抑制所有输出流（不使用 Out-Null 以保留返回值）
+            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null *>&1 |
+                Where-Object { $_ -isnot [string] -and $_ -isnot [System.Management.Automation.InformationRecord] } |
+                Select-Object -First 1
+
+            # 恢复原始设置
+            $VerbosePreference = $originalVerbose
+            $DebugPreference = $originalDebug
+            $InformationPreference = $originalInfo
+            $WarningPreference = $originalWarning
+        } catch {
+            # 忽略检测错误，视为未安装
+            $testResult = $null
+        }
+
         $isInstalled = if ($testResult -is [bool]) { $testResult }
                        elseif ($testResult) { [bool]$testResult.IsInstalled }
                        else { $false }
@@ -359,12 +421,9 @@ function Select-TopLevelAction {
     #>
     param()
 
-    $basicStatus = Get-GroupStatus -GroupName "Basic"
-    $advancedStatus = Get-GroupStatus -GroupName "Advanced"
-
     $options = @(
-        "基础环境 ($($basicStatus.Installed)/$($basicStatus.Total) 已完成)  - Node.js, Git, Claude Code, API Key"
-        "进阶扩展 ($($advancedStatus.Installed)/$($advancedStatus.Total) 已完成)  - 增强工具, 配置, 工作流, 多模型"
+        "基础环境 - Node.js, Git, Claude Code, API Key"
+        "进阶扩展 - 增强工具, 配置, 工作流, 多模型"
     )
 
     return Show-SingleSelectMenu -Title "请选择操作：" -Options $options -DefaultIndex 0
@@ -432,28 +491,38 @@ function Show-FinalSummary {
     )
 
     Write-Host ""
-    Show-AsciiBanner -Title "Claude Code 环境管理器 - 安装完成"
+    Show-AsciiBanner -Title "CCQ - 安装完成"
 
+    # 仅展示本次执行计划中涉及的步骤
     $summaryItems = @()
-    $orderedResults = $State.StepResults.Values | Sort-Object StepId
 
-    foreach ($stepResult in $orderedResults) {
-        $statusText = switch ($stepResult.Status) {
-            ([StepStatus]::Success) { "成功" }
-            ([StepStatus]::Skipped) { "跳过" }
-            ([StepStatus]::Failed)  { "失败" }
-            ([StepStatus]::Pending) { "未执行" }
-            default                 { "未知" }
-        }
+    foreach ($stepId in $Results.ExecutedStepIds) {
+        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+        $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
 
-        $version = if ($stepResult.Data -and $stepResult.Data.ContainsKey("Version") -and $stepResult.Data["Version"]) {
-            [string]$stepResult.Data["Version"]
+        if ($State.StepResults.ContainsKey($stepId)) {
+            $stepResult = $State.StepResults[$stepId]
+            $statusText = switch ($stepResult.Status) {
+                ([StepStatus]::Success) { "成功" }
+                ([StepStatus]::Skipped) { "跳过" }
+                ([StepStatus]::Failed)  { "失败" }
+                ([StepStatus]::Pending) { "未执行" }
+                default                 { "未知" }
+            }
+
+            $version = if ($stepResult.Data -and $stepResult.Data.ContainsKey("Version") -and $stepResult.Data["Version"]) {
+                [string]$stepResult.Data["Version"]
+            } else {
+                "-"
+            }
         } else {
-            "-"
+            # 在执行计划中但未进入生命周期（如依赖检查失败）
+            $statusText = "跳过"
+            $version = "-"
         }
 
         $summaryItems += [PSCustomObject]@{
-            Name    = $stepResult.StepName
+            Name    = $stepName
             Status  = $statusText
             Version = $version
         }
@@ -497,7 +566,8 @@ function Show-FinalSummary {
         Write-UiWarn "安装完成，但有 $($Results.Failed) 个步骤失败"
         Write-Host ""
         Write-UiInfo "失败步骤列表："
-        foreach ($stepResult in $orderedResults) {
+        $executedResults = $State.StepResults.Values | Sort-Object StepId
+        foreach ($stepResult in $executedResults) {
             if ($stepResult.Status -eq [StepStatus]::Failed) {
                 Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
             }
@@ -526,9 +596,9 @@ function Main {
         }
 
         # 欢迎横幅
-        Show-AsciiBanner -Title "Claude Code 环境管理器 v2.0"
+        Show-AsciiBanner -Title "CCQ 环境管理器 v2.0"
 
-        Write-UiInfo "欢迎使用 Claude Code 环境管理器！"
+        Write-UiInfo "欢迎使用 CCQ 环境管理器！"
         Write-UiInfo "支持基础环境一键安装和进阶扩展灵活选配"
         Write-Host ""
 

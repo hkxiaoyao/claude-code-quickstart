@@ -1,8 +1,18 @@
-# Claude Code Quickstart
+<div align="center">
+<pre>
+  ██████╗  ██████╗  ██████╗
+ ██╔════╝ ██╔════╝ ██╔═══██╗
+ ██║      ██║      ██║   ██║
+ ██║      ██║      ██║▄▄ ██║
+  ╚██████╗ ╚██████╗ ╚██████╔╝
+  ╚═════╝  ╚═════╝  ╚══▀▀═╝
+</pre>
 
-> Windows 10/11 平台的 Claude Code 开发环境**自动化安装器**
+**Claude Code Quickstart** — Windows 平台的 Claude Code 开发环境自动化安装器
 
 一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，支持断点续传**。
+
+</div>
 
 ---
 
@@ -44,10 +54,20 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex
 ```
 
-引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
+引导完成后，在 **PowerShell 7**（`pwsh`）中运行（二选一）：
+
+**推荐 — 分组安装**（基础环境 / 进阶扩展分组选择）：
 
 ```powershell
-# 第二步：执行主安装脚本（PS 7+）
+# 第二步：执行分组安装脚本（PS 7+，推荐）
+Set-ExecutionPolicy Bypass -Scope Process -Force
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
+```
+
+**经典 — 全量安装**（一键安装全部 12 个步骤）：
+
+```powershell
+# 第二步：执行全量安装脚本（PS 7+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
 irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex
 ```
@@ -57,6 +77,7 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 > - 第二步在 PS 7 中运行，`irm` 原生支持 UTF-8，无需特殊处理
 > - `iex` (Invoke-Expression) 直接执行脚本
 > - 执行前可以先访问 URL 查看脚本源码，确保安全
+> - **推荐使用分组安装**：将 12 个步骤分为基础环境和进阶扩展两组，更灵活
 
 ---
 
