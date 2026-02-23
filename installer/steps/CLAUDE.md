@@ -259,11 +259,20 @@ $script:ApiProviders = @{
 
 ## Step08 — CLAUDE.md 配置
 
-**文件**：`Step08.ClaudeMd.ps1`（454 行）
-**目标**：`$env:USERPROFILE\.claude\CLAUDE.md`
+**文件**：`Step08.ClaudeMd.ps1`
+**目标**：`$env:USERPROFILE\.claude\CLAUDE.md` + `$env:USERPROFILE\.claude\rules\`
 
-**功能**：生成全局 Claude Code 工作规范文件，包含代码风格、工具速查、交互规范等内容。
-使用 `Write-FileAtomically -FilePath`（**注意参数名**）。
+**功能**：生成全局 Claude Code 工作规范。主文件 ~80 行（确保在 token 截断限制内完整可见），详细内容拆分到 `rules/` 目录（Claude Code 无条件加载）。
+
+**瘦身结构**：
+- `CLAUDE.md`（~80 行）：核心原则 / 工作流原则 / 任务分级 / 交互与环境+输出设置
+- `rules/ccg-multimodel.md`：多模型协作（Codex/Gemini 调用格式、会话复用、并行调用）
+- `rules/ccg-tools.md`：工具速查表 + 知识获取 + 设计图获取
+- `rules/ccg-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
+
+**写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用备份 + 原子覆写。
+
+**检测条件**：`Test-Step08Installed` 检查主文件 3 个关键标识 + 3 个 rules 文件存在性。
 
 ---
 
