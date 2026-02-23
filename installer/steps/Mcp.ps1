@@ -483,20 +483,12 @@ function Get-McpCredentials {
             return $result
         }
         "single-key" {
-            if ($Server.ApiKeyUrl) {
-                Write-UiInfo "$($Server.Name) 凭据获取地址: $($Server.ApiKeyUrl)"
-            }
-
             $apiKeyName = [string]$Server.ApiKeyName
             $apiKeyValue = Read-McpCredentialValue -Label $apiKeyName -Secret $true -Required $true
             $result.Values[$apiKeyName] = $apiKeyValue
         }
         "url-embedded" {
             foreach ($credential in @($Server.Credentials)) {
-                if ($credential.Url) {
-                    Write-UiInfo "$($credential.Label) 获取地址: $($credential.Url)"
-                }
-
                 $value = Read-McpCredentialValue `
                     -Label ([string]$credential.Label) `
                     -Secret ([bool]$credential.Secret) `
@@ -556,10 +548,6 @@ function Get-McpCredentials {
             }
         }
         "args-token" {
-            if ($Server.TokenUrl) {
-                Write-UiInfo "$($Server.Name) Token 获取地址: $($Server.TokenUrl)"
-            }
-
             $tokenLabel = if ($Server.TokenLabel) { [string]$Server.TokenLabel } else { "Token" }
             $tokenValue = Read-McpCredentialValue -Label $tokenLabel -Secret $true -Required $true
             $result.Values["token"] = $tokenValue
@@ -568,10 +556,6 @@ function Get-McpCredentials {
             $envFile = $Server.EnvFile
             if (-not $envFile) {
                 throw "$($Server.Name) 缺少 EnvFile 配置"
-            }
-
-            if ($envFile.ProviderUrl) {
-                Write-UiInfo "$($Server.Name) 凭据获取地址: $($envFile.ProviderUrl)"
             }
 
             $sharedCredentialName = if ($envFile.ContainsKey("SharedCredentialName")) { [string]$envFile.SharedCredentialName } else { "" }
@@ -1058,8 +1042,8 @@ function Install-Mcp {
                 $server = $script:McpServers[$serverId]
                 $recommendedTag = if ($server.Recommended) { " (推荐)" } else { "" }
                 $credentialTag = if ($server.CredentialType -ne "none") { " | 需凭据" } else { "" }
-                $installedTag = if ($existingServers -contains $serverId) { " [已安装]" } else { "" }
-                $displayOptions += "[$($server.Category)] $($server.Name)$recommendedTag [$($server.McpType)]$credentialTag$installedTag - $($server.Description)"
+                $installedTag = if ($existingServers -contains $serverId) { "[已安装] " } else { "" }
+                $displayOptions += "$installedTag$($server.Name)$recommendedTag$credentialTag - $($server.Description)"
                 $serverMap += $serverId
                 # 默认选中推荐的且未安装的
                 if ($server.Recommended -and $existingServers -notcontains $serverId) {
@@ -1070,7 +1054,7 @@ function Install-Mcp {
             Write-UiInfo "请选择要安装的 MCP Server:"
             $selectedIndices = Show-MultiSelectMenu -Options $displayOptions -DefaultSelected $defaultSelected -Title "MCP Server 选择"
 
-            if (-not $selectedIndices -or $selectedIndices.Count -eq 0) {
+            if (-not $selectedIndices -or @($selectedIndices).Count -eq 0) {
                 throw "未选择任何 MCP Server"
             }
 
@@ -1206,6 +1190,7 @@ function Install-Mcp {
             }
         }
 
+        $serversToRemove = @()
         foreach ($serverId in @($activeServers)) {
             $server = $script:McpServers[$serverId]
             if ($server.CredentialType -eq "none") {
@@ -1215,7 +1200,8 @@ function Install-Mcp {
             try {
                 $credentialResult = Get-McpCredentials -ServerId $serverId -Server $server -SharedCredentials $sharedCredentials
                 $settingsCredentials[$serverId] = $credentialResult.Values
-                if ($credentialResult.EnvFileValues.Count -gt 0) {
+                $envFileValuesCount = if ($credentialResult.ContainsKey("EnvFileValues") -and $credentialResult.EnvFileValues) { @($credentialResult.EnvFileValues.Keys).Count } else { 0 }
+                if ($envFileValuesCount -gt 0) {
                     $envFileCredentials[$serverId] = $credentialResult.EnvFileValues
                 }
                 foreach ($sharedKey in $credentialResult.Shared.Keys) {
@@ -1227,11 +1213,15 @@ function Install-Mcp {
                 $serverStatus[$serverId].State = "失败"
                 $serverStatus[$serverId].Message = "凭据收集失败: $($_.Exception.Message)"
                 Write-UiWarn "跳过 $($server.Name): $($serverStatus[$serverId].Message)"
-                [void]$activeServers.Remove($serverId)
+                $serversToRemove += $serverId
             }
+        }
+        foreach ($serverId in $serversToRemove) {
+            [void]$activeServers.Remove($serverId)
         }
 
         Write-UiInfo "阶段 4/5: 软件安装"
+        $serversToRemove = @()
         foreach ($serverId in @($activeServers)) {
             $server = $script:McpServers[$serverId]
             if ($server.McpType -ne "software") {
@@ -1247,8 +1237,11 @@ function Install-Mcp {
                 $serverStatus[$serverId].State = "失败"
                 $serverStatus[$serverId].Message = "软件安装失败: $($_.Exception.Message)"
                 Write-UiWarn "跳过 $($server.Name): $($serverStatus[$serverId].Message)"
-                [void]$activeServers.Remove($serverId)
+                $serversToRemove += $serverId
             }
+        }
+        foreach ($serverId in $serversToRemove) {
+            [void]$activeServers.Remove($serverId)
         }
 
         Write-UiInfo "阶段 5/5: 配置生成与写入"
@@ -1388,7 +1381,8 @@ function Install-Mcp {
         Write-UiInfo "配置摘要:"
         Write-UiInfo "  - 选择 MCP 数量: $($selectedServers.Count)"
         Write-UiInfo "  - 有效处理数量: $(@($activeServers).Count)"
-        Write-UiInfo "  - 权限策略: $($settings.permissions.allow.Count) 项"
+        $allowCount = if ($settings.ContainsKey("permissions") -and $settings.permissions.ContainsKey("allow")) { @($settings.permissions.allow).Count } else { 0 }
+        Write-UiInfo "  - 权限策略: $allowCount 项"
 
         foreach ($serverId in $selectedServers) {
             $server = $script:McpServers[$serverId]
