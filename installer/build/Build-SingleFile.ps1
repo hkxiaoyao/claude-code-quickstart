@@ -42,9 +42,9 @@ function Get-MainInstallerBuildOrder {
         'steps/Step01.NodeFnm.ps1'
         'steps/Step02.Git.ps1'
         'steps/Step03.ClaudeCode.ps1'
-        'steps/Step04.Ccline.ps1'
-        'steps/Step05.CcSwitch.ps1'
-        'steps/Step06.ApiKey.ps1'
+        'steps/Step04.ApiKey.ps1'
+        'steps/Step05.Ccline.ps1'
+        'steps/Step06.CcSwitch.ps1'
         'steps/Step07.ClaudeConfig.ps1'
         'steps/Step08.ClaudeMd.ps1'
         'steps/Step09.Mcp.ps1'
@@ -52,6 +52,38 @@ function Get-MainInstallerBuildOrder {
         'steps/Step11.CodexCli.ps1'
         'steps/Step12.GeminiCli.ps1'
         'Install-ClaudeEnv.ps1'
+    )
+}
+
+function Get-ManageBuildOrder {
+    <#
+    .SYNOPSIS
+    返回分组管理入口脚本构建时需要按顺序拼接的文件路径数组
+    .RETURNS
+    string[] - 相对于 installer/ 目录的文件路径数组
+    .NOTES
+    ⚠️  新增步骤文件（如 Step13.*.ps1）时，必须同步更新此函数，否则产物将缺失该步骤！
+    #>
+    return @(
+        'core/Ui.ps1'
+        'core/Process.ps1'
+        'core/Profile.ps1'
+        'core/Admin.ps1'
+        'core/Net.ps1'
+        'core/Bootstrap.ps1'
+        'steps/Step01.NodeFnm.ps1'
+        'steps/Step02.Git.ps1'
+        'steps/Step03.ClaudeCode.ps1'
+        'steps/Step04.ApiKey.ps1'
+        'steps/Step05.Ccline.ps1'
+        'steps/Step06.CcSwitch.ps1'
+        'steps/Step07.ClaudeConfig.ps1'
+        'steps/Step08.ClaudeMd.ps1'
+        'steps/Step09.Mcp.ps1'
+        'steps/Step10.CcgWorkflow.ps1'
+        'steps/Step11.CodexCli.ps1'
+        'steps/Step12.GeminiCli.ps1'
+        'Manage-ClaudeEnv.ps1'
     )
 }
 
@@ -291,7 +323,7 @@ function Test-BuiltScriptSyntax {
 function Main {
     <#
     .SYNOPSIS
-    构建入口：生成 Bootstrap 和 Installer 的单文件版本
+    构建入口：生成 Bootstrap、Installer、Manage 的单文件版本
     .PARAMETER InstallerRoot
     installer/ 目录的绝对路径
     .PARAMETER OutputDir
@@ -345,11 +377,24 @@ function Main {
         -RequiresHeader "#Requires -Version 7.0" `
         -HoistParamFromRelativePath 'Install-ClaudeEnv.ps1'
 
+    # 构建 Manage 单文件版本
+    Write-Host ""
+    Write-Host "─── 构建 Manage 单文件版本 ────────────────────────────────" -ForegroundColor Yellow
+    $manageOrder = Get-ManageBuildOrder
+    $manageOutput = Join-Path $OutputDir "Manage-ClaudeEnv.built.ps1"
+    Build-SingleFileScript `
+        -InstallerRoot $InstallerRoot `
+        -FileOrder $manageOrder `
+        -OutputPath $manageOutput `
+        -RequiresHeader "#Requires -Version 7.0" `
+        -HoistParamFromRelativePath 'Manage-ClaudeEnv.ps1'
+
     # 语法检查
     Write-Host ""
     Write-Host "─── 语法检查 ───────────────────────────────────────────────" -ForegroundColor Yellow
     $bootstrapOk = Test-BuiltScriptSyntax -ScriptPath $bootstrapOutput
     $installerOk = Test-BuiltScriptSyntax -ScriptPath $installerOutput
+    $manageOk = Test-BuiltScriptSyntax -ScriptPath $manageOutput
 
     # 构建摘要
     Write-Host ""
@@ -359,14 +404,17 @@ function Main {
 
     $bootstrapSize = if (Test-Path $bootstrapOutput) { (Get-Item $bootstrapOutput).Length } else { 0 }
     $installerSize = if (Test-Path $installerOutput) { (Get-Item $installerOutput).Length } else { 0 }
+    $manageSize = if (Test-Path $manageOutput) { (Get-Item $manageOutput).Length } else { 0 }
 
     Write-Host "  Bootstrap:  $bootstrapOutput"
     Write-Host "              大小: $([math]::Round($bootstrapSize / 1KB, 1)) KB | 语法: $(if ($bootstrapOk) { '[PASS]' } else { '[FAIL]' })"
     Write-Host "  Installer:  $installerOutput"
     Write-Host "              大小: $([math]::Round($installerSize / 1KB, 1)) KB | 语法: $(if ($installerOk) { '[PASS]' } else { '[FAIL]' })"
+    Write-Host "  Manage:     $manageOutput"
+    Write-Host "              大小: $([math]::Round($manageSize / 1KB, 1)) KB | 语法: $(if ($manageOk) { '[PASS]' } else { '[FAIL]' })"
     Write-Host ""
 
-    if ($bootstrapOk -and $installerOk) {
+    if ($bootstrapOk -and $installerOk -and $manageOk) {
         Write-Host "  构建完成！所有文件语法检查通过。" -ForegroundColor Green
     } else {
         Write-Host "  构建完成，但存在语法错误，请检查。" -ForegroundColor Red

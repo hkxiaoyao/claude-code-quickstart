@@ -10,7 +10,8 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 主安装：dot-source 所有模块 → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
+| `Install-ClaudeEnv.ps1` | **7.0+** | 全量安装：dot-source 所有模块 → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
+| `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（Step01-04）/ 进阶扩展（Step05-12）两级分组 |
 
 ---
 
@@ -68,13 +69,13 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 ```powershell
 @{
-    StepId          = "Step06.ApiKey"       # 与 Bootstrap.ps1 依赖图 key 一致
+    StepId          = "Step04.ApiKey"       # 与 Bootstrap.ps1 依赖图 key 一致
     StepName        = "API Key 配置"
     Description     = "..."
-    TestFunction    = "Test-Step06Installed"
-    InstallFunction = "Install-Step06"
-    VerifyFunction  = "Verify-Step06"        # 空字符串 = 不验证
-    RollbackFunction = "Rollback-Step06"     # 空字符串 = 不回滚
+    TestFunction    = "Test-Step04Installed"
+    InstallFunction = "Install-Step04"
+    VerifyFunction  = "Verify-Step04"        # 空字符串 = 不验证
+    RollbackFunction = "Rollback-Step04"     # 空字符串 = 不回滚
     SkipIfInstalled = $false                 # false = 每次都重新配置
     IsOptional      = $false                 # true = 分阶段模式默认不勾选
 }
@@ -124,3 +125,62 @@ Main()
 | Step12.GeminiCli | Google Gemini CLI，多模型协作使用 |
 
 在 Staged 模式下，用户通过**单选迭代式菜单**逐个选择步骤执行，每次执行后返回菜单。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，**全部包含**。
+
+---
+
+## Manage-ClaudeEnv.ps1
+
+**用途**：PS 7 分组安装入口（推荐），将 12 个步骤分为**基础环境**和**进阶扩展**两组。
+
+### 参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `-Resume` | switch | 从上次失败点继续 |
+| `-ListSteps` | switch | 列出所有步骤（按分组显示）后退出 |
+| `-Group` | string | 指定分组：`Basic`（基础环境）或 `Advanced`（进阶扩展） |
+| `-Mode` | string | 进阶扩展安装模式：`OneClick` 或 `Select` |
+| `-Staged` | switch | 兼容旧参数，等同于 `-Group Advanced -Mode Select` |
+
+### 步骤分组
+
+| 分组 | 步骤 | 安装模式 |
+|------|------|----------|
+| **基础环境** | Step01-04（Node.js, Git, Claude Code, API Key） | 仅一键安装 |
+| **进阶扩展** | Step05-12（ccline, cc-switch, 配置, MCP, 工作流, 多模型） | 一键或多选 |
+
+### 核心函数
+
+| 函数 | 职责 |
+|------|------|
+| `Get-GroupStatus` | 统计分组内步骤完成状态 |
+| `Get-DependencyClosure` | 计算传递依赖闭包，自动补齐跨组依赖 |
+| `Show-ExecutionPlan` | 显示执行计划（含自动补齐的依赖）并确认 |
+| `Invoke-GroupedInstall` | 依赖闭包 → 确认 → 拓扑排序 → 执行 |
+| `Show-AdvancedSelectMenu` | 进阶多选菜单（带状态标签和智能默认勾选） |
+| `Select-TopLevelAction` | 顶层菜单：基础环境 / 进阶扩展 |
+| `Select-AdvancedAction` | 进阶子菜单：一键安装 / 可选安装 |
+
+### 执行流
+
+```
+Main()
+  ├── [if -ListSteps] Show-StepList（按分组显示） → exit
+  ├── Show-AsciiBanner
+  ├── Load-InstallState
+  ├── [if -Resume] Resume-Installation
+  │
+  ├── [CLI 模式]（-Group 参数）
+  │   ├── Basic → Invoke-GroupedInstall(Step01-04) → Show-FinalSummary
+  │   ├── Advanced/OneClick → Invoke-GroupedInstall(Step05-12) → Show-FinalSummary
+  │   └── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
+  │
+  └── [交互模式]（无 -Group 参数） while($true):
+      ├── Select-TopLevelAction
+      ├── [基础环境] → Invoke-GroupedInstall(Step01-04) → Show-FinalSummary
+      ├── [进阶扩展] → Select-AdvancedAction
+      │   ├── [一键] → Invoke-GroupedInstall(Step05-12)
+      │   ├── [可选] → Show-AdvancedSelectMenu → Invoke-GroupedInstall
+      │   └── [Esc] → 回到顶层
+      └── [Esc] → 退出
+```

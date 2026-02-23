@@ -1,4 +1,4 @@
-﻿# Step05: CC-Switch 安装 - Claude Code 环境安装器
+﻿# Step06: CC-Switch 安装 - Claude Code 环境安装器
 # 作者: 哈雷酱 (本小姐的 CC-Switch 安装杰作！)
 # 功能: CC-Switch GitHub Release 下载 + MSI 静默安装
 
@@ -16,7 +16,7 @@ $script:CcSwitchRepo = "farion1231/cc-switch"
 $script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
 $script:TempDownloadDir = "$env:TEMP\CcSwitchInstall"
 
-function Test-Step05Installed {
+function Test-Step06Installed {
     <#
     .SYNOPSIS
     检测 CC-Switch 是否已安装
@@ -87,7 +87,7 @@ function Test-Step05Installed {
     }
 }
 
-function Install-Step05 {
+function Install-Step06 {
     <#
     .SYNOPSIS
     安装 CC-Switch
@@ -96,7 +96,7 @@ function Install-Step05 {
     #>
     param()
 
-    Write-Host "=== Step 05: CC-Switch 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== Step 06: CC-Switch 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     $result = @{
@@ -119,7 +119,7 @@ function Install-Step05 {
         Write-Host ""
         Write-Host "2. 检查 CC-Switch 安装状态..." -ForegroundColor Gray
 
-        if (Test-Step05Installed) {
+        if (Test-Step06Installed) {
             Write-Host "✓ CC-Switch 已安装" -ForegroundColor Green
 
             # 询问是否重新安装
@@ -200,7 +200,7 @@ function Install-Step05 {
         # 等待安装完成
         Start-Sleep -Seconds 3
 
-        if (-not (Test-Step05Installed)) {
+        if (-not (Test-Step06Installed)) {
             Write-Host "⚠ CC-Switch 安装验证失败，但安装过程成功" -ForegroundColor Yellow
             Write-Host "  可能需要重启系统或重新登录才能完全生效" -ForegroundColor Gray
         } else {
@@ -476,7 +476,7 @@ function Install-CcSwitchPackage {
     }
 }
 
-function Verify-Step05 {
+function Verify-Step06 {
     <#
     .SYNOPSIS
     验证 CC-Switch 安装
@@ -485,7 +485,7 @@ function Verify-Step05 {
     #>
     param()
 
-    return Test-Step05Installed
+    return Test-Step06Installed
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

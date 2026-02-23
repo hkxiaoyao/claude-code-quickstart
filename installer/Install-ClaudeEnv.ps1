@@ -30,9 +30,9 @@ $script:InstallerRoot = $PSScriptRoot
 . "$script:InstallerRoot\steps\Step01.NodeFnm.ps1"
 . "$script:InstallerRoot\steps\Step02.Git.ps1"
 . "$script:InstallerRoot\steps\Step03.ClaudeCode.ps1"
-. "$script:InstallerRoot\steps\Step04.Ccline.ps1"
-. "$script:InstallerRoot\steps\Step05.CcSwitch.ps1"
-. "$script:InstallerRoot\steps\Step06.ApiKey.ps1"
+. "$script:InstallerRoot\steps\Step04.ApiKey.ps1"
+. "$script:InstallerRoot\steps\Step05.Ccline.ps1"
+. "$script:InstallerRoot\steps\Step06.CcSwitch.ps1"
 . "$script:InstallerRoot\steps\Step07.ClaudeConfig.ps1"
 . "$script:InstallerRoot\steps\Step08.ClaudeMd.ps1"
 . "$script:InstallerRoot\steps\Step09.Mcp.ps1"
@@ -75,9 +75,9 @@ $script:StepRegistry = @(
         IsOptional      = $false
     },
     @{
-        StepId          = "Step04.Ccline"
-        StepName        = "ccline"
-        Description     = "安装 ccline 命令行工具"
+        StepId          = "Step04.ApiKey"
+        StepName        = "API Key 配置"
+        Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
         TestFunction    = "Test-Step04Installed"
         InstallFunction = "Install-Step04"
         VerifyFunction  = "Verify-Step04"
@@ -85,9 +85,9 @@ $script:StepRegistry = @(
         IsOptional      = $false
     },
     @{
-        StepId          = "Step05.CcSwitch"
-        StepName        = "cc-switch"
-        Description     = "安装 cc-switch，用于切换 Claude Code 版本"
+        StepId          = "Step05.Ccline"
+        StepName        = "ccline"
+        Description     = "安装 ccline 命令行工具"
         TestFunction    = "Test-Step05Installed"
         InstallFunction = "Install-Step05"
         VerifyFunction  = "Verify-Step05"
@@ -95,9 +95,9 @@ $script:StepRegistry = @(
         IsOptional      = $false
     },
     @{
-        StepId          = "Step06.ApiKey"
-        StepName        = "API Key 配置"
-        Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
+        StepId          = "Step06.CcSwitch"
+        StepName        = "cc-switch"
+        Description     = "安装 cc-switch，用于切换 Claude Code 版本"
         TestFunction    = "Test-Step06Installed"
         InstallFunction = "Install-Step06"
         VerifyFunction  = "Verify-Step06"
@@ -609,8 +609,8 @@ function Show-FinalSummary {
         Write-UiInfo "快速开始："
         Write-UiInfo "  claude          - 启动 Claude Code"
         Write-UiInfo "  claude --help   - 查看帮助信息"
-        if ($State.StepResults.ContainsKey("Step05.CcSwitch") -and
-            $State.StepResults["Step05.CcSwitch"].Status -eq [StepStatus]::Success) {
+        if ($State.StepResults.ContainsKey("Step06.CcSwitch") -and
+            $State.StepResults["Step06.CcSwitch"].Status -eq [StepStatus]::Success) {
             Write-UiInfo "  cc-switch       - 切换 Claude Code 版本"
         }
         if ($State.StepResults.ContainsKey("Step11.CodexCli") -and

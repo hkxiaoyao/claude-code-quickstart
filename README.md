@@ -123,7 +123,21 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1"
 > - 构建后的单文件：`.\Install-ClaudeEnv.built.ps1`
 > - 源码模式：`.\installer\Install-ClaudeEnv.ps1`
 
-### 一键安装（推荐）
+### 分组安装（推荐）
+
+```powershell
+# 构建后的单文件版本
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
+
+# 或源码版本
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+```
+
+将 12 个步骤分为**基础环境**（Step 01-04）和**进阶扩展**（Step 05-12）两组：
+- **基础环境**：Node.js、Git、Claude Code、API Key — 一键安装，无需选择
+- **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
+
+### 一键安装（全量）
 
 ```powershell
 # 构建后的单文件版本
@@ -135,7 +149,7 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -OneClick
 
 自动按依赖顺序安装全部 12 个步骤（含可选的 Codex CLI 和 Gemini CLI）。
 
-### 分阶段安装
+### 分阶段安装（逐步选择）
 
 ```powershell
 # 构建后的单文件版本
@@ -173,20 +187,20 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps
 
 ## 安装内容
 
-| # | 步骤 | 说明 | 可选 |
-|---|------|------|:----:|
-| 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | — |
-| 02 | Git | 安装 Git，配置中文支持 | — |
-| 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | — |
-| 04 | ccline | 安装 ccline 状态栏工具 | — |
-| 05 | cc-switch | 安装 cc-switch 版本切换工具 | — |
-| 06 | API Key 配置 | 配置 AI 供应商 API Key | — |
-| 07 | Claude 基础配置 | 写入语言/模型/权限/状态栏配置 | — |
-| 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | — |
-| 09 | MCP Server | 配置 MCP 插件服务器 | — |
-| 10 | CCG 工作流 | 安装 Claude Code Generator 工作流 | — |
-| 11 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | ✓ |
-| 12 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | ✓ |
+| # | 步骤 | 说明 | 分组 | 可选 |
+|---|------|------|------|:----:|
+| 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | 基础 | — |
+| 02 | Git | 安装 Git，配置中文支持 | 基础 | — |
+| 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
+| 04 | API Key 配置 | 配置 AI 供应商 API Key | 基础 | — |
+| 05 | ccline | 安装 ccline 状态栏工具 | 进阶 | — |
+| 06 | cc-switch | 安装 cc-switch 版本切换工具 | 进阶 | — |
+| 07 | Claude 基础配置 | 写入语言/模型/权限/环境变量配置 | 进阶 | — |
+| 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | 进阶 | — |
+| 09 | MCP Server | 配置 MCP 插件服务器 | 进阶 | — |
+| 10 | CCG 工作流 | 安装 Claude Code Generator 工作流 | 进阶 | — |
+| 11 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | 进阶 | ✓ |
+| 12 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | 进阶 | ✓ |
 
 ---
 
@@ -251,7 +265,8 @@ API Key 和模型映射写入 `~/.claude/settings.json`：
 claude-code-quickstart/
 ├── installer/
 │   ├── Bootstrap-ClaudeEnv.ps1   # PS 5.1 引导入口
-│   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口
+│   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口（全量安装）
+│   ├── Manage-ClaudeEnv.ps1      # PS 7+ 分组安装入口（推荐）
 │   ├── build/                    # 构建工具目录
 │   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本
 │   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
@@ -329,7 +344,7 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
 
 **Q：想重新配置 API Key？**
 
-Step06（API Key 配置）的 `SkipIfInstalled` 为 `false`，每次安装都会重新运行。直接 `-Staged` 模式只勾选 Step06 即可：
+Step04（API Key 配置）的 `SkipIfInstalled` 为 `false`，每次安装都会重新运行。直接 `-Staged` 模式只勾选 Step04 即可：
 
 ```powershell
 # 构建后的单文件版本
@@ -380,9 +395,10 @@ pwsh -File ".\installer\build\Build-SingleFile.ps1"
 构建脚本会自动：
 - ✓ 按依赖顺序合并所有源文件
 - ✓ 移除 dot-source 引用和重复的 #Requires 声明
-- ✓ 生成两个单文件脚本到 `installer/build/dist/` 目录：
+- ✓ 生成三个单文件脚本到 `installer/build/dist/` 目录：
   - `Bootstrap-ClaudeEnv.built.ps1` - 引导脚本（PS 5.1+）
-  - `Install-ClaudeEnv.built.ps1` - 主安装脚本（PS 7+）
+  - `Install-ClaudeEnv.built.ps1` - 全量安装脚本（PS 7+）
+  - `Manage-ClaudeEnv.built.ps1` - 分组安装脚本（PS 7+，推荐）
 - ✓ 自动进行语法检查验证
 
 构建产物可直接分发给用户使用，无需携带整个源码目录。

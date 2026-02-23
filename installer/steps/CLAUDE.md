@@ -42,20 +42,20 @@ function Verify-StepXX {
 
 ## 步骤总览
 
-| 步骤 | 名称 | 可选 | SkipIfInstalled | 主要依赖 |
-|------|------|:----:|:---------------:|---------|
-| Step01 | Node.js (fnm) | — | ✓ | 无 |
-| Step02 | Git | — | ✓ | 无 |
-| Step03 | Claude Code | — | ✓ | Step01 |
-| Step04 | ccline | — | ✓ | Step03 |
-| Step05 | cc-switch | — | ✓ | Step03 |
-| Step06 | API Key 配置 | — | — | Step03 |
-| Step07 | Claude 基础配置 | — | ✓ | Step06 |
-| Step08 | CLAUDE.md 配置 | — | ✓ | Step07 |
-| Step09 | MCP Server 配置 | — | ✓ | Step07 |
-| Step10 | CCG 工作流 | — | ✓ | Step01 + Step07 |
-| Step11 | Codex CLI | **✓** | ✓ | Step01 |
-| Step12 | Gemini CLI | **✓** | ✓ | Step01 |
+| 步骤 | 名称 | 可选 | SkipIfInstalled | 主要依赖 | 分组 |
+|------|------|:----:|:---------------:|---------|------|
+| Step01 | Node.js (fnm) | — | ✓ | 无 | 基础 |
+| Step02 | Git | — | ✓ | 无 | 基础 |
+| Step03 | Claude Code | — | ✓ | Step01 | 基础 |
+| Step04 | API Key 配置 | — | — | Step03 | 基础 |
+| Step05 | ccline | — | ✓ | Step03 | 进阶 |
+| Step06 | cc-switch | — | ✓ | Step03 | 进阶 |
+| Step07 | Claude 基础配置 | — | ✓ | Step03 | 进阶 |
+| Step08 | CLAUDE.md 配置 | — | ✓ | Step07 | 进阶 |
+| Step09 | MCP Server 配置 | — | ✓ | Step03 | 进阶 |
+| Step10 | CCG 工作流 | — | ✓ | Step01 | 进阶 |
+| Step11 | Codex CLI | **✓** | ✓ | Step01 | 进阶 |
+| Step12 | Gemini CLI | **✓** | ✓ | Step01 | 进阶 |
 
 ---
 
@@ -91,48 +91,9 @@ function Verify-StepXX {
 
 ---
 
-## Step04 — ccline
+## Step04 — API Key 配置（HC-12 关键）
 
-**文件**：`Step04.Ccline.ps1`（295 行）
-**依赖核心模块**：`Process.ps1`, `Ui.ps1`
-
-**包名**：`@cometix/ccline`（scoped package）
-
-**安装流程**：
-1. 前置检查（Claude Code + npm）
-2. `npm install -g @cometix/ccline`
-3. 配置 `statusLine`（官方 schema）写入 `~/.claude/settings.json`
-4. 执行 `ccline --patch <cli.js>` 对 Claude Code 进行 patch
-
-**statusLine 配置格式（Claude Code 官方 schema）**：
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "ccline",
-    "padding": 0
-  }
-}
-```
-
-**检测条件**：`$settings.statusLine.type -eq "command"`
-
-**ccline patch**：安装后自动定位 `npm prefix/node_modules/@anthropic-ai/claude-code/cli.js`，执行 `ccline --patch` 注入状态栏支持。失败时仅警告不中断。
-
----
-
-## Step05 — cc-switch
-
-**文件**：`Step05.CcSwitch.ps1`（562 行）
-**依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
-
-**安装**：npm 全局安装 cc-switch + 写入 `$PROFILE`。
-
----
-
-## Step06 — API Key 配置（HC-12 关键）
-
-**文件**：`Step06.ApiKey.ps1`（约 330 行）
+**文件**：`Step04.ApiKey.ps1`（约 330 行）
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
 
 ### 支持的 AI 供应商
@@ -209,7 +170,7 @@ $script:ApiProviders = @{
 }
 ```
 
-此配置用于标记 Claude Code 环境已完成初始化，由 Step06 自动创建。如果文件已存在，将合并写入，保留用户已有字段。
+此配置用于标记 Claude Code 环境已完成初始化，由 Step04 自动创建。如果文件已存在，将合并写入，保留用户已有字段。
 
 ### 自定义供应商流程
 
@@ -222,12 +183,51 @@ $script:ApiProviders = @{
 
 ---
 
+## Step05 — ccline
+
+**文件**：`Step05.Ccline.ps1`（295 行）
+**依赖核心模块**：`Process.ps1`, `Ui.ps1`
+
+**包名**：`@cometix/ccline`（scoped package）
+
+**安装流程**：
+1. 前置检查（Claude Code + npm）
+2. `npm install -g @cometix/ccline`
+3. 配置 `statusLine`（官方 schema）写入 `~/.claude/settings.json`
+4. 执行 `ccline --patch <cli.js>` 对 Claude Code 进行 patch
+
+**statusLine 配置格式（Claude Code 官方 schema）**：
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "ccline",
+    "padding": 0
+  }
+}
+```
+
+**检测条件**：`$settings.statusLine.type -eq "command"`
+
+**ccline patch**：安装后自动定位 `npm prefix/node_modules/@anthropic-ai/claude-code/cli.js`，执行 `ccline --patch` 注入状态栏支持。失败时仅警告不中断。
+
+---
+
+## Step06 — cc-switch
+
+**文件**：`Step06.CcSwitch.ps1`（562 行）
+**依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
+
+**安装**：npm 全局安装 cc-switch + 写入 `$PROFILE`。
+
+---
+
 ## Step07 — Claude 基础配置
 
 **文件**：`Step07.ClaudeConfig.ps1`
-**配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 Step06 同一文件）
+**配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 Step04 同一文件）
 
-**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 Step07 自有字段，不覆盖 Step06（API Key/Base URL/modelMapping）、Step04（statusLine）或用户自定义配置。
+**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 Step07 自有字段，不覆盖 Step04（API Key/Base URL/modelMapping）、Step05（statusLine）或用户自定义配置。
 
 **Step07 管辖的 env 字段**：
 
@@ -251,9 +251,9 @@ $script:ApiProviders = @{
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
-**Step07 不触碰的字段**：`statusLine`（Step04）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Step09）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（Step06）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（Step10）
+**Step07 不触碰的字段**：`statusLine`（Step05）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Step09）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（Step04）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（Step10）
 
-> **注意**：statusLine 配置完全由 Step04（ccline）负责，Step07 不触碰 statusLine 字段。
+> **注意**：statusLine 配置完全由 Step05（ccline）负责，Step07 不触碰 statusLine 字段。
 
 ---
 
@@ -391,4 +391,4 @@ function Rollback-Step13 {
 }
 ```
 
-在 `Install-ClaudeEnv.ps1` 的 `$script:StepRegistry` 中注册，并在 `Bootstrap.ps1` 的 `Get-StepDependencies` 中声明依赖。
+在 `Install-ClaudeEnv.ps1` 和 `Manage-ClaudeEnv.ps1` 的 `$script:StepRegistry` 中注册，并在 `Bootstrap.ps1` 的 `Get-StepDependencies` 中声明依赖。

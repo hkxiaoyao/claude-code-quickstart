@@ -282,7 +282,7 @@ function Read-McpCredentialValue {
             Write-UiInfo "请输入 $Label（直接回车使用默认值）:"
         }
         else {
-            Write-UiInfo "请输入 $Label:"
+            Write-UiInfo "请输入 ${Label}:"
         }
 
         if ($Secret) {

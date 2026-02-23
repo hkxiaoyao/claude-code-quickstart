@@ -30,12 +30,15 @@ jobs:
         shell: pwsh
         run: |
           $bootstrapPath = ".\installer\build\dist\Bootstrap-ClaudeEnv.built.ps1"
-          $installerPath  = ".\installer\build\dist\Install-ClaudeEnv.built.ps1"
+          $installerPath = ".\installer\build\dist\Install-ClaudeEnv.built.ps1"
+          $managePath    = ".\installer\build\dist\Manage-ClaudeEnv.built.ps1"
           if (-not (Test-Path $bootstrapPath)) { throw "Bootstrap 构建产物不存在" }
-          if (-not (Test-Path $installerPath))  { throw "Installer 构建产物不存在" }
+          if (-not (Test-Path $installerPath)) { throw "Installer 构建产物不存在" }
+          if (-not (Test-Path $managePath))    { throw "Manage 构建产物不存在" }
           Write-Host "[PASS] 构建产物验证通过" -ForegroundColor Green
           Write-Host "  Bootstrap: $([math]::Round((Get-Item $bootstrapPath).Length / 1KB, 1)) KB"
           Write-Host "  Installer: $([math]::Round((Get-Item $installerPath).Length / 1KB, 1)) KB"
+          Write-Host "  Manage:    $([math]::Round((Get-Item $managePath).Length / 1KB, 1)) KB"
 
       - name: 上传构建产物（Artifacts）
         uses: actions/upload-artifact@v4
@@ -44,6 +47,7 @@ jobs:
           path: |
             installer/build/dist/Bootstrap-ClaudeEnv.built.ps1
             installer/build/dist/Install-ClaudeEnv.built.ps1
+            installer/build/dist/Manage-ClaudeEnv.built.ps1
           retention-days: 7
 
       - name: 创建或更新 GitHub Release
@@ -74,7 +78,15 @@ jobs:
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
             ```
 
-            **步骤 2**（在 PowerShell 7 中运行）：
+            **步骤 2**（在 PowerShell 7 中运行，二选一）：
+
+            - **推荐 — 分组安装**（基础环境 / 进阶扩展分组选择）：
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Manage-ClaudeEnv.built.ps1' | iex
+            ```
+
+            - **经典 — 全量安装**（一键安装全部 12 个步骤）：
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Install-ClaudeEnv.built.ps1' | iex
@@ -87,6 +99,7 @@ jobs:
             | 文件 | PS 版本要求 | 用途 |
             |------|------------|------|
             | `Bootstrap-ClaudeEnv.built.ps1` | 5.1+ | 安装前置依赖（首先运行）|
-            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 安装 Claude Code 开发环境 |
+            | `Manage-ClaudeEnv.built.ps1` | 7.0+ | 分组安装 Claude Code 开发环境（推荐）|
+            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 全量安装 Claude Code 开发环境 |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

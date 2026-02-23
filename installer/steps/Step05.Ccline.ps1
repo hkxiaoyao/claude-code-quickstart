@@ -1,4 +1,4 @@
-﻿# Step04: CCometixLine 安装 - Claude Code 环境安装器
+﻿# Step05: CCometixLine 安装 - Claude Code 环境安装器
 # 作者: 哈雷酱 (本小姐的状态栏配置杰作！)
 # 功能: CCometixLine 安装 + statusLine 配置写入
 
@@ -15,7 +15,7 @@ $script:CclinePackage = "@cometix/ccline"
 $script:ClaudeConfigDir = "$env:USERPROFILE\.claude"
 $script:ClaudeSettingsFile = "$script:ClaudeConfigDir\settings.json"
 
-function Test-Step04Installed {
+function Test-Step05Installed {
     <#
     .SYNOPSIS
     检测 CCometixLine 是否已安装并配置
@@ -59,7 +59,7 @@ function Test-Step04Installed {
     }
 }
 
-function Install-Step04 {
+function Install-Step05 {
     <#
     .SYNOPSIS
     安装 CCometixLine 并配置状态栏
@@ -68,7 +68,7 @@ function Install-Step04 {
     #>
     param()
 
-    Write-Host "=== Step 04: CCometixLine 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== Step 05: CCometixLine 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     $stepResult = @{
@@ -311,7 +311,7 @@ function Install-Step04 {
     }
 }
 
-function Verify-Step04 {
+function Verify-Step05 {
     <#
     .SYNOPSIS
     验证 CCometixLine 安装和配置
@@ -320,7 +320,7 @@ function Verify-Step04 {
     #>
     param()
 
-    return Test-Step04Installed
+    return Test-Step05Installed
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
