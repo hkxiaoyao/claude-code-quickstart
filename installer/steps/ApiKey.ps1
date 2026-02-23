@@ -84,7 +84,7 @@ function Test-ApiKeyInstalled {
         }
 
         # HC-12: API Key 存于 env.ANTHROPIC_AUTH_TOKEN
-        $envSection = $settings.env
+        $envSection = if ($settings.PSObject.Properties.Name -contains "env") { $settings.env } else { $null }
         $hasAuthToken = $envSection -and
             $envSection.PSObject.Properties.Name -contains "ANTHROPIC_AUTH_TOKEN" -and
             -not [string]::IsNullOrWhiteSpace($envSection.ANTHROPIC_AUTH_TOKEN)
@@ -138,7 +138,8 @@ function Resolve-CurrentProvider {
 
     # 策略 2：匹配 ANTHROPIC_BASE_URL（兜底，适用于手动编辑的情况）
     $baseUrl = $null
-    if ($Settings.env -and $Settings.env.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") {
+    if ($Settings.PSObject.Properties.Name -contains "env" -and $Settings.env -and
+        $Settings.env.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") {
         $baseUrl = $Settings.env.ANTHROPIC_BASE_URL
     }
     if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
@@ -386,18 +387,24 @@ function Verify-ApiKey {
 
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
 
+        $hasEnv = $settings.PSObject.Properties.Name -contains "env" -and $settings.env
+
         # 验证 env.ANTHROPIC_AUTH_TOKEN 已写入
-        if (-not $settings.env -or [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_AUTH_TOKEN)) {
+        if (-not $hasEnv -or
+            -not ($settings.env.PSObject.Properties.Name -contains "ANTHROPIC_AUTH_TOKEN") -or
+            [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_AUTH_TOKEN)) {
             throw "env.ANTHROPIC_AUTH_TOKEN 未配置或为空"
         }
 
         # 验证 env.ANTHROPIC_BASE_URL 已写入
-        if (-not $settings.env -or [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_BASE_URL)) {
+        if (-not $hasEnv -or
+            -not ($settings.env.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") -or
+            [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_BASE_URL)) {
             throw "env.ANTHROPIC_BASE_URL 未配置或为空"
         }
 
         # 验证模型映射配置（可选，部分供应商服务端自动路由）
-        if ($settings.modelMapping) {
+        if ($settings.PSObject.Properties.Name -contains "modelMapping" -and $settings.modelMapping) {
             $requiredModels = @("opus", "sonnet", "haiku")
             $missingModels = @()
             foreach ($model in $requiredModels) {
