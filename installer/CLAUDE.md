@@ -10,7 +10,7 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 全量安装：动态加载 Registry → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
+| `Install-ClaudeEnv.ps1`（维护中） | **7.0+** | 全量安装：动态加载 Registry → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
 | `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（NodeFnm~ApiKey）/ 进阶扩展（Ccline~GeminiCli）两级分组 |
 
 ---
@@ -39,6 +39,8 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 ---
 
 ## Install-ClaudeEnv.ps1
+
+> **状态**：维护中，暂不推荐使用。请使用 `Manage-ClaudeEnv.ps1`。
 
 **用途**：PS 7 主安装入口，协调全部 12 个步骤。
 

@@ -54,22 +54,12 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex
 ```
 
-引导完成后，在 **PowerShell 7**（`pwsh`）中运行（二选一）：
-
-**推荐 — 分组安装**（基础环境 / 进阶扩展分组选择）：
+引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
-# 第二步：执行分组安装脚本（PS 7+，推荐）
+# 第二步：执行分组安装脚本（PS 7+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
 irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
-```
-
-**经典 — 全量安装**（一键安装全部 12 个步骤）：
-
-```powershell
-# 第二步：执行全量安装脚本（PS 7+）
-Set-ExecutionPolicy Bypass -Scope Process -Force
-irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex
 ```
 
 > **说明**：
@@ -77,7 +67,7 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 > - 第二步在 PS 7 中运行，`irm` 原生支持 UTF-8，无需特殊处理
 > - `iex` (Invoke-Expression) 直接执行脚本
 > - 执行前可以先访问 URL 查看脚本源码，确保安全
-> - **推荐使用分组安装**：将 12 个步骤分为基础环境和进阶扩展两组，更灵活
+> - 分组安装将 12 个步骤分为基础环境和进阶扩展两组，更灵活
 
 ---
 
@@ -96,10 +86,10 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 #### 第二步：运行主安装脚本
 
-引导完成后，下载 `Install-ClaudeEnv.built.ps1`，在 **PowerShell 7**（`pwsh`）中运行：
+引导完成后，下载 `Manage-ClaudeEnv.built.ps1`，在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
-pwsh -File ".\Install-ClaudeEnv.built.ps1"
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 ```
 
 按提示选择安装模式后，全程自动完成。
@@ -131,7 +121,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 引导完成后，按照提示在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
-pwsh -File ".\installer\Install-ClaudeEnv.ps1"
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
 按提示选择安装模式后，全程自动完成。
@@ -141,10 +131,10 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1"
 ## 安装模式
 
 > **提示**：以下命令中的脚本路径根据你的使用方式选择：
-> - 构建后的单文件：`.\Install-ClaudeEnv.built.ps1`
-> - 源码模式：`.\installer\Install-ClaudeEnv.ps1`
+> - 构建后的单文件：`.\Manage-ClaudeEnv.built.ps1`
+> - 源码模式：`.\installer\Manage-ClaudeEnv.ps1`
 
-### 分组安装（推荐）
+### 分组安装
 
 ```powershell
 # 构建后的单文件版本
@@ -158,50 +148,26 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 - **基础环境**：Node.js、Git、Claude Code、API Key — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
-### 一键安装（全量）
-
-```powershell
-# 构建后的单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -OneClick
-
-# 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -OneClick
-```
-
-自动按依赖顺序安装全部 12 个步骤（含可选的 Codex CLI 和 Gemini CLI）。
-
-### 分阶段安装（逐步选择）
-
-```powershell
-# 构建后的单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -Staged
-
-# 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Staged
-```
-
-弹出多选菜单，用 `↑↓` 导航、`空格` 选择/取消、`Enter` 确认。必选步骤默认勾选，可选步骤默认不勾选。
-
 ### 断点续传
 
 ```powershell
 # 构建后的单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -Resume
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
 
 # 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Resume
 ```
 
-从上次失败或中断的步骤继续，已成功的步骤自动跳过。
+从上次失败或中断的步骤继续，已成功的步骤自动跳过。Manage 脚本完整支持断点续传功能。
 
 ### 查看步骤列表
 
 ```powershell
 # 构建后的单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -ListSteps
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -ListSteps
 
 # 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 ```
 
 ---
@@ -352,28 +318,28 @@ gemini --help
 
 ```powershell
 # 如果使用云端执行，需要先下载脚本到本地
-Invoke-RestMethod -Uri "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1" -OutFile "Install-ClaudeEnv.built.ps1"
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -Resume
+Invoke-RestMethod -Uri "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1" -OutFile "Manage-ClaudeEnv.built.ps1"
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
 
 # 或使用本地单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -Resume
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
 
 # 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Resume
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Resume
 ```
 
 > **注意**：v1.2.0 版本已完成架构重构，步骤文件和函数名采用语义化命名。旧版状态文件会自动迁移，用户无需手动操作。安装失败时使用 `-Resume` 重试失败步骤即可。
 
 **Q：想重新配置 API Key？**
 
-API Key 配置步骤的 `SkipIfInstalled` 为 `true`，若已检测到配置则自动跳过。使用 `-Staged` 模式手动选择该步骤即可重新配置：
+API Key 配置步骤的 `SkipIfInstalled` 为 `true`，若已检测到配置则自动跳过。使用 Manage 脚本的进阶扩展模式手动选择该步骤即可重新配置：
 
 ```powershell
 # 构建后的单文件版本
-pwsh -File ".\Install-ClaudeEnv.built.ps1" -Staged
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Group Advanced -Mode Select
 
 # 或源码版本
-pwsh -File ".\installer\Install-ClaudeEnv.ps1" -Staged
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Group Advanced -Mode Select
 ```
 
 **Q：运行脚本报 "无法加载文件" 错误？**

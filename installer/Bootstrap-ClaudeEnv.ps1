@@ -364,16 +364,16 @@ function Show-CompletionMessage {
     Write-Host ""
     if ($scriptRoot) {
         # 本地文件模式：直接指向同目录的安装脚本
-        Write-UiSuccess "  pwsh -File `"$scriptRoot\Install-ClaudeEnv.ps1`""
+        Write-UiSuccess "  pwsh -File `"$scriptRoot\Manage-ClaudeEnv.ps1`""
     } else {
         # iex 管道模式：PS7 原生支持 UTF-8，irm|iex 无需特殊处理
-        Write-UiSuccess "  irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex"
+        Write-UiSuccess "  irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex"
     }
     Write-Host ""
 
     Write-UiInfo "💡 提示："
     Write-UiInfo "• 如果您使用的是 Windows Terminal，建议在其中运行主安装脚本"
-    Write-UiInfo "• 主安装脚本提供一键安装和分阶段安装两种模式"
+    Write-UiInfo "• 主安装脚本提供基础环境和进阶扩展两级分组安装"
     Write-UiInfo "• 安装过程支持断点续传，遇到问题可以重新运行"
     Write-Host ""
 

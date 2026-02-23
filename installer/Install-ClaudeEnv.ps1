@@ -523,6 +523,33 @@ function Main {
     param()
 
     try {
+        # ─── 入口拦截（可通过环境变量绕过）─────────────────────────────────────────
+        if (-not $env:CCQ_ALLOW_LEGACY_INSTALL) {
+            Write-Host ""
+            Show-CcqLogo -Subtitle "维护中"
+            Write-Host ""
+            Write-UiWarn "⚠️  此脚本目前处于维护状态，推荐使用新版分组安装脚本"
+            Write-Host ""
+            Write-UiInfo "📋 推荐使用："
+            Write-UiSuccess "  pwsh -File `"$script:InstallerRoot\Manage-ClaudeEnv.ps1`""
+            Write-Host ""
+            Write-UiInfo "💡 新版脚本优势："
+            Write-UiInfo "  • 分组安装（基础环境 + 进阶扩展）"
+            Write-UiInfo "  • 更好的用户体验"
+            Write-UiInfo "  • 完整的断点续传支持（-Resume）"
+            Write-Host ""
+            Write-UiInfo "🔧 如需继续（仅供开发/测试）："
+            Write-UiInfo "  设置环境变量：`$env:CCQ_ALLOW_LEGACY_INSTALL = `"true`""
+            Write-Host ""
+
+            $continue = Read-Host "是否继续？(y/N)"
+            if ($continue -ne "y" -and $continue -ne "Y") {
+                Write-UiInfo "已取消"
+                exit 0
+            }
+            Write-Host ""
+        }
+
         # ── 仅列出步骤时快速退出
         if ($ListSteps) {
             Show-StepList

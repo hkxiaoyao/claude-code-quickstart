@@ -78,18 +78,10 @@ jobs:
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
             ```
 
-            **步骤 2**（在 PowerShell 7 中运行，二选一）：
-
-            - **推荐 — 分组安装**（基础环境 / 进阶扩展分组选择）：
+            **步骤 2**（在 PowerShell 7 中运行）：
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
             irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Manage-ClaudeEnv.built.ps1' | iex
-            ```
-
-            - **经典 — 全量安装**（一键安装全部 12 个步骤）：
-            ```powershell
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Install-ClaudeEnv.built.ps1' | iex
             ```
 
             ---
@@ -100,6 +92,6 @@ jobs:
             |------|------------|------|
             | `Bootstrap-ClaudeEnv.built.ps1` | 5.1+ | 安装前置依赖（首先运行）|
             | `Manage-ClaudeEnv.built.ps1` | 7.0+ | 分组安装 Claude Code 开发环境（推荐）|
-            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 全量安装 Claude Code 开发环境 |
+            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 全量安装 Claude Code 开发环境（维护中）|
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
