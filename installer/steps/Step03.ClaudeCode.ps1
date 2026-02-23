@@ -91,7 +91,7 @@ function Test-Step03Installed {
 
         # 检查 npm 全局包列表中是否存在
         try {
-            $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0", $script:ClaudeCodePackage) -SuppressOutput -TimeoutSeconds 30
+            $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0", $script:ClaudeCodePackage) -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
             if ($npmListResult.Success -and $npmListResult.Output -match $script:ClaudeCodePackage) {
                 $result.Data["NpmPackageInstalled"] = $true
                 Write-UiSuccess "✓ Claude Code npm 包已安装"
@@ -365,7 +365,7 @@ function Verify-Step03 {
 
         # 验证 npm 包状态
         try {
-            $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0") -SuppressOutput -TimeoutSeconds 30
+            $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0") -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
             if ($npmListResult.Success -and $npmListResult.Output -match $script:ClaudeCodePackage) {
                 Write-UiSuccess "✓ Claude Code npm 包状态验证通过"
             } else {

@@ -444,8 +444,8 @@ function Get-ExecutionOrder {
             break
         }
 
-        # 按字母顺序排序同级步骤
-        $canExecute = $canExecute | Sort-Object
+        # 按步骤编号数值排序（保持注册顺序语义）
+        $canExecute = $canExecute | Sort-Object { [int]($_ -replace '^Step(\d+)\..*', '$1') }
         $ordered += $canExecute
 
         # 从剩余列表中移除（@() 确保 StrictMode 下结果始终为数组）
