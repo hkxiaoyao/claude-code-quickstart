@@ -12,6 +12,7 @@ $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pat
 . "$scriptRoot\core\Process.ps1"
 . "$scriptRoot\core\Profile.ps1"
 . "$scriptRoot\core\Ui.ps1"
+. "$scriptRoot\core\Net.ps1"
 
 # 全局配置
 $script:RequiredNodeVersion = "20"  # Node.js LTS 版本
@@ -159,7 +160,13 @@ function Install-NodeFnm {
 
                     Write-UiInfo "正在下载 fnm..."
                     try {
-                        Invoke-WebRequest -Uri $fnmUrl -OutFile $fnmZip -UseBasicParsing
+                        # 使用统一的下载函数
+                        $downloadResult = Invoke-FileDownload -Url $fnmUrl -OutputPath $fnmZip -Description "fnm (Fast Node Manager)"
+
+                        if (-not $downloadResult.Success) {
+                            throw "下载失败: $($downloadResult.ErrorMessage)"
+                        }
+
                         Expand-Archive -Path $fnmZip -DestinationPath $fnmDir -Force
                         Remove-Item $fnmZip -Force
 

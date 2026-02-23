@@ -123,7 +123,7 @@ Main()
   │   │   └── foreach stepId:
   │   │       ├── Test-StepDependencies  # 前置依赖检查
   │   │       └── Invoke-StepLifecycle   # Test → Install → Verify
-  │   └── Show-FinalSummary
+  │   └── Show-FinalSummary（无 Logo，简化快速开始）
   └── [if Staged]
       └── Invoke-StagedMode（迭代式单选）
           ├── 构建步骤列表（带状态标签 PASS/FAIL/LOCK/空）
@@ -190,7 +190,7 @@ Main()
   ├── [if -Resume] Resume-Installation
   │
   ├── [CLI 模式]（-Group 参数）
-  │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary
+  │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary（无 Logo，简化快速开始）
   │   ├── Advanced/OneClick → Invoke-GroupedInstall(进阶步骤) → Show-FinalSummary
   │   └── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
   │

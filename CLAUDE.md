@@ -50,7 +50,8 @@ NodeFnm ────────────────────────
 │   └── Mcp
 └── CcgWorkflow
 Git
-ClaudeConfig (依赖 ClaudeCode) ── ClaudeMd
+ClaudeConfig (依赖 ClaudeCode)
+ClaudeMd (无依赖)
 ```
 
 ---

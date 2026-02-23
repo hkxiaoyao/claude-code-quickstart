@@ -427,7 +427,6 @@ function Show-FinalSummary {
     )
 
     Write-Host ""
-    Show-CcqLogo -Subtitle "环境安装完成"
 
     # 构建摘要表格
     $summaryItems = @()
@@ -475,14 +474,13 @@ function Show-FinalSummary {
     Write-Host ""
 
     if ($Results.Failed -eq 0) {
-        Write-UiSuccess "Claude Code 环境安装完成！"
         Write-Host ""
         Write-UiInfo "快速开始："
         Write-UiInfo "  claude          - 启动 Claude Code"
         Write-UiInfo "  claude --help   - 查看帮助信息"
         if ($State.StepResults.ContainsKey("CcSwitch") -and
             $State.StepResults["CcSwitch"].Status -eq [StepStatus]::Success) {
-            Write-UiInfo "  cc-switch       - 切换 Claude Code 版本"
+            Write-UiInfo "  cc-switch       - Claude Code / Codex / Gemini CLI 全方位辅助工具"
         }
         if ($State.StepResults.ContainsKey("CodexCli") -and
             $State.StepResults["CodexCli"].Status -eq [StepStatus]::Success) {

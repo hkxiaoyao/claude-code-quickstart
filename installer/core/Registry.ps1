@@ -94,7 +94,7 @@ function Get-StepRegistry {
         @{
             StepId          = "CcSwitch"
             StepName        = "cc-switch"
-            Description     = "安装 cc-switch，用于切换 Claude Code 版本"
+            Description     = "安装 cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具"
             StepFile        = "steps/CcSwitch.ps1"
             TestFunction    = "Test-CcSwitchInstalled"
             InstallFunction = "Install-CcSwitch"
@@ -132,7 +132,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 80
-            Dependencies    = @("ClaudeConfig")
+            Dependencies    = @()
             Group           = "Advanced"
             LegacyIds       = @("Step08.ClaudeMd")
         },

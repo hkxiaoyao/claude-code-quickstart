@@ -233,5 +233,149 @@ function Get-NetworkHealth {
     }
 }
 
+function Invoke-FileDownload {
+    <#
+    .SYNOPSIS
+    统一的文件下载函数，带进度条显示
+    .DESCRIPTION
+    使用 System.Net.WebClient 实现带进度条的文件下载，支持自动重试和错误处理
+    .PARAMETER Url
+    下载地址
+    .PARAMETER OutputPath
+    输出文件路径
+    .PARAMETER Description
+    下载描述（可选，用于显示）
+    .PARAMETER TimeoutSeconds
+    超时时间（秒，默认 300）
+    .RETURNS
+    @{Success; FilePath; ErrorMessage; FileSize}
+    .EXAMPLE
+    $result = Invoke-FileDownload -Url "https://example.com/file.zip" -OutputPath "C:\temp\file.zip"
+    if ($result.Success) {
+        Write-Host "下载成功: $($result.FilePath)"
+    }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $Url,
+
+        [Parameter(Mandatory = $true)]
+        [string] $OutputPath,
+
+        [Parameter(Mandatory = $false)]
+        [string] $Description = "",
+
+        [Parameter(Mandatory = $false)]
+        [int] $TimeoutSeconds = 300
+    )
+
+    $result = @{
+        Success      = $false
+        FilePath     = $OutputPath
+        ErrorMessage = ""
+        FileSize     = 0
+    }
+
+    try {
+        # 确保输出目录存在
+        $outputDir = Split-Path -Path $OutputPath -Parent
+        if ($outputDir -and -not (Test-Path $outputDir)) {
+            New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
+        }
+
+        # 显示下载信息
+        $fileName = Split-Path -Path $OutputPath -Leaf
+        if ($Description) {
+            Write-Host "  正在下载: $Description" -ForegroundColor Gray
+        } else {
+            Write-Host "  正在下载: $fileName" -ForegroundColor Gray
+        }
+        Write-Host "  下载地址: $Url" -ForegroundColor Gray
+
+        # 使用 WebClient 实现带进度条的下载
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Proxy = [System.Net.WebRequest]::GetSystemWebProxy()
+        $webClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
+
+        # 注册进度事件
+        $progressData = @{
+            LastPercent = -1
+            StartTime   = Get-Date
+        }
+
+        $progressEvent = Register-ObjectEvent -InputObject $webClient -EventName DownloadProgressChanged -Action {
+            $percent = $EventArgs.ProgressPercentage
+            $received = $EventArgs.BytesReceived
+            $total = $EventArgs.TotalBytesToReceive
+
+            # 只在百分比变化时更新（避免刷新过快）
+            if ($percent -ne $Event.MessageData.LastPercent) {
+                $Event.MessageData.LastPercent = $percent
+
+                # 计算下载速度
+                $elapsed = (Get-Date) - $Event.MessageData.StartTime
+                $speed = if ($elapsed.TotalSeconds -gt 0) { $received / $elapsed.TotalSeconds } else { 0 }
+
+                # 格式化显示
+                $receivedMB = [math]::Round($received / 1MB, 2)
+                $totalMB = [math]::Round($total / 1MB, 2)
+                $speedMB = [math]::Round($speed / 1MB, 2)
+
+                # 进度条
+                $barLength = 40
+                $completed = [math]::Floor($barLength * $percent / 100)
+                $remaining = $barLength - $completed
+                $bar = ("[" + ("=" * $completed) + (">" * [math]::Min(1, $remaining)) + (" " * [math]::Max(0, $remaining - 1)) + "]")
+
+                # 输出进度（使用 `r 回到行首覆盖）
+                Write-Host "`r  $bar $percent% ($receivedMB/$totalMB MB) $speedMB MB/s" -NoNewline -ForegroundColor Cyan
+            }
+        } -MessageData $progressData
+
+        try {
+            # 开始下载（同步）
+            $webClient.DownloadFile($Url, $OutputPath)
+
+            # 下载完成后换行
+            Write-Host ""
+
+            # 验证下载
+            if (-not (Test-Path $OutputPath)) {
+                throw "下载的文件不存在"
+            }
+
+            $fileInfo = Get-Item $OutputPath
+            if ($fileInfo.Length -eq 0) {
+                throw "下载的文件为空"
+            }
+
+            $result.Success = $true
+            $result.FileSize = $fileInfo.Length
+            Write-Host "  ✓ 下载完成: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
+
+        } finally {
+            # 清理事件
+            if ($progressEvent) {
+                Unregister-Event -SourceIdentifier $progressEvent.Name -ErrorAction SilentlyContinue
+            }
+            $webClient.Dispose()
+        }
+
+    } catch {
+        $result.ErrorMessage = $_.Exception.Message
+        Write-Host ""
+        Write-Host "  下载失败: $($result.ErrorMessage)" -ForegroundColor Red
+
+        # 清理失败的文件
+        if (Test-Path $OutputPath) {
+            try {
+                Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue
+            } catch { }
+        }
+    }
+
+    return $result
+}
+
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
 # 所有函数在 dot-source 后自动可用

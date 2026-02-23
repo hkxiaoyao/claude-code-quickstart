@@ -218,6 +218,8 @@ $script:ApiProviders = @{
 **文件**：`CcSwitch.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
 
+**功能**：Claude Code / Codex / Gemini CLI 全方位辅助工具
+
 **安装**：npm 全局安装 cc-switch + 写入 `$PROFILE`。
 
 ---
@@ -261,6 +263,7 @@ $script:ApiProviders = @{
 
 **文件**：`ClaudeMd.ps1`
 **目标**：`$env:USERPROFILE\.claude\CLAUDE.md` + `$env:USERPROFILE\.claude\rules\`
+**依赖**：无（不依赖 Claude 基础配置）
 
 **功能**：生成全局 Claude Code 工作规范。主文件 ~80 行（确保在 token 截断限制内完整可见），详细内容拆分到 `rules/` 目录（Claude Code 无条件加载）。
 
@@ -283,6 +286,8 @@ $script:ApiProviders = @{
 
 **功能**：在 settings.json 中写入 `mcpServers` 配置块，支持多个 MCP 插件服务器。
 变量插值注意使用 `${serverId}` 格式（避免冒号歧义）。
+
+**contextweaver 安装增强**：针对 Windows 权限问题，添加了 npm 缓存清理和 `--force` 重试机制，解决 EPERM 错误导致的安装失败。
 
 ---
 

@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Profile.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
+. "$PSScriptRoot\..\core\Net.ps1"
 
 # 默认运行时依赖
 $script:DefaultMcpRuntimeDeps = @(
@@ -397,8 +398,32 @@ function Invoke-McpPreInstall {
             $commandCheck = if ($pre.CommandCheck) { [string]$pre.CommandCheck } else { [string]$Server.Command }
             if (-not (Test-CommandAvailable -Command $commandCheck)) {
                 Write-UiInfo "预安装 $($Server.Name): npm 全局安装 $($pre.Package)"
-                Invoke-NpmGlobalInstall -PackageName $pre.Package | Out-Null
-                Refresh-SessionPath
+
+                try {
+                    Invoke-NpmGlobalInstall -PackageName $pre.Package | Out-Null
+                    Refresh-SessionPath
+                }
+                catch {
+                    Write-UiWarn "标准安装失败，尝试清理 npm 缓存后重试..."
+
+                    # 清理 npm 缓存
+                    $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60
+                    if ($cleanResult.Success) {
+                        Write-UiInfo "npm 缓存已清理，重新尝试安装..."
+
+                        # 重试安装，使用 --force 参数
+                        $retryResult = Invoke-ExternalCommand -Command "npm" -Arguments @("install", "-g", $pre.Package, "--force") -TimeoutSeconds 300
+                        if (-not $retryResult.Success) {
+                            throw "重试安装失败: $($retryResult.Error)"
+                        }
+
+                        Refresh-SessionPath
+                        Write-UiSuccess "✓ $($pre.Package) 重试安装成功"
+                    }
+                    else {
+                        throw "npm 缓存清理失败: $($cleanResult.Error)"
+                    }
+                }
             }
 
             if ($pre.InitCommand) {
@@ -795,8 +820,13 @@ function Install-McpSoftware {
             }
             $downloadPath = Join-Path $downloadDir $fileName
 
-            Write-UiInfo "下载安装程序: $($install.DownloadUrl)"
-            Invoke-WebRequest -Uri $install.DownloadUrl -OutFile $downloadPath -UseBasicParsing
+            # 使用统一的下载函数
+            $downloadResult = Invoke-FileDownload -Url $install.DownloadUrl -OutputPath $downloadPath -Description "$($Server.Name) 安装程序"
+
+            if (-not $downloadResult.Success) {
+                throw "下载失败: $($downloadResult.ErrorMessage)"
+            }
+
             $process = Start-Process -FilePath $downloadPath -PassThru -Wait
 
             if ($process -and $process.ExitCode -ne 0) {

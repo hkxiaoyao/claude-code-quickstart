@@ -10,6 +10,7 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\..\core\Process.ps1"
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Admin.ps1"
+. "$PSScriptRoot\..\core\Net.ps1"
 
 # 配置
 $script:CcSwitchRepo = "farion1231/cc-switch"
@@ -346,32 +347,14 @@ function Download-CcSwitchInstaller {
 
         $filePath = Join-Path $script:TempDownloadDir $fileName
 
-        Write-Host "  正在下载: $fileName" -ForegroundColor Gray
-        Write-Host "  下载地址: $DownloadUrl" -ForegroundColor Gray
+        # 使用统一的下载函数
+        $downloadResult = Invoke-FileDownload -Url $DownloadUrl -OutputPath $filePath -Description "CC-Switch $Version"
 
-        # 下载文件
-        $progressPreference = $ProgressPreference
-        $ProgressPreference = 'SilentlyContinue'
-
-        try {
-            Invoke-WebRequest -Uri $DownloadUrl -OutFile $filePath -UseBasicParsing -TimeoutSec 300
-
-            # 验证下载
-            if (-not (Test-Path $filePath)) {
-                throw "下载的文件不存在"
-            }
-
-            $fileInfo = Get-Item $filePath
-            if ($fileInfo.Length -eq 0) {
-                throw "下载的文件为空"
-            }
-
-            Write-Host "  ✓ 下载完成: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
-            return $filePath
-
-        } finally {
-            $ProgressPreference = $progressPreference
+        if (-not $downloadResult.Success) {
+            throw $downloadResult.ErrorMessage
         }
+
+        return $filePath
 
     } catch {
         Write-Host "  下载失败: $($_.Exception.Message)" -ForegroundColor Red

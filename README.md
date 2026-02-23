@@ -181,7 +181,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 | 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
 | 04 | API Key 配置 | 配置 AI 供应商 API Key | 基础 | — |
 | 05 | ccline | 安装 ccline 状态栏工具 | 进阶 | — |
-| 06 | cc-switch | 安装 cc-switch 版本切换工具 | 进阶 | — |
+| 06 | cc-switch | Claude Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | — |
 | 07 | Claude 基础配置 | 写入语言/模型/权限/环境变量配置 | 进阶 | — |
 | 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | 进阶 | — |
 | 09 | MCP Server | 配置 MCP 插件服务器 | 进阶 | — |
