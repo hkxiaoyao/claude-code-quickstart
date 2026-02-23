@@ -282,12 +282,25 @@ $script:ApiProviders = @{
 ## Mcp — MCP Server 配置
 
 **文件**：`Mcp.ps1`
-**配置路径**：`$env:USERPROFILE\.claude\settings.json`
+**配置路径**：
+- `$env:USERPROFILE\.claude.json` - MCP Server 配置（mcpServers）
+- `$env:USERPROFILE\.claude\settings.json` - 权限配置（permissions）
 
-**功能**：在 settings.json 中写入 `mcpServers` 配置块，支持多个 MCP 插件服务器。
+**功能**：在 .claude.json 中写入 `mcpServers` 配置块，在 settings.json 中写入权限配置，支持多个 MCP 插件服务器。
 变量插值注意使用 `${serverId}` 格式（避免冒号歧义）。
 
+**增量安装支持**：
+- 设置 `SkipIfInstalled = $false`，允许用户每次都能进入选择菜单
+- 自动检测已安装的 MCP Server 并在选项中标记 `[已安装]`
+- 默认只选中推荐的且未安装的 MCP Server
+- 自动跳过已安装的 MCP Server，只安装新选择的
+
 **contextweaver 安装增强**：针对 Windows 权限问题，添加了 npm 缓存清理和 `--force` 重试机制，解决 EPERM 错误导致的安装失败。
+
+**检测逻辑修复**：
+1. 修复了 Pencil 软件存在时错误跳过 MCP 配置的问题
+2. 修复了配置文件路径错误：MCP Server 配置应写入 `~/.claude.json`，而不是 `settings.json`
+3. 现在只有当 .claude.json 中有实际的 stdio/http MCP Server 配置时才返回 true（但不会跳过安装）
 
 ---
 

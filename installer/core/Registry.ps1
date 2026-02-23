@@ -144,7 +144,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-McpInstalled"
             InstallFunction = "Install-Mcp"
             VerifyFunction  = "Verify-Mcp"
-            SkipIfInstalled = $true
+            SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 90
             Dependencies    = @("ClaudeCode")

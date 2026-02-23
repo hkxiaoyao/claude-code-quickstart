@@ -933,24 +933,23 @@ function Test-McpInstalled {
     #>
 
     try {
-        $settingsPath = Get-ClaudeSettingsPath
-        if (-not (Test-Path $settingsPath)) {
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        if (-not (Test-Path $claudeJsonPath)) {
             return $false
         }
 
-        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-        if (-not $settings) {
+        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if (-not $claudeJson) {
             return $false
         }
 
-        $hasMcpServers = $settings.PSObject.Properties.Name -contains "mcpServers" -and $settings.mcpServers
-        $hasPermissions = $settings.PSObject.Properties.Name -contains "permissions" -and $settings.permissions -and $settings.permissions.allow
+        $hasMcpServers = $claudeJson.PSObject.Properties.Name -contains "mcpServers" -and $claudeJson.mcpServers
 
         $stdioCount = 0
         $httpCount = 0
         if ($hasMcpServers) {
-            foreach ($serverId in @($settings.mcpServers.PSObject.Properties.Name)) {
-                $serverConfig = $settings.mcpServers.PSObject.Properties[$serverId].Value
+            foreach ($serverId in @($claudeJson.mcpServers.PSObject.Properties.Name)) {
+                $serverConfig = $claudeJson.mcpServers.PSObject.Properties[$serverId].Value
                 $hasType = Test-ObjectProperty -InputObject $serverConfig -PropertyName "type"
                 $hasUrl = Test-ObjectProperty -InputObject $serverConfig -PropertyName "url"
                 $hasCommand = Test-ObjectProperty -InputObject $serverConfig -PropertyName "command"
@@ -967,13 +966,26 @@ function Test-McpInstalled {
             }
         }
 
+        # 检测 Pencil 软件安装（仅用于显示，不影响检测结果）
         $softwareCount = 0
         $pencilInstalled = (Test-CommandAvailable -Command "pencil") -or (Test-Path "$env:LOCALAPPDATA\Programs\Pencil")
         if ($pencilInstalled) {
             $softwareCount = 1
         }
 
-        if (($stdioCount + $httpCount + $softwareCount) -gt 0 -and $hasPermissions) {
+        # 检查 settings.json 中的权限配置
+        $settingsPath = Get-ClaudeSettingsPath
+        $hasPermissions = $false
+        if (Test-Path $settingsPath) {
+            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($settings) {
+                $hasPermissions = $settings.PSObject.Properties.Name -contains "permissions" -and $settings.permissions -and $settings.permissions.allow
+            }
+        }
+
+        # 只有当 .claude.json 中有实际的 MCP Server 配置时才返回 true
+        # Pencil 的存在不应该导致跳过 MCP 配置步骤
+        if (($stdioCount + $httpCount) -gt 0 -and $hasPermissions) {
             Write-UiSuccess "✓ MCP Server 已配置 (stdio: $stdioCount, http: $httpCount, software: $softwareCount)"
             return $true
         }
@@ -995,6 +1007,24 @@ function Install-Mcp {
     try {
         Write-UiInfo "配置 MCP Server..."
 
+        # 检测已安装的 MCP Server
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $existingServers = @()
+        if (Test-Path $claudeJsonPath) {
+            try {
+                $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+                if ($claudeJson -and $claudeJson.PSObject.Properties.Name -contains "mcpServers" -and $claudeJson.mcpServers) {
+                    $existingServers = @($claudeJson.mcpServers.PSObject.Properties.Name)
+                    if ($existingServers.Count -gt 0) {
+                        Write-UiInfo "已安装的 MCP Server: $($existingServers -join ', ')"
+                    }
+                }
+            }
+            catch {
+                Write-UiWarn "读取现有 MCP 配置时出错: $($_.Exception.Message)"
+            }
+        }
+
         $modeOptions = @(
             "一键模式 (推荐) - 自动安装核心 5 个 MCP Server",
             "自定义模式 - 手动选择需要的 MCP Server"
@@ -1014,7 +1044,8 @@ function Install-Mcp {
             Write-UiInfo "一键模式将安装以下 MCP Server:"
             foreach ($serverId in $selectedServers) {
                 $server = $script:McpServers[$serverId]
-                Write-UiInfo "  - [$($server.Category)] $($server.Name) [$($server.McpType)]"
+                $installedTag = if ($existingServers -contains $serverId) { " [已安装]" } else { "" }
+                Write-UiInfo "  - [$($server.Category)] $($server.Name) [$($server.McpType)]$installedTag"
             }
         }
         else {
@@ -1027,9 +1058,11 @@ function Install-Mcp {
                 $server = $script:McpServers[$serverId]
                 $recommendedTag = if ($server.Recommended) { " (推荐)" } else { "" }
                 $credentialTag = if ($server.CredentialType -ne "none") { " | 需凭据" } else { "" }
-                $displayOptions += "[$($server.Category)] $($server.Name)$recommendedTag [$($server.McpType)]$credentialTag - $($server.Description)"
+                $installedTag = if ($existingServers -contains $serverId) { " [已安装]" } else { "" }
+                $displayOptions += "[$($server.Category)] $($server.Name)$recommendedTag [$($server.McpType)]$credentialTag$installedTag - $($server.Description)"
                 $serverMap += $serverId
-                if ($server.Recommended) {
+                # 默认选中推荐的且未安装的
+                if ($server.Recommended -and $existingServers -notcontains $serverId) {
                     $defaultSelected += $i
                 }
             }
@@ -1046,6 +1079,26 @@ function Install-Mcp {
                 $selectedServers += $serverMap[[int]$selectedIndex]
             }
         }
+
+        # 过滤掉已安装的 MCP Server（可选：用户可以选择重新安装）
+        $newServers = @()
+        $skippedServers = @()
+        foreach ($serverId in $selectedServers) {
+            if ($existingServers -contains $serverId) {
+                Write-UiInfo "$($script:McpServers[$serverId].Name) 已安装，将跳过"
+                $skippedServers += $serverId
+            } else {
+                $newServers += $serverId
+            }
+        }
+
+        if ($newServers.Count -eq 0) {
+            Write-UiSuccess "所有选择的 MCP Server 均已安装，无需重复安装"
+            return $true
+        }
+
+        Write-UiInfo "将安装 $($newServers.Count) 个新的 MCP Server"
+        $selectedServers = $newServers
 
         $serverStatus = @{}
         foreach ($serverId in $selectedServers) {
@@ -1205,26 +1258,27 @@ function Install-Mcp {
             throw "所有 MCP Server 均处理失败"
         }
 
-        $settingsPath = Get-ClaudeSettingsPath
-        $settings = @{}
+        # 读取 ~/.claude.json 配置
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $claudeJson = @{}
 
-        if (Test-Path $settingsPath) {
+        if (Test-Path $claudeJsonPath) {
             try {
-                $existingContent = Get-Content -Path $settingsPath -Raw
-                $settings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-                if (-not $settings) {
-                    $settings = @{}
+                $existingContent = Get-Content -Path $claudeJsonPath -Raw
+                $claudeJson = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if (-not $claudeJson) {
+                    $claudeJson = @{}
                 }
-                Write-UiInfo "已读取现有 settings.json，将按增量方式合并"
+                Write-UiInfo "已读取现有 .claude.json，将按增量方式合并"
             }
             catch {
-                Write-UiWarn "无法解析现有 settings.json，将创建新配置"
-                $settings = @{}
+                Write-UiWarn "无法解析现有 .claude.json，将创建新配置"
+                $claudeJson = @{}
             }
         }
 
-        if (-not $settings.ContainsKey("mcpServers")) {
-            $settings["mcpServers"] = @{}
+        if (-not $claudeJson.ContainsKey("mcpServers")) {
+            $claudeJson["mcpServers"] = @{}
         }
 
         foreach ($serverId in @($activeServers)) {
@@ -1246,7 +1300,7 @@ function Install-Mcp {
             try {
                 $entry = New-McpSettingsEntry -ServerId $serverId -Server $server -Credentials $credentials
                 if ($entry) {
-                    $settings["mcpServers"][$serverId] = $entry
+                    $claudeJson["mcpServers"][$serverId] = $entry
                 }
                 $serverStatus[$serverId].State = "已配置"
             }
@@ -1254,6 +1308,23 @@ function Install-Mcp {
                 $serverStatus[$serverId].State = "失败"
                 $serverStatus[$serverId].Message = "配置生成失败: $($_.Exception.Message)"
                 Write-UiWarn "跳过 $($server.Name): $($serverStatus[$serverId].Message)"
+            }
+        }
+
+        # 读取 ~/.claude/settings.json 配置（用于权限配置）
+        $settingsPath = Get-ClaudeSettingsPath
+        $settings = @{}
+
+        if (Test-Path $settingsPath) {
+            try {
+                $existingContent = Get-Content -Path $settingsPath -Raw
+                $settings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if (-not $settings) {
+                    $settings = @{}
+                }
+            }
+            catch {
+                $settings = @{}
             }
         }
 
@@ -1287,18 +1358,32 @@ function Install-Mcp {
             }
         }
 
+        # 写入 ~/.claude/settings.json（权限和 env）
         $settingsDir = Split-Path $settingsPath -Parent
         if (-not (Test-Path $settingsDir)) {
             New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
         }
 
-        Write-UiInfo "写入 MCP Server 配置..."
+        Write-UiInfo "写入 settings.json 配置（权限和环境变量）..."
         $tempPath = "$settingsPath.tmp"
         $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $tempPath -Encoding UTF8
         Move-Item -Path $tempPath -Destination $settingsPath -Force
 
+        # 写入 ~/.claude.json（MCP Server 配置）
+        $claudeJsonDir = Split-Path $claudeJsonPath -Parent
+        if (-not (Test-Path $claudeJsonDir)) {
+            New-Item -ItemType Directory -Path $claudeJsonDir -Force | Out-Null
+        }
+
+        Write-UiInfo "写入 .claude.json 配置（MCP Server）..."
+        $tempClaudeJsonPath = "$claudeJsonPath.tmp"
+        $claudeJson | ConvertTo-Json -Depth 10 | Set-Content -Path $tempClaudeJsonPath -Encoding UTF8
+        Move-Item -Path $tempClaudeJsonPath -Destination $claudeJsonPath -Force
+
         Write-UiSuccess "✓ MCP Server 配置已写入"
-        Write-UiInfo "配置路径: $settingsPath"
+        Write-UiInfo "配置路径:"
+        Write-UiInfo "  - MCP Servers: $claudeJsonPath"
+        Write-UiInfo "  - 权限配置: $settingsPath"
 
         Write-UiInfo "配置摘要:"
         Write-UiInfo "  - 选择 MCP 数量: $($selectedServers.Count)"
@@ -1341,17 +1426,18 @@ function Verify-Mcp {
     #>
 
     try {
-        $settingsPath = Get-ClaudeSettingsPath
-        if (-not (Test-Path $settingsPath)) {
-            throw "settings.json 不存在"
+        # 验证 ~/.claude.json 中的 MCP Server 配置
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        if (-not (Test-Path $claudeJsonPath)) {
+            throw ".claude.json 不存在"
         }
 
-        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-        if (-not (Test-ObjectProperty -InputObject $settings -PropertyName "mcpServers") -or -not $settings.mcpServers) {
+        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json
+        if (-not (Test-ObjectProperty -InputObject $claudeJson -PropertyName "mcpServers") -or -not $claudeJson.mcpServers) {
             throw "缺少 MCP Server 配置"
         }
 
-        $configuredServers = @($settings.mcpServers.PSObject.Properties.Name)
+        $configuredServers = @($claudeJson.mcpServers.PSObject.Properties.Name)
         if ($configuredServers.Count -eq 0) {
             throw "未配置任何 MCP Server"
         }
@@ -1360,7 +1446,7 @@ function Verify-Mcp {
         $httpCount = 0
 
         foreach ($serverId in $configuredServers) {
-            $serverConfig = $settings.mcpServers.PSObject.Properties[$serverId].Value
+            $serverConfig = $claudeJson.mcpServers.PSObject.Properties[$serverId].Value
             if (-not $serverConfig) {
                 Write-UiWarn "跳过空配置: $serverId"
                 continue
@@ -1402,17 +1488,22 @@ function Verify-Mcp {
 
             switch ($credentialType) {
                 "single-key" {
-                    $apiKeyName = [string]$serverDef.ApiKeyName
-                    $hasServerEnv = (Test-ObjectProperty -InputObject $serverConfig -PropertyName "env") -and
-                        $serverConfig.env -and
-                        ($serverConfig.env.PSObject.Properties.Name -contains $apiKeyName) -and
-                        -not [string]::IsNullOrWhiteSpace([string]$serverConfig.env.$apiKeyName)
-                    $hasGlobalEnv = (Test-ObjectProperty -InputObject $settings -PropertyName "env") -and
-                        $settings.env -and
-                        ($settings.env.PSObject.Properties.Name -contains $apiKeyName) -and
-                        -not [string]::IsNullOrWhiteSpace([string]$settings.env.$apiKeyName)
-                    if (-not ($hasServerEnv -or $hasGlobalEnv)) {
-                        Write-UiWarn "MCP Server '$serverId' 缺少 API Key: $apiKeyName"
+                    # 检查 settings.json 中的 API Key
+                    $settingsPath = Get-ClaudeSettingsPath
+                    if (Test-Path $settingsPath) {
+                        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
+                        $apiKeyName = [string]$serverDef.ApiKeyName
+                        $hasServerEnv = (Test-ObjectProperty -InputObject $serverConfig -PropertyName "env") -and
+                            $serverConfig.env -and
+                            ($serverConfig.env.PSObject.Properties.Name -contains $apiKeyName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$serverConfig.env.$apiKeyName)
+                        $hasGlobalEnv = (Test-ObjectProperty -InputObject $settings -PropertyName "env") -and
+                            $settings.env -and
+                            ($settings.env.PSObject.Properties.Name -contains $apiKeyName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$settings.env.$apiKeyName)
+                        if (-not ($hasServerEnv -or $hasGlobalEnv)) {
+                            Write-UiWarn "MCP Server '$serverId' 缺少 API Key: $apiKeyName"
+                        }
                     }
                 }
                 "args-multi" {
@@ -1473,6 +1564,13 @@ function Verify-Mcp {
             }
         }
 
+        # 验证 settings.json 中的权限配置
+        $settingsPath = Get-ClaudeSettingsPath
+        if (-not (Test-Path $settingsPath)) {
+            throw "settings.json 不存在"
+        }
+
+        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
         if (-not (Test-ObjectProperty -InputObject $settings -PropertyName "permissions") -or
             -not $settings.permissions -or
             -not (Test-ObjectProperty -InputObject $settings.permissions -PropertyName "allow") -or
@@ -1491,7 +1589,7 @@ function Verify-Mcp {
         Write-UiInfo "  - stdio: $stdioCount"
         Write-UiInfo "  - http: $httpCount"
 
-        if ($settings.mcpServers.PSObject.Properties.Name -contains "contextweaver") {
+        if ($claudeJson.mcpServers.PSObject.Properties.Name -contains "contextweaver") {
             $envPath = $script:McpServers["contextweaver"].EnvFile.Path
             if (Test-Path $envPath) {
                 Write-UiInfo "  - contextweaver .env: ✓ ($envPath)"
