@@ -99,6 +99,12 @@ function Install-Step05 {
     Write-Host "=== Step 05: CC-Switch 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+    }
+
     try {
         # 1. 检查前置条件
         Write-Host "1. 检查前置条件..." -ForegroundColor Gray
@@ -120,11 +126,9 @@ function Install-Step05 {
             $response = Read-Host "CC-Switch 已安装，是否重新安装最新版本？[y/N]"
             if ($response -notmatch "^[Yy]") {
                 Write-Host "跳过 CC-Switch 重新安装" -ForegroundColor Gray
-                return @{
-                    Success = $true
-                    Message = "CC-Switch 已存在，跳过安装"
-                    Skipped = $true
-                }
+                $result.Success = $true
+                $result.Data["Skipped"] = $true
+                return $result
             }
         }
 
@@ -230,16 +234,15 @@ function Install-Step05 {
         Write-Host ""
         Write-Host "✓ CC-Switch 安装完成" -ForegroundColor Green
 
-        return @{
-            Success = $true
-            Version = $releaseInfo.Version
-            InstallerPath = $installerPath
-            InstallResult = $installResult
-            Message = "CC-Switch 安装成功"
-        }
+        $result.Success = $true
+        $result.Data["Version"] = $releaseInfo.Version
+        $result.Data["InstallerPath"] = $installerPath
+
+        return $result
 
     } catch {
-        Write-Host "✗ CC-Switch 安装失败: $($_.Exception.Message)" -ForegroundColor Red
+        $result.ErrorMessage = "CC-Switch 安装失败: $($_.Exception.Message)"
+        Write-Host "✗ $($result.ErrorMessage)" -ForegroundColor Red
 
         # 清理临时文件
         try {
@@ -248,7 +251,7 @@ function Install-Step05 {
             }
         } catch { }
 
-        throw
+        return $result
     }
 }
 

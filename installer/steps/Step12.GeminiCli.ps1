@@ -84,7 +84,7 @@ function Install-Step12 {
 
         # 全局安装 Gemini CLI（HC-2: 无 -DisplayName 参数）
         Write-UiInfo "正在通过 npm 全局安装 Gemini CLI..."
-        $installOut = Invoke-NpmGlobalInstall -PackageName "gemini-cli"
+        $installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
 
         if (-not $installOut.Success) {
             throw "安装失败: $($installOut.Error)"

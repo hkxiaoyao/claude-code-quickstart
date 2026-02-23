@@ -84,7 +84,7 @@ function Install-Step11 {
 
         # 全局安装 Codex CLI（HC-2: 无 -DisplayName 参数）
         Write-UiInfo "正在通过 npm 全局安装 Codex CLI..."
-        $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
+        $installOut = Invoke-NpmGlobalInstall -PackageName "@openai/codex"
 
         if (-not $installOut.Success) {
             throw "安装失败: $($installOut.Error)"

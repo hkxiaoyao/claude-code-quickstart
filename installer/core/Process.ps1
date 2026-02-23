@@ -112,6 +112,14 @@ function Invoke-ExternalCommand {
             $processInfo.RedirectStandardError = $true
             $processInfo.CreateNoWindow = $true
 
+            # 设置 UTF-8 编码避免中文乱码
+            try {
+                $processInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+                $processInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+            } catch {
+                # 低版本运行时可能不支持，保持默认行为
+            }
+
             # 启动进程
             $process = New-Object System.Diagnostics.Process
             $process.StartInfo = $processInfo

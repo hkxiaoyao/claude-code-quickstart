@@ -71,6 +71,12 @@ function Install-Step04 {
     Write-Host "=== Step 04: CCometixLine 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
+    $stepResult = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+    }
+
     try {
         # 1. 检查前置条件
         Write-Host "1. 检查前置条件..." -ForegroundColor Gray
@@ -115,8 +121,8 @@ function Install-Step04 {
             } else {
                 # 重新安装
                 Write-Host "重新安装 CCometixLine..." -ForegroundColor Yellow
-                $result = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage -Force
-                if (-not $result.Success) {
+                $npmResult = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage -Force
+                if (-not $npmResult.Success) {
                     throw "CCometixLine 重新安装失败"
                 }
                 Write-Host "✓ CCometixLine 重新安装成功" -ForegroundColor Green
@@ -125,9 +131,9 @@ function Install-Step04 {
             # 安装 CCometixLine
             Write-Host "安装 CCometixLine..." -ForegroundColor Yellow
 
-            $result = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage
+            $npmResult = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage
 
-            if (-not $result.Success) {
+            if (-not $npmResult.Success) {
                 throw "CCometixLine 安装失败"
             }
 
@@ -290,18 +296,18 @@ function Install-Step04 {
             "CCometixLine 安装和状态栏配置成功，但 ccline patch 未完成，请按提示手动执行"
         }
 
-        return @{
-            Success = $true
-            CclineVersion = $cclineVersion
-            ConfigFile = $script:ClaudeSettingsFile
-            StatusLineEnabled = $true
-            PatchApplied = $patchApplied
-            Message = $resultMessage
-        }
+        $stepResult.Success = $true
+        $stepResult.Data["Version"] = $cclineVersion
+        $stepResult.Data["ConfigFile"] = $script:ClaudeSettingsFile
+        $stepResult.Data["StatusLineEnabled"] = $true
+        $stepResult.Data["PatchApplied"] = $patchApplied
+
+        return $stepResult
 
     } catch {
-        Write-Host "✗ CCometixLine 安装和配置失败: $($_.Exception.Message)" -ForegroundColor Red
-        throw
+        $stepResult.ErrorMessage = "CCometixLine 安装和配置失败: $($_.Exception.Message)"
+        Write-Host "✗ $($stepResult.ErrorMessage)" -ForegroundColor Red
+        return $stepResult
     }
 }
 

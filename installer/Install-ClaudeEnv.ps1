@@ -442,8 +442,25 @@ function Invoke-AllSteps {
         [InstallState]$State
     )
 
-    # 按依赖关系拓扑排序
-    $orderedStepIds = Get-ExecutionOrder -StepIds $SelectedStepIds
+    # 分离必选和可选步骤，确保可选步骤在所有必选步骤之后执行
+    $mandatoryIds = @()
+    $optionalIds = @()
+
+    foreach ($stepId in $SelectedStepIds) {
+        $config = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+        if ($config -and $config.IsOptional) {
+            $optionalIds += $stepId
+        } else {
+            $mandatoryIds += $stepId
+        }
+    }
+
+    # 分别对必选和可选步骤进行拓扑排序
+    $orderedMandatoryIds = if ($mandatoryIds.Count -gt 0) { Get-ExecutionOrder -StepIds $mandatoryIds } else { @() }
+    $orderedOptionalIds = if ($optionalIds.Count -gt 0) { Get-ExecutionOrder -StepIds $optionalIds } else { @() }
+
+    # 合并：必选步骤在前，可选步骤在后
+    $orderedStepIds = @($orderedMandatoryIds + $orderedOptionalIds)
 
     $results = @{
         Total   = $orderedStepIds.Count
@@ -622,7 +639,7 @@ function Show-FinalSummary {
 
     # 标记安装完成状态
     $State.IsCompleted = ($Results.Failed -eq 0)
-    Save-InstallState -State $State
+    $null = Save-InstallState -State $State
 }
 
 # ─── 主函数 ──────────────────────────────────────────────────────────────────

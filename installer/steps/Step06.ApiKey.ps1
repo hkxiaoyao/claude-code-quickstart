@@ -183,11 +183,24 @@ function Install-Step06 {
         )
         $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
 
-        Write-UiInfo "请选择 API 供应商（仅供 Claude Code 中转使用）:"
-        $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
+        # 菜单重试机制（最多 3 次）
+        $selectedIndex = -1
+        $maxMenuAttempts = 3
+        for ($attempt = 1; $attempt -le $maxMenuAttempts; $attempt++) {
+            Write-UiInfo "请选择 API 供应商（仅供 Claude Code 中转使用）:"
+            $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
 
-        if ($selectedIndex -lt 0) {
-            throw "未选择 API 供应商"
+            if ($selectedIndex -ge 0) {
+                break
+            }
+
+            if ($attempt -lt $maxMenuAttempts) {
+                Write-UiWarn "未检测到有效选择，请重试 ($attempt/$maxMenuAttempts)"
+            }
+        }
+
+        if ($selectedIndex -lt 0 -or $selectedIndex -ge $providerKeys.Count) {
+            throw "未选择 API 供应商（已重试 $maxMenuAttempts 次）"
         }
 
         $selectedKey = $providerKeys[$selectedIndex]

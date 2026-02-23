@@ -138,6 +138,34 @@ function Load-InstallState {
     #>
     param()
 
+    # 辅助函数：将 PSCustomObject 转换为 Hashtable
+    function ConvertTo-HashtableDeep {
+        param([Parameter(ValueFromPipeline)]$InputObject)
+
+        if ($null -eq $InputObject) {
+            return @{}
+        }
+
+        if ($InputObject -is [hashtable]) {
+            return $InputObject
+        }
+
+        if ($InputObject -is [System.Management.Automation.PSCustomObject]) {
+            $hash = @{}
+            foreach ($property in $InputObject.PSObject.Properties) {
+                $value = $property.Value
+                if ($value -is [System.Management.Automation.PSCustomObject]) {
+                    $hash[$property.Name] = ConvertTo-HashtableDeep $value
+                } else {
+                    $hash[$property.Name] = $value
+                }
+            }
+            return $hash
+        }
+
+        return @{}
+    }
+
     try {
         if (Test-Path $script:StateFilePath) {
             Write-Host "📂 加载现有安装状态..." -ForegroundColor Cyan
@@ -161,7 +189,7 @@ function Load-InstallState {
                 $stepResult = [StepResult]::new($stepId, $stepData.StepName)
                 $stepResult.Status = [StepStatus]$stepData.Status
                 $stepResult.Message = $stepData.Message
-                $stepResult.Data = $stepData.Data
+                $stepResult.Data = ConvertTo-HashtableDeep $stepData.Data
                 $stepResult.StartTime = [datetime]$stepData.StartTime
                 $stepResult.EndTime = [datetime]$stepData.EndTime
                 $stepResult.ErrorDetails = $stepData.ErrorDetails
@@ -171,7 +199,7 @@ function Load-InstallState {
 
             # 重建全局数据
             if ($stateData.GlobalData) {
-                $state.GlobalData = $stateData.GlobalData
+                $state.GlobalData = ConvertTo-HashtableDeep $stateData.GlobalData
             }
 
             Write-Host "✓ 安装状态加载成功 (ID: $($state.InstallationId))" -ForegroundColor Green
@@ -297,15 +325,42 @@ function Invoke-StepLifecycle {
         $stepResult.Message = "步骤执行成功"
         $stepResult.EndTime = Get-Date
 
-        # 合并结果数据
-        if ($testResult -and $testResult.Data) {
-            foreach ($key in $testResult.Data.Keys) {
-                $stepResult.Data[$key] = $testResult.Data[$key]
+        # 合并结果数据（加固类型安全检查，兼容不规范的返回结构）
+        foreach ($candidate in @($testResult, $installResult)) {
+            if (-not $candidate -or $candidate -is [bool]) {
+                continue
             }
-        }
-        if ($installResult -and $installResult.Data) {
-            foreach ($key in $installResult.Data.Keys) {
-                $stepResult.Data[$key] = $installResult.Data[$key]
+
+            $dataObject = $null
+
+            # 检查 hashtable 类型
+            if ($candidate -is [hashtable] -and $candidate.ContainsKey("Data")) {
+                $dataObject = $candidate["Data"]
+            }
+            # 检查 PSCustomObject 类型
+            elseif ($candidate.PSObject.Properties.Name -contains "Data") {
+                $dataObject = $candidate.Data
+            }
+
+            if (-not $dataObject) {
+                continue
+            }
+
+            # 安全复制 Data 内容
+            if ($dataObject -is [hashtable]) {
+                foreach ($key in $dataObject.Keys) {
+                    $stepResult.Data[$key] = $dataObject[$key]
+                }
+            }
+            elseif ($dataObject -is [System.Collections.IDictionary]) {
+                foreach ($key in $dataObject.Keys) {
+                    $stepResult.Data[[string]$key] = $dataObject[$key]
+                }
+            }
+            elseif ($dataObject -is [System.Management.Automation.PSCustomObject]) {
+                foreach ($prop in $dataObject.PSObject.Properties) {
+                    $stepResult.Data[$prop.Name] = $prop.Value
+                }
             }
         }
 
@@ -342,10 +397,10 @@ function Get-StepDependencies {
         "Step04.Ccline" = @("Step03.ClaudeCode")
         "Step05.CcSwitch" = @("Step03.ClaudeCode")
         "Step06.ApiKey" = @("Step03.ClaudeCode")
-        "Step07.ClaudeConfig" = @("Step06.ApiKey")
+        "Step07.ClaudeConfig" = @("Step03.ClaudeCode")
         "Step08.ClaudeMd" = @("Step07.ClaudeConfig")
-        "Step09.Mcp" = @("Step07.ClaudeConfig")
-        "Step10.CcgWorkflow" = @("Step01.NodeFnm", "Step07.ClaudeConfig")
+        "Step09.Mcp" = @("Step03.ClaudeCode")
+        "Step10.CcgWorkflow" = @("Step01.NodeFnm")
         "Step11.CodexCli" = @("Step01.NodeFnm")
         "Step12.GeminiCli" = @("Step01.NodeFnm")
     }
