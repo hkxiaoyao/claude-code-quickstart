@@ -86,36 +86,6 @@ $script:McpServers = @{
         Priority = 7
         Recommended = $false
     }
-    "pencil" = @{
-        Name = "Pencil"
-        Description = "UI/UX 设计和原型工具"
-        Command = "npx"
-        Args = @("@pencil-js/mcp-server")
-        RequiresApiKey = $false
-        Category = "Design"
-        Priority = 8
-        Recommended = $false
-    }
-    "filesystem" = @{
-        Name = "Filesystem"
-        Description = "文件系统操作和管理"
-        Command = "npx"
-        Args = @("@modelcontextprotocol/server-filesystem")
-        RequiresApiKey = $false
-        Category = "System"
-        Priority = 9
-        Recommended = $false
-    }
-    "sqlite" = @{
-        Name = "SQLite"
-        Description = "SQLite 数据库操作"
-        Command = "npx"
-        Args = @("@modelcontextprotocol/server-sqlite")
-        RequiresApiKey = $false
-        Category = "Database"
-        Priority = 10
-        Recommended = $false
-    }
 }
 
 function Test-Step09Installed {

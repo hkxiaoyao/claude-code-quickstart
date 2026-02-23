@@ -251,11 +251,51 @@ function Install-Step01 {
 
             Write-UiSuccess "✓ Node.js LTS 安装成功"
 
+            # 显式注入 fnm 环境变量到当前会话（不依赖 $PROFILE 重载）
+            # fnm use 需要 FNM_MULTISHELL_PATH 等变量，必须在调用前确保已设置
+            Write-UiInfo "🔄 初始化 fnm 环境变量..."
+            try {
+                $fnmEnvOutput = & fnm env --use-on-cd 2>&1 | Out-String
+                if ($fnmEnvOutput) {
+                    Invoke-Expression $fnmEnvOutput
+                    Write-UiSuccess "✓ fnm 环境变量已注入当前会话"
+                } else {
+                    Write-UiWarn "⚠ fnm env 未返回输出，fnm use 可能失败"
+                }
+            } catch {
+                Write-UiWarn "⚠ fnm env 执行异常: $($_.Exception.Message)"
+            }
+
             # 使用 LTS 版本
             Write-UiInfo "正在激活 Node.js LTS 版本..."
+
+            # 优先使用 fnm default 设置默认版本（不依赖 MULTISHELL_PATH）
+            $defaultResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("default", "lts-latest") -TimeoutSeconds 60
+            if ($defaultResult.Success) {
+                Write-UiSuccess "✓ Node.js LTS 已设为默认版本"
+            } else {
+                Write-UiWarn "⚠ fnm default 失败，尝试 fnm use..."
+            }
+
+            # 再次确认环境变量存在后执行 fnm use
+            if (-not $env:FNM_MULTISHELL_PATH) {
+                Write-UiWarn "⚠ FNM_MULTISHELL_PATH 仍未设置，再次尝试注入..."
+                try {
+                    $fnmEnvRetry = & fnm env --use-on-cd 2>&1 | Out-String
+                    if ($fnmEnvRetry) { Invoke-Expression $fnmEnvRetry }
+                } catch {
+                    Write-UiWarn "⚠ fnm env 重试失败: $($_.Exception.Message)"
+                }
+            }
+
             $useResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("use", "--install-if-missing", "lts-latest") -TimeoutSeconds 60
             if (-not $useResult.Success) {
-                throw "fnm 切换到 LTS 版本失败: $($useResult.Error)"
+                # fnm use 失败时提供友好的中文指引
+                $friendlyMsg = "Node.js 版本激活失败。"
+                $friendlyMsg += "`n  原因: fnm 环境变量未正确初始化"
+                $friendlyMsg += "`n  建议: 关闭当前终端，打开新的 PowerShell 7 窗口后重新运行安装程序（-Resume）"
+                $friendlyMsg += "`n  或手动执行: fnm env --use-on-cd | Out-String | Invoke-Expression; fnm use lts-latest"
+                throw $friendlyMsg
             }
 
             Write-UiSuccess "✓ Node.js LTS 版本已激活"
