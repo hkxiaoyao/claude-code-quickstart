@@ -10,10 +10,10 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Profile.ps1"
 
-# ─── Step07 字段归属声明 ──────────────────────────────────────────────────────
+# ─── ClaudeConfig 字段归属声明 ──────────────────────────────────────────────────────
 
-# Step07 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
-$script:Step07EnvDefaults = @{
+# ClaudeConfig 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
+$script:ClaudeConfigEnvDefaults = @{
     "BASH_DEFAULT_TIMEOUT_MS"                  = "600000"
     "BASH_MAX_TIMEOUT_MS"                      = "3600000"
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"          = "90"
@@ -24,8 +24,8 @@ $script:Step07EnvDefaults = @{
     "MAX_THINKING_TOKENS"                      = "31999"
 }
 
-# Step07 负责的基础权限列表（合并策略：只添加缺失项，不删除已有项）
-$script:Step07BasePermissions = @(
+# ClaudeConfig 负责的基础权限列表（合并策略：只添加缺失项，不删除已有项）
+$script:ClaudeConfigBasePermissions = @(
     "Bash",
     "BashOutput",
     "Edit",
@@ -47,7 +47,7 @@ $script:Step07BasePermissions = @(
 function Test-ClaudeConfigInstalled {
     <#
     .SYNOPSIS
-    检测 Step07 自有字段是否已配置（不检测 Step04 的 ANTHROPIC_AUTH_TOKEN）
+    检测 ClaudeConfig 自有字段是否已配置（不检测 ApiKey 的 ANTHROPIC_AUTH_TOKEN）
     .RETURNS
     包含 IsInstalled 字段的结果对象
     #>
@@ -82,14 +82,14 @@ function Test-ClaudeConfigInstalled {
             ($settings.permissions.PSObject.Properties.Name -contains "allow") -and
             ($settings.permissions.allow -is [System.Array])
 
-        $hasStep07EnvMarker = $true
+        $hasClaudeConfigEnvMarker = $true
         if (-not $hasEnv) {
-            $hasStep07EnvMarker = $false
+            $hasClaudeConfigEnvMarker = $false
         } else {
-            foreach ($key in $script:Step07EnvDefaults.Keys) {
+            foreach ($key in $script:ClaudeConfigEnvDefaults.Keys) {
                 if (-not ($settings.env.PSObject.Properties.Name -contains $key) -or
                     [string]::IsNullOrWhiteSpace([string]$settings.env.$key)) {
-                    $hasStep07EnvMarker = $false
+                    $hasClaudeConfigEnvMarker = $false
                     break
                 }
             }
@@ -97,7 +97,7 @@ function Test-ClaudeConfigInstalled {
 
         $hasBasePermissions = $true
         if ($hasPermissionsAllow) {
-            foreach ($perm in $script:Step07BasePermissions) {
+            foreach ($perm in $script:ClaudeConfigBasePermissions) {
                 if ($settings.permissions.allow -notcontains $perm) {
                     $hasBasePermissions = $false
                     break
@@ -107,7 +107,7 @@ function Test-ClaudeConfigInstalled {
             $hasBasePermissions = $false
         }
 
-        if ($hasLanguage -and $hasPermissionsAllow -and $hasBasePermissions -and $hasStep07EnvMarker) {
+        if ($hasLanguage -and $hasPermissionsAllow -and $hasBasePermissions -and $hasClaudeConfigEnvMarker) {
             Write-UiSuccess "✓ Claude Code 常用配置已完成"
             $result.IsInstalled = $true
             $result.Message     = "Claude Code 常用配置已完成"
@@ -128,7 +128,7 @@ function Install-ClaudeConfig {
     .SYNOPSIS
     写入 Claude Code 常用配置（读取 -> 补缺失 -> 原子写入）
     .DESCRIPTION
-    仅管理 Step07 自有字段，不覆盖 Step04（API Key）、Step05（statusLine）或用户自定义配置
+    仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（API Key）、Ccline（statusLine）或用户自定义配置
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -162,8 +162,8 @@ function Install-ClaudeConfig {
             $settings["env"] = @{}
         }
 
-        # 补齐 Step07 管辖的 env 键（仅缺失时写入）
-        foreach ($entry in $script:Step07EnvDefaults.GetEnumerator()) {
+        # 补齐 ClaudeConfig 管辖的 env 键（仅缺失时写入）
+        foreach ($entry in $script:ClaudeConfigEnvDefaults.GetEnumerator()) {
             if (-not $settings["env"].ContainsKey($entry.Key)) {
                 $settings["env"][$entry.Key] = $entry.Value
             }
@@ -196,7 +196,7 @@ function Install-ClaudeConfig {
                 [void]$allowList.Add([string]$perm)
             }
         }
-        foreach ($perm in $script:Step07BasePermissions) {
+        foreach ($perm in $script:ClaudeConfigBasePermissions) {
             if ($allowList -notcontains $perm) {
                 [void]$allowList.Add($perm)
             }
@@ -228,7 +228,7 @@ function Install-ClaudeConfig {
         Write-UiInfo "  - 语言: $($settings['language'])"
         Write-UiInfo "  - 默认模型: $($settings['model'])"
         Write-UiInfo "  - 权限项: $($settings['permissions']['allow'].Count) 项"
-        Write-UiInfo "  - 环境变量: $($script:Step07EnvDefaults.Count) 项"
+        Write-UiInfo "  - 环境变量: $($script:ClaudeConfigEnvDefaults.Count) 项"
 
         $result.Success = $true
     }
@@ -243,7 +243,7 @@ function Install-ClaudeConfig {
 function Verify-ClaudeConfig {
     <#
     .SYNOPSIS
-    验证 Step07 自有字段（不验证 Step04 的 ANTHROPIC_AUTH_TOKEN）
+    验证 ClaudeConfig 自有字段（不验证 ApiKey 的 ANTHROPIC_AUTH_TOKEN）
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -276,7 +276,7 @@ function Verify-ClaudeConfig {
         }
 
         $missingPerms = @()
-        foreach ($perm in $script:Step07BasePermissions) {
+        foreach ($perm in $script:ClaudeConfigBasePermissions) {
             if ($settings.permissions.allow -notcontains $perm) {
                 $missingPerms += $perm
             }
@@ -285,12 +285,12 @@ function Verify-ClaudeConfig {
             throw "permissions.allow 缺少: $($missingPerms -join ', ')"
         }
 
-        # 验证 Step07 管辖 env 键已存在
+        # 验证 ClaudeConfig 管辖 env 键已存在
         if (-not $settings.env) {
             throw "env 配置缺失"
         }
         $missingEnvKeys = @()
-        foreach ($key in $script:Step07EnvDefaults.Keys) {
+        foreach ($key in $script:ClaudeConfigEnvDefaults.Keys) {
             if (-not ($settings.env.PSObject.Properties.Name -contains $key) -or
                 [string]::IsNullOrWhiteSpace([string]$settings.env.$key)) {
                 $missingEnvKeys += $key
@@ -303,7 +303,7 @@ function Verify-ClaudeConfig {
         Write-UiSuccess "✓ Claude Code 常用配置验证通过"
         Write-UiInfo "  - language: $($settings.language)"
         Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项"
-        Write-UiInfo "  - env: $($script:Step07EnvDefaults.Count) 项"
+        Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项"
 
         $result.Success = $true
     }
