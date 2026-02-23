@@ -107,7 +107,7 @@ $script:StepRegistry = @(
     @{
         StepId          = "Step07.ClaudeConfig"
         StepName        = "Claude 基础配置"
-        Description     = "写入 Claude Code 基础配置（语言、模型、权限、状态栏等）"
+        Description     = "写入 Claude Code 常用配置（语言、模型、权限、超时、归因等）"
         TestFunction    = "Test-Step07Installed"
         InstallFunction = "Install-Step07"
         VerifyFunction  = "Verify-Step07"

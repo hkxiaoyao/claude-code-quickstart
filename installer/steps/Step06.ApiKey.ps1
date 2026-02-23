@@ -124,7 +124,7 @@ function Test-Step06Installed {
 function Resolve-CurrentProvider {
     param([Parameter(Mandatory)] $Settings)
 
-    # 策略 1：查找供应商标记字段（Install-Step06 写入的 SettingsKey.selected）
+    # 策略 1：查找供应商标记字段（兼容历史安装，新安装不再写入此字段）
     foreach ($key in $script:ApiProviders.Keys) {
         $provider = $script:ApiProviders[$key]
         $settingsKey = $provider.SettingsKey
@@ -272,12 +272,6 @@ function Install-Step06 {
             # 切换到无映射的供应商时，清理旧配置（避免残留）
             $settings.Remove("modelMapping")
             Write-UiInfo "已清理旧模型映射配置（当前供应商由服务端自动路由）"
-        }
-
-        # 同时记录所选供应商（用于后续步骤判断）
-        $settings[$provider.SettingsKey] = @{
-            selected = $true
-            baseUrl = $provider.BaseUrl
         }
 
         # 确保目录存在

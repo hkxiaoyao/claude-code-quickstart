@@ -65,7 +65,7 @@ Step02.Git
 
 | 约束 | 内容 |
 |------|------|
-| **HC-12** | API Key 写入 `~/.claude/settings.json` 的 `env.ANTHROPIC_AUTH_TOKEN` + `env.ANTHROPIC_BASE_URL`；供应商仅限 智谱GLM / MiniMax / Kimi |
+| **HC-12** | Step06 管 API 连接：`env.ANTHROPIC_AUTH_TOKEN` + `env.ANTHROPIC_BASE_URL` + `modelMapping`；Step07 管常用配置：语言、模型、权限、超时、归因等（仅补缺失，不覆盖）；供应商支持 智谱GLM / MiniMax / Kimi / 自定义 |
 | **HC-4** | `$PROFILE` 编辑使用标记块 `# >>> Claude Code Quickstart >>>` / `# <<< Claude Code Quickstart <<<` |
 | **HC-3** | 状态文件：`%TEMP%\ClaudeEnvInstaller\install-state.json` |
 | **SC-3** | 状态指示器：`[PASS]` / `[FAIL]` / `[SKIP]` |
@@ -77,6 +77,7 @@ Step02.Git
 
 ```
 ~/.claude/settings.json     # Claude Code 主配置（API Key + env + 权限）
+~/.claude.json              # Claude Code 初始化标记（hasCompletedOnboarding）
 ~/.claude/CLAUDE.md         # 全局 Claude 工作规范（Step08 写入）
 $PROFILE                    # PowerShell 配置文件（ccline/cc-switch PATH）
 %TEMP%\ClaudeEnvInstaller\  # 安装状态 + 备份目录

@@ -224,30 +224,36 @@ $script:ApiProviders = @{
 
 ## Step07 — Claude 基础配置
 
-**文件**：`Step07.ClaudeConfig.ps1`（298 行）
+**文件**：`Step07.ClaudeConfig.ps1`
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 Step06 同一文件）
 
-**写入字段**（补充 Step06 的 env 配置）：
+**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 Step07 自有字段，不覆盖 Step06（API Key/Base URL/modelMapping）、Step04（statusLine）或用户自定义配置。
 
-```json
-{
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "...",
-    "ANTHROPIC_BASE_URL": "...",
-    "BASH_DEFAULT_TIMEOUT_MS": "600000",
-    "BASH_MAX_TIMEOUT_MS": "3600000",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "MAX_THINKING_TOKENS": "31999"
-  },
-  "language": "简体中文",
-  "model": "sonnet",
-  "permissions": {
-    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "..."]
-  }
-}
-```
+**Step07 管辖的 env 字段**：
 
-> **注意**：statusLine 配置完全由 Step04（ccline）负责，Step07 不再写入 statusLine 字段。
+| 字段 | 默认值 | 写入策略 |
+|------|--------|----------|
+| `BASH_DEFAULT_TIMEOUT_MS` | `600000` | 仅补缺失 |
+| `BASH_MAX_TIMEOUT_MS` | `3600000` | 仅补缺失 |
+| `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | `90` | 仅补缺失 |
+| `CLAUDE_CODE_ATTRIBUTION_HEADER` | `0` | 仅补缺失 |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | 仅补缺失 |
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `1` | 仅补缺失 |
+| `DISABLE_INSTALLATION_CHECKS` | `1` | 仅补缺失 |
+| `MAX_THINKING_TOKENS` | `31999` | 仅补缺失 |
+
+**其他 Step07 管辖字段**：
+
+| 字段 | 默认值 | 写入策略 |
+|------|--------|----------|
+| `language` | `简体中文` | 仅补缺失 |
+| `model` | `sonnet` | 仅补缺失 |
+| `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
+| `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
+
+**Step07 不触碰的字段**：`statusLine`（Step04）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Step09）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（Step06）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（Step10）
+
+> **注意**：statusLine 配置完全由 Step04（ccline）负责，Step07 不触碰 statusLine 字段。
 
 ---
 
