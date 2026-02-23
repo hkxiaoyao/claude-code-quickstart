@@ -12,7 +12,7 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\..\core\Admin.ps1"
 
 # 配置
-$script:CcSwitchRepo = "anthropics/cc-switch"
+$script:CcSwitchRepo = "farion1231/cc-switch"
 $script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
 $script:TempDownloadDir = "$env:TEMP\CcSwitchInstall"
 
@@ -37,7 +37,9 @@ function Test-Step05Installed {
             try {
                 $items = Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
                     $_.DisplayName -like "*CC-Switch*" -or
+                    $_.DisplayName -like "*CC Switch*" -or
                     $_.DisplayName -like "*Claude Code Switch*" -or
+                    $_.Publisher -like "*ccswitch*" -or
                     $_.Publisher -like "*Anthropic*"
                 }
 
@@ -57,13 +59,15 @@ function Test-Step05Installed {
 
         # 检查常见安装路径
         $commonPaths = @(
+            "$env:LOCALAPPDATA\Programs\CC Switch",
+            "$env:LOCALAPPDATA\Programs\CC-Switch",
             "$env:ProgramFiles\CC-Switch",
-            "$env:ProgramFiles\Claude Code Switch",
+            "$env:ProgramFiles\CC Switch",
             "$env:ProgramFiles\Anthropic\CC-Switch",
             "${env:ProgramFiles(x86)}\CC-Switch",
-            "${env:ProgramFiles(x86)}\Claude Code Switch",
+            "${env:ProgramFiles(x86)}\CC Switch",
             "${env:ProgramFiles(x86)}\Anthropic\CC-Switch",
-            "$env:LOCALAPPDATA\Programs\CC-Switch"
+            "$env:LOCALAPPDATA\Programs\cc-switch"
         )
 
         foreach ($path in $commonPaths) {
@@ -92,7 +96,7 @@ function Install-Step05 {
     #>
     param()
 
-    Write-Host "=== Step 06: CC-Switch 安装 ===" -ForegroundColor Cyan
+    Write-Host "=== Step 05: CC-Switch 安装 ===" -ForegroundColor Cyan
     Write-Host ""
 
     try {
