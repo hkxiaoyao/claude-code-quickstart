@@ -101,7 +101,7 @@ $script:StepRegistry = @(
         TestFunction    = "Test-Step06Installed"
         InstallFunction = "Install-Step06"
         VerifyFunction  = "Verify-Step06"
-        SkipIfInstalled = $false
+        SkipIfInstalled = $true
         IsOptional      = $false
     },
     @{

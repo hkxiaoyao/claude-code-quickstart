@@ -1,5 +1,6 @@
 ﻿# API Key 配置步骤 - Claude Code 环境安装器
-# 功能: 供应商选择（智谱 GLM / MiniMax / Kimi）、API Key 输入和 settings.json 写入
+# 功能: 供应商选择（智谱 GLM / MiniMax / Kimi / 自定义）、API Key 输入、settings.json 写入
+# 更新: 2026-02-22 - 更新供应商配置，添加 ~/.claude.json 配置
 
 #Requires -Version 5.1
 
@@ -11,35 +12,53 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Profile.ps1"
 
-# API 供应商配置（HC-12：智谱 GLM / MiniMax / Kimi 三选一）
+# API 供应商配置（HC-12：智谱 GLM / MiniMax / Kimi + 自定义）
+# 最后更新：2026-02-22，基于最新官方文档
 $script:ApiProviders = @{
     "zhipu" = @{
         Name        = "智谱 GLM"
-        Description = "智谱 AI，支持 GLM-4 系列模型"
-        BaseUrl     = "https://open.bigmodel.cn/api/paas/v4/"
-        PlatformUrl = "https://open.bigmodel.cn"
+        Description = "智谱 AI，服务端自动路由到最新 GLM 模型"
+        BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
+        PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
         SettingsKey = "zhipu"
     }
     "minimax" = @{
         Name        = "MiniMax"
-        Description = "MiniMax API，支持 abab6.5 等系列模型"
-        BaseUrl     = "https://api.minimax.chat/v1/"
-        PlatformUrl = "https://platform.minimaxi.com"
+        Description = "MiniMax API，支持 M2.5 系列模型"
+        BaseUrl     = "https://api.minimaxi.com/anthropic"
+        PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         SettingsKey = "minimax"
+        ModelMapping = @{
+            "opus"   = "MiniMax-M2.5"  # 官方推荐：最新 M2.5 系列
+            "sonnet" = "MiniMax-M2.5"  # 官方推荐：统一使用 M2.5
+            "haiku"  = "MiniMax-M2.5"  # 官方推荐：统一使用 M2.5
+        }
     }
     "moonshot" = @{
         Name        = "Kimi (Moonshot)"
-        Description = "月之暗面 Kimi，支持 moonshot-v1 系列模型"
-        BaseUrl     = "https://api.moonshot.cn/v1/"
-        PlatformUrl = "https://platform.moonshot.cn"
+        Description = "月之暗面 Kimi，支持 K2.5 系列模型"
+        BaseUrl     = "https://api.moonshot.cn/anthropic"
+        PlatformUrl = "https://platform.moonshot.cn/console/api-keys"
         SettingsKey = "moonshot"
+        ModelMapping = @{
+            "opus"   = "kimi-k2.5"  # 官方推荐：最新多模态模型
+            "sonnet" = "kimi-k2.5"  # 官方推荐：统一使用 k2.5
+            "haiku"  = "kimi-k2.5"  # 官方推荐：统一使用 k2.5
+        }
+    }
+    "custom" = @{
+        Name        = "自定义供应商"
+        Description = "手动配置 Base URL 和 API Key"
+        BaseUrl     = ""  # 用户输入
+        PlatformUrl = ""
+        SettingsKey = "custom"
     }
 }
 
 function Test-Step06Installed {
     <#
     .SYNOPSIS
-    检测 API Key 是否已配置
+    检测 API Key 是否已配置，并识别当前供应商
     .RETURNS
     包含 IsInstalled 字段的结果对象
     #>
@@ -71,9 +90,24 @@ function Test-Step06Installed {
             -not [string]::IsNullOrWhiteSpace($envSection.ANTHROPIC_AUTH_TOKEN)
 
         if ($hasAuthToken) {
+            # 识别当前供应商
+            $providerName = Resolve-CurrentProvider -Settings $settings
+            $baseUrl = if ($envSection.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") {
+                $envSection.ANTHROPIC_BASE_URL
+            } else { "" }
+
             Write-UiSuccess "✓ API Key 已配置（env.ANTHROPIC_AUTH_TOKEN）"
+            if ($providerName) {
+                Write-UiInfo "  当前供应商: $providerName"
+            }
+            if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
+                Write-UiInfo "  Base URL: $baseUrl"
+            }
+
             $result.IsInstalled = $true
             $result.Message = "API Key 已配置"
+            $result.Data["Provider"] = $providerName
+            $result.Data["BaseUrl"]  = $baseUrl
         } else {
             $result.Message = "env.ANTHROPIC_AUTH_TOKEN 未配置"
         }
@@ -84,6 +118,43 @@ function Test-Step06Installed {
     }
 
     return $result
+}
+
+# 辅助函数：从 settings.json 识别当前配置的供应商
+function Resolve-CurrentProvider {
+    param([Parameter(Mandatory)] $Settings)
+
+    # 策略 1：查找供应商标记字段（Install-Step06 写入的 SettingsKey.selected）
+    foreach ($key in $script:ApiProviders.Keys) {
+        $provider = $script:ApiProviders[$key]
+        $settingsKey = $provider.SettingsKey
+        if ($Settings.PSObject.Properties.Name -contains $settingsKey) {
+            $entry = $Settings.$settingsKey
+            if ($entry -and $entry.PSObject.Properties.Name -contains "selected" -and $entry.selected -eq $true) {
+                return $provider.Name
+            }
+        }
+    }
+
+    # 策略 2：匹配 ANTHROPIC_BASE_URL（兜底，适用于手动编辑的情况）
+    $baseUrl = $null
+    if ($Settings.env -and $Settings.env.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") {
+        $baseUrl = $Settings.env.ANTHROPIC_BASE_URL
+    }
+    if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
+        foreach ($key in $script:ApiProviders.Keys) {
+            $provider = $script:ApiProviders[$key]
+            if ($key -eq "custom") { continue }
+            if (-not [string]::IsNullOrWhiteSpace($provider.BaseUrl) -and
+                $baseUrl -like "$($provider.BaseUrl)*") {
+                return $provider.Name
+            }
+        }
+        # 未匹配到已知供应商，标记为自定义
+        return "自定义供应商"
+    }
+
+    return $null
 }
 
 function Install-Step06 {
@@ -103,23 +174,47 @@ function Install-Step06 {
     try {
         Write-UiInfo "配置 API Provider 和 API Key..."
 
-        # 构建菜单选项
-        $providerOptions = @(
-            @{ Label = "智谱 GLM";        Description = "智谱 AI，支持 GLM-4 系列模型";              Value = "zhipu" }
-            @{ Label = "MiniMax";          Description = "MiniMax API，支持 abab6.5 系列模型";        Value = "minimax" }
-            @{ Label = "Kimi (Moonshot)";  Description = "月之暗面 Kimi，支持 moonshot-v1 系列模型"; Value = "moonshot" }
+        # 构建菜单选项（Show-SingleSelectMenu 接受 [string[]]，返回索引）
+        $providerLabels = @(
+            "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型"
+            "MiniMax        - MiniMax API，支持 M2.5 系列"
+            "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列"
+            "自定义供应商    - 手动配置 Base URL 和 API Key"
         )
+        $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
 
         Write-UiInfo "请选择 API 供应商（仅供 Claude Code 中转使用）:"
-        $selectedKey = Show-SingleSelectMenu -Options $providerOptions -Title "API 供应商选择"
+        $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
 
-        if (-not $selectedKey) {
+        if ($selectedIndex -lt 0) {
             throw "未选择 API 供应商"
         }
 
+        $selectedKey = $providerKeys[$selectedIndex]
         $provider = $script:ApiProviders[$selectedKey]
         Write-UiSuccess "已选择: $($provider.Name)"
-        Write-UiInfo "请前往以下平台获取 API Key: $($provider.PlatformUrl)"
+
+        # 处理自定义供应商的 Base URL 输入
+        if ($selectedKey -eq "custom") {
+            Write-UiInfo "请输入自定义 API Base URL（例如: https://api.example.com）:"
+            do {
+                $customBaseUrl = Read-Host -Prompt "Base URL"
+                if ([string]::IsNullOrWhiteSpace($customBaseUrl)) {
+                    Write-UiError "Base URL 不能为空，请重新输入"
+                    continue
+                }
+                if ($customBaseUrl -notmatch '^https?://') {
+                    Write-UiError "Base URL 必须以 http:// 或 https:// 开头，请重新输入"
+                    continue
+                }
+                break
+            } while ($true)
+
+            $provider.BaseUrl = $customBaseUrl.TrimEnd('/')
+            Write-UiSuccess "Base URL 已设置: $($provider.BaseUrl)"
+        } else {
+            Write-UiInfo "请前往以下平台获取 API Key: $($provider.PlatformUrl)"
+        }
 
         # 安全输入 API Key
         Write-UiInfo "请粘贴 $($provider.Name) 的 API Key（输入不会回显）:"
@@ -166,8 +261,24 @@ function Install-Step06 {
         $settings["env"]["ANTHROPIC_AUTH_TOKEN"] = $apiKeyPlain
         $settings["env"]["ANTHROPIC_BASE_URL"]   = $provider.BaseUrl
 
+        # 写入模型映射配置（仅当供应商定义了 ModelMapping 时）
+        if ($provider.ContainsKey("ModelMapping") -and $provider.ModelMapping) {
+            $settings["modelMapping"] = $provider.ModelMapping
+            Write-UiInfo "已写入模型映射配置:"
+            Write-UiInfo "  - opus   → $($provider.ModelMapping['opus'])"
+            Write-UiInfo "  - sonnet → $($provider.ModelMapping['sonnet'])"
+            Write-UiInfo "  - haiku  → $($provider.ModelMapping['haiku'])"
+        } elseif ($settings.ContainsKey("modelMapping")) {
+            # 切换到无映射的供应商时，清理旧配置（避免残留）
+            $settings.Remove("modelMapping")
+            Write-UiInfo "已清理旧模型映射配置（当前供应商由服务端自动路由）"
+        }
+
         # 同时记录所选供应商（用于后续步骤判断）
-        $settings[$provider.SettingsKey] = @{ selected = $true }
+        $settings[$provider.SettingsKey] = @{
+            selected = $true
+            baseUrl = $provider.BaseUrl
+        }
 
         # 确保目录存在
         $settingsDir = Split-Path $settingsPath -Parent
@@ -190,6 +301,41 @@ function Install-Step06 {
             $masked = "***"
         }
         Write-UiInfo "Key 摘要: $masked（已脱敏）"
+
+        # 创建/更新 ~/.claude.json 配置（添加 hasCompletedOnboarding）
+        try {
+            $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+            $claudeJsonConfig = @{}
+
+            # 如果文件已存在，读取并合并
+            if (Test-Path $claudeJsonPath) {
+                try {
+                    $existingJsonContent = Get-Content $claudeJsonPath -Raw
+                    $claudeJsonConfig = $existingJsonContent | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                    if (-not $claudeJsonConfig) { $claudeJsonConfig = @{} }
+                    Write-UiInfo "已读取现有 ~/.claude.json，将合并写入"
+                }
+                catch {
+                    Write-UiWarn "无法解析现有 ~/.claude.json，将创建新配置"
+                    $claudeJsonConfig = @{}
+                }
+            }
+
+            # 添加 hasCompletedOnboarding 配置
+            $claudeJsonConfig["hasCompletedOnboarding"] = $true
+
+            # 原子写入
+            $tempJsonPath = "$claudeJsonPath.tmp"
+            $claudeJsonConfig | ConvertTo-Json -Depth 10 | Set-Content $tempJsonPath -Encoding UTF8
+            Move-Item $tempJsonPath $claudeJsonPath -Force
+
+            Write-UiSuccess "✓ ~/.claude.json 配置已更新（hasCompletedOnboarding: true）"
+            Write-UiInfo "配置路径: $claudeJsonPath"
+        }
+        catch {
+            Write-UiWarn "更新 ~/.claude.json 失败: $($_.Exception.Message)"
+            Write-UiWarn "此错误不影响安装流程"
+        }
 
         $result.Data["Provider"]   = $selectedKey
         $result.Data["BaseUrl"]    = $provider.BaseUrl
@@ -241,6 +387,22 @@ function Verify-Step06 {
         # 验证 env.ANTHROPIC_BASE_URL 已写入
         if (-not $settings.env -or [string]::IsNullOrWhiteSpace($settings.env.ANTHROPIC_BASE_URL)) {
             throw "env.ANTHROPIC_BASE_URL 未配置或为空"
+        }
+
+        # 验证模型映射配置（可选，部分供应商服务端自动路由）
+        if ($settings.modelMapping) {
+            $requiredModels = @("opus", "sonnet", "haiku")
+            $missingModels = @()
+            foreach ($model in $requiredModels) {
+                if (-not $settings.modelMapping.$model) {
+                    $missingModels += $model
+                }
+            }
+            if ($missingModels.Count -gt 0) {
+                Write-UiWarn "⚠ 模型映射不完整，缺少: $($missingModels -join ', ')"
+            } else {
+                Write-UiSuccess "✓ 模型映射配置完整"
+            }
         }
 
         # 验证环境变量未被污染（HC-12 合规检查）

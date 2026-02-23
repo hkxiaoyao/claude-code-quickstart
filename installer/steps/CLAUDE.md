@@ -75,10 +75,10 @@ function Verify-StepXX {
 
 ## Step02 — Git
 
-**文件**：`Step02.Git.ps1`（546 行）
+**文件**：`Step02.Git.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
-**安装流程**：`winget install Git.Git` → 配置 `core.autocrlf=false` 等 → 验证 `git --version`
+**安装流程**：`winget install Git.Git` → 配置 4 项 Git 推荐设置 → 写入 Git Bash UTF-8（Python + PowerShell wrapper）→ 验证 `git --version` / `git config --list --global`
 
 ---
 
@@ -93,10 +93,31 @@ function Verify-StepXX {
 
 ## Step04 — ccline
 
-**文件**：`Step04.Ccline.ps1`（307 行）
-**依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
+**文件**：`Step04.Ccline.ps1`（295 行）
+**依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
-**安装**：npm 全局安装 + 写入 `$PROFILE` PATH。
+**包名**：`@cometix/ccline`（scoped package）
+
+**安装流程**：
+1. 前置检查（Claude Code + npm）
+2. `npm install -g @cometix/ccline`
+3. 配置 `statusLine`（官方 schema）写入 `~/.claude/settings.json`
+4. 执行 `ccline --patch <cli.js>` 对 Claude Code 进行 patch
+
+**statusLine 配置格式（Claude Code 官方 schema）**：
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "ccline",
+    "padding": 0
+  }
+}
+```
+
+**检测条件**：`$settings.statusLine.type -eq "command"`
+
+**ccline patch**：安装后自动定位 `npm prefix/node_modules/@anthropic-ai/claude-code/cli.js`，执行 `ccline --patch` 注入状态栏支持。失败时仅警告不中断。
 
 ---
 
@@ -111,7 +132,7 @@ function Verify-StepXX {
 
 ## Step06 — API Key 配置（HC-12 关键）
 
-**文件**：`Step06.ApiKey.ps1`（330 行）
+**文件**：`Step06.ApiKey.ps1`（约 330 行）
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
 
 ### 支持的 AI 供应商
@@ -120,24 +141,43 @@ function Verify-StepXX {
 $script:ApiProviders = @{
     zhipu    = @{
         Name        = "智谱 GLM"
-        BaseUrl     = "https://open.bigmodel.cn/api/paas/v4/"
-        PlatformUrl = "https://open.bigmodel.cn"
+        Description = "智谱 AI，服务端自动路由到最新 GLM 模型"
+        BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
+        PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
+        # 无 ModelMapping — 服务端自动翻译模型名
     }
     minimax  = @{
-        Name        = "MiniMax"
-        BaseUrl     = "https://api.minimax.chat/v1/"
-        PlatformUrl = "https://platform.minimaxi.com"
+        Name         = "MiniMax"
+        BaseUrl      = "https://api.minimaxi.com/anthropic"
+        PlatformUrl  = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
+        ModelMapping = @{
+            "opus"   = "MiniMax-M2.5"
+            "sonnet" = "MiniMax-M2.5"
+            "haiku"  = "MiniMax-M2.5"
+        }
     }
     moonshot = @{
-        Name        = "Kimi (Moonshot)"
-        BaseUrl     = "https://api.moonshot.cn/v1/"
-        PlatformUrl = "https://platform.moonshot.cn"
+        Name         = "Kimi (Moonshot)"
+        BaseUrl      = "https://api.moonshot.cn/anthropic"
+        PlatformUrl  = "https://platform.moonshot.cn/console/api-keys"
+        ModelMapping = @{
+            "opus"   = "kimi-k2.5"
+            "sonnet" = "kimi-k2.5"
+            "haiku"  = "kimi-k2.5"
+        }
+    }
+    custom   = @{
+        Name        = "自定义供应商"
+        Description = "手动配置 Base URL 和 API Key"
+        BaseUrl     = ""  # 用户输入
+        # 无 ModelMapping — 用户按需自行配置
     }
 }
 ```
 
 ### 写入格式（HC-12）
 
+**~/.claude/settings.json**（智谱/自定义 — 无 modelMapping）：
 ```json
 {
   "env": {
@@ -146,6 +186,36 @@ $script:ApiProviders = @{
   }
 }
 ```
+
+**~/.claude/settings.json**（MiniMax/Moonshot — 含 modelMapping）：
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "<API_KEY>",
+    "ANTHROPIC_BASE_URL": "<BaseUrl>"
+  },
+  "modelMapping": {
+    "opus": "MiniMax-M2.5",
+    "sonnet": "MiniMax-M2.5",
+    "haiku": "MiniMax-M2.5"
+  }
+}
+```
+
+**~/.claude.json**：
+```json
+{
+  "hasCompletedOnboarding": true
+}
+```
+
+此配置用于标记 Claude Code 环境已完成初始化，由 Step06 自动创建。如果文件已存在，将合并写入，保留用户已有字段。
+
+### 自定义供应商流程
+
+1. 用户选择"自定义供应商"
+2. 输入自定义 Base URL（必须以 `http://` 或 `https://` 开头）
+3. 输入 API Key
 
 > **禁止**写入 `anthropicApiKey`、`openaiApiKey` 等顶层字段。
 > **禁止**写入 Anthropic / OpenAI / Azure 供应商。
@@ -164,16 +234,20 @@ $script:ApiProviders = @{
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "...",
     "ANTHROPIC_BASE_URL": "...",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192"
+    "BASH_DEFAULT_TIMEOUT_MS": "600000",
+    "BASH_MAX_TIMEOUT_MS": "3600000",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "MAX_THINKING_TOKENS": "31999"
   },
-  "language": "zh-CN",
-  "model": "claude-opus-4-5",
+  "language": "简体中文",
+  "model": "sonnet",
   "permissions": {
-    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch"]
-  },
-  "statusLine": "auto"
+    "allow": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "..."]
+  }
 }
 ```
+
+> **注意**：statusLine 配置完全由 Step04（ccline）负责，Step07 不再写入 statusLine 字段。
 
 ---
 
