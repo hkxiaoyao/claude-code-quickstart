@@ -15,7 +15,7 @@
 | `Process.ps1` | 492 | 外部命令执行、PATH 刷新、版本检测、npm/winget 封装 |
 | `Profile.ps1` | 526 | `$PROFILE` 安全编辑：备份、标记块读写、原子写入 |
 | `Admin.ps1` | 137 | 管理员权限检测与自提权 |
-| `Net.ps1` | 270 | 网络连通性检测、代理快照、健康评估 |
+| `Net.ps1` | ~270 | 端点可达性检测、文件下载 |
 | `Registry.ps1` | 280 | **共享步骤注册表**：元数据、分组、依赖、迁移映射（消除 DRY 违规） |
 | `Bootstrap.ps1` | 617 | 步骤状态模型、生命周期调度、拓扑排序、恢复逻辑 |
 
@@ -121,24 +121,12 @@ $script:BackupDirectory = "$env:TEMP\ClaudeEnvInstaller\Backups"
 
 ## Net.ps1
 
-### 监测端点
-
-```powershell
-$script:KeyEndpoints = @{
-    NpmRegistry = "https://registry.npmjs.org"
-    GitHub      = "https://github.com"
-    ClaudeApi   = "https://api.anthropic.com"
-    WingetSrc   = "https://cdn.winget.microsoft.com"
-}
-```
-
 ### 主要函数
 
 | 函数 | 返回 |
 |------|------|
 | `Test-EndpointReachable -Url -TimeoutSeconds` | `@{Url; Reachable; StatusCode; ErrorMessage; LatencyMs}` |
-| `Get-ProxySnapshot` | 当前代理配置快照（`IE Settings + env 变量`） |
-| `Get-NetworkHealth` | 综合健康评估：`@{OverallReachable; EndpointResults; ProxyDetected}` |
+| `Invoke-FileDownload -Url -OutputPath [-Description] [-TimeoutSeconds]` | `@{Success; FilePath; ErrorMessage; FileSize}` |
 
 ---
 
