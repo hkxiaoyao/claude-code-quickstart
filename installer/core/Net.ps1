@@ -238,7 +238,8 @@ function Invoke-FileDownload {
     .SYNOPSIS
     统一的文件下载函数，带进度条显示
     .DESCRIPTION
-    使用 System.Net.WebClient 实现带进度条的文件下载，支持自动重试和错误处理
+    使用 HttpWebRequest + 流式读取实现带实时进度条的文件下载，支持错误处理。
+    进度条在主线程中更新，避免 WebClient 事件队列阻塞导致进度不显示的问题。
     .PARAMETER Url
     下载地址
     .PARAMETER OutputPath
@@ -292,54 +293,86 @@ function Invoke-FileDownload {
         }
         Write-Host "  下载地址: $Url" -ForegroundColor Gray
 
-        # 使用 WebClient 实现带进度条的下载
-        $webClient = New-Object System.Net.WebClient
-        $webClient.Proxy = [System.Net.WebRequest]::GetSystemWebProxy()
-        $webClient.Proxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
+        # [M1] 仅允许 TLS 1.2+，禁用不安全的旧协议
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
-        # 注册进度事件
-        $progressData = @{
-            LastPercent = -1
-            StartTime   = Get-Date
-        }
+        # 使用 HttpWebRequest + 流式读取（主线程进度更新）
+        $request = [System.Net.HttpWebRequest]::Create($Url)
+        $request.Method = "GET"
+        $request.Timeout = $TimeoutSeconds * 1000
+        $request.ReadWriteTimeout = $TimeoutSeconds * 1000
+        $request.AllowAutoRedirect = $true
+        $request.UserAgent = "ClaudeEnvInstaller/1.0"
+        $request.Proxy = [System.Net.WebRequest]::GetSystemWebProxy()
+        $request.Proxy.Credentials = [System.Net.CredentialCache]::DefaultCredentials
 
-        $progressEvent = Register-ObjectEvent -InputObject $webClient -EventName DownloadProgressChanged -Action {
-            $percent = $EventArgs.ProgressPercentage
-            $received = $EventArgs.BytesReceived
-            $total = $EventArgs.TotalBytesToReceive
-
-            # 只在百分比变化时更新（避免刷新过快）
-            if ($percent -ne $Event.MessageData.LastPercent) {
-                $Event.MessageData.LastPercent = $percent
-
-                # 计算下载速度
-                $elapsed = (Get-Date) - $Event.MessageData.StartTime
-                $speed = if ($elapsed.TotalSeconds -gt 0) { $received / $elapsed.TotalSeconds } else { 0 }
-
-                # 格式化显示
-                $receivedMB = [math]::Round($received / 1MB, 2)
-                $totalMB = [math]::Round($total / 1MB, 2)
-                $speedMB = [math]::Round($speed / 1MB, 2)
-
-                # 进度条
-                $barLength = 40
-                $completed = [math]::Floor($barLength * $percent / 100)
-                $remaining = $barLength - $completed
-                $bar = ("[" + ("=" * $completed) + (">" * [math]::Min(1, $remaining)) + (" " * [math]::Max(0, $remaining - 1)) + "]")
-
-                # 输出进度（使用 `r 回到行首覆盖）
-                Write-Host "`r  $bar $percent% ($receivedMB/$totalMB MB) $speedMB MB/s" -NoNewline -ForegroundColor Cyan
-            }
-        } -MessageData $progressData
+        $response = $null
+        $responseStream = $null
+        $fileStream = $null
+        $downloadSuccess = $false
 
         try {
-            # 开始下载（同步）
-            $webClient.DownloadFile($Url, $OutputPath)
+            $response = $request.GetResponse()
+            $totalBytes = $response.ContentLength  # -1 if unknown
+            $responseStream = $response.GetResponseStream()
+            $fileStream = [System.IO.File]::Create($OutputPath)
+
+            $buffer = New-Object byte[] 8192
+            $totalRead = [long]0
+            $lastPercent = -1
+            $lastProgressTime = [DateTime]::MinValue
+            $startTime = Get-Date
+
+            while ($true) {
+                $bytesRead = $responseStream.Read($buffer, 0, $buffer.Length)
+                if ($bytesRead -le 0) { break }
+
+                $fileStream.Write($buffer, 0, $bytesRead)
+                $totalRead += $bytesRead
+
+                # 主线程更新进度条
+                $now = Get-Date
+                $elapsed = $now - $startTime
+                $speed = if ($elapsed.TotalSeconds -gt 0) { $totalRead / $elapsed.TotalSeconds } else { 0 }
+                $speedMB = [math]::Round($speed / 1MB, 2)
+                $receivedMB = [math]::Round($totalRead / 1MB, 2)
+
+                if ($totalBytes -gt 0) {
+                    # 已知总大小：显示百分比进度条
+                    $percent = [math]::Min([math]::Floor($totalRead * 100 / $totalBytes), 100)  # [m1] 钳制上限
+                    if ($percent -ne $lastPercent) {
+                        $lastPercent = $percent
+                        $totalMB = [math]::Round($totalBytes / 1MB, 2)
+
+                        $barLength = 40
+                        $completed = [math]::Floor($barLength * $percent / 100)
+                        $remaining = $barLength - $completed
+                        $bar = "[" + ("=" * $completed) + (">" * [math]::Min(1, $remaining)) + (" " * [math]::Max(0, $remaining - 1)) + "]"
+
+                        Write-Host "`r  $bar $percent% ($receivedMB/$totalMB MB) $speedMB MB/s    " -NoNewline -ForegroundColor Cyan
+                    }
+                } else {
+                    # [M2] 未知总大小：节流刷新（每 500ms 更新一次，避免控制台闪烁）
+                    if (($now - $lastProgressTime).TotalMilliseconds -ge 500) {
+                        $lastProgressTime = $now
+                        Write-Host "`r  正在下载... $receivedMB MB | $speedMB MB/s    " -NoNewline -ForegroundColor Cyan
+                    }
+                }
+            }
+
+            $fileStream.Flush()
+            $fileStream.Close()
+            $fileStream = $null
 
             # 下载完成后换行
             Write-Host ""
 
-            # 验证下载
+            # [C1] 完整性校验：已知长度时验证实际字节数
+            if ($totalBytes -gt 0 -and $totalRead -ne $totalBytes) {
+                throw "下载不完整: 预期 $totalBytes 字节，实际接收 $totalRead 字节"
+            }
+
+            # 验证下载文件
             if (-not (Test-Path $OutputPath)) {
                 throw "下载的文件不存在"
             }
@@ -349,16 +382,20 @@ function Invoke-FileDownload {
                 throw "下载的文件为空"
             }
 
+            $downloadSuccess = $true
             $result.Success = $true
             $result.FileSize = $fileInfo.Length
             Write-Host "  ✓ 下载完成: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
 
         } finally {
-            # 清理事件
-            if ($progressEvent) {
-                Unregister-Event -SourceIdentifier $progressEvent.Name -ErrorAction SilentlyContinue
+            if ($fileStream)     { $fileStream.Close() }
+            if ($responseStream) { $responseStream.Close() }
+            if ($response)       { $response.Close() }
+
+            # [C2] 失败时清理残留的部分文件，防止污染后续重试
+            if (-not $downloadSuccess -and (Test-Path $OutputPath)) {
+                try { Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue } catch { }
             }
-            $webClient.Dispose()
         }
 
     } catch {
@@ -366,7 +403,7 @@ function Invoke-FileDownload {
         Write-Host ""
         Write-Host "  下载失败: $($result.ErrorMessage)" -ForegroundColor Red
 
-        # 清理失败的文件
+        # 清理失败的文件（兜底，覆盖 finally 未触及的场景）
         if (Test-Path $OutputPath) {
             try {
                 Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue
