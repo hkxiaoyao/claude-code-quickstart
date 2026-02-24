@@ -304,7 +304,7 @@ function Invoke-StepLifecycle {
         [switch]$SkipIfInstalled
     )
 
-    Write-Host "🔄 执行步骤: $StepName" -ForegroundColor Cyan
+    Write-UiOutput "🔄 执行步骤: $StepName" -Level Essential -Type Info
 
     # 创建或获取步骤结果
     if ($State.StepResults.ContainsKey($StepId)) {
@@ -316,7 +316,7 @@ function Invoke-StepLifecycle {
 
     # 如果步骤已成功完成且允许跳过，则跳过
     if ($SkipIfInstalled -and $stepResult.Status -eq [StepStatus]::Success) {
-        Write-Host "⏭ 步骤已完成，跳过: $StepName" -ForegroundColor Green
+        Write-UiOutput "⏭ 步骤已完成，跳过: $StepName" -Level Essential -Type Success
         return $stepResult
     }
 
@@ -329,7 +329,7 @@ function Invoke-StepLifecycle {
         $null = Save-InstallState -State $State
 
         # 1. 执行测试阶段
-        Write-Host "  🔍 测试阶段: $TestFunction" -ForegroundColor Gray
+        Write-UiOutput "  🔍 测试阶段: $TestFunction" -Level Debug -Type Info
         $testResult = & $TestFunction
 
         # 兼容 bool 和 hashtable 两种返回类型
@@ -338,12 +338,12 @@ function Invoke-StepLifecycle {
             $stepResult.Status = [StepStatus]::Skipped
             $stepResult.Message = "组件已安装，跳过安装"
             $stepResult.EndTime = Get-Date
-            Write-Host "  ✓ 组件已安装，跳过" -ForegroundColor Yellow
+            Write-UiOutput "  ✓ 组件已安装，跳过" -Level Essential -Type Warn
             return $stepResult
         }
 
         # 2. 执行安装阶段
-        Write-Host "  🔧 安装阶段: $InstallFunction" -ForegroundColor Gray
+        Write-UiOutput "  🔧 安装阶段: $InstallFunction" -Level Debug -Type Info
         $installResult = & $InstallFunction
 
         # 兼容 bool 和 hashtable 两种返回类型
@@ -355,7 +355,7 @@ function Invoke-StepLifecycle {
 
         # 3. 执行验证阶段（如果提供）
         if ($VerifyFunction) {
-            Write-Host "  ✅ 验证阶段: $VerifyFunction" -ForegroundColor Gray
+            Write-UiOutput "  ✅ 验证阶段: $VerifyFunction" -Level Debug -Type Info
             $verifyResult = & $VerifyFunction
 
             # 兼容 bool 和 hashtable 两种返回类型
@@ -410,7 +410,7 @@ function Invoke-StepLifecycle {
             }
         }
 
-        Write-Host "  ✓ $StepName 执行成功" -ForegroundColor Green
+        Write-UiOutput "  ✓ $StepName 执行成功" -Level Essential -Type Success
 
     } catch {
         $stepResult.Status = [StepStatus]::Failed
@@ -418,9 +418,10 @@ function Invoke-StepLifecycle {
         $stepResult.ErrorDetails = $_.Exception.Message
         $stepResult.EndTime = Get-Date
 
-        Write-Host "  ✗ $StepName 执行失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiOutput "  ✗ $StepName 执行失败: $($_.Exception.Message)" -Level Essential -Type Error
     } finally {
         # 保存状态（使用 $null 赋值避免返回值污染）
+        Write-UiOutput "  💾 保存安装状态..." -Level Debug -Type Info
         $null = Save-InstallState -State $State
     }
 

@@ -251,6 +251,22 @@ function Install-ApiKey {
             break
         } while ($true)
 
+        # 显示配置摘要并确认
+        Write-Host ""
+        Write-UiWarn "即将写入以下配置："
+        Write-UiInfo "  供应商: $($provider.Name)"
+        Write-UiInfo "  Base URL: $($provider.BaseUrl)"
+        Write-UiInfo "  配置文件: ~/.claude/settings.json"
+        Write-Host ""
+
+        $confirmIndex = Show-SingleSelectMenu `
+            -Title "确认写入配置？" `
+            -Options @("是，写入", "否，取消")
+
+        if ($confirmIndex -ne 0) {
+            throw "用户取消配置"
+        }
+
         # 读取现有 settings.json
         $settingsPath = Get-ClaudeSettingsPath
         $settings = @{}

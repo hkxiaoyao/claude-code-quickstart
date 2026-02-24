@@ -113,6 +113,23 @@ $script:AnsiColors = @{
     White = "$script:EscapeChar[97m"
 }
 
+# ─── 输出模式控制 ────────────────────────────────────────────────────────────
+
+enum CcqOutputMode {
+    Normal = 0
+    Developer = 1
+}
+
+enum CcqOutputLevel {
+    Essential = 0
+    Detail = 1
+    Debug = 2
+}
+
+if (-not (Get-Variable -Scope Script -Name CcqOutputMode -ErrorAction SilentlyContinue)) {
+    $script:CcqOutputMode = [CcqOutputMode]::Normal
+}
+
 function Write-UiInfo {
     <#
     .SYNOPSIS
@@ -239,6 +256,67 @@ function Write-UiError {
     } else {
         Write-Host $coloredMessage
     }
+}
+
+# ─── 输出级别控制函数 ────────────────────────────────────────────────────────
+
+function Write-UiOutput {
+    <#
+    .SYNOPSIS
+    带级别控制的统一输出函数，根据当前输出模式过滤
+    .PARAMETER Message
+    要输出的消息
+    .PARAMETER Level
+    输出级别：Essential（必要）, Detail（详细）, Debug（调试）
+    .PARAMETER Type
+    输出类型：Info, Success, Warn, Error
+    .PARAMETER NoNewline
+    不添加换行符
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential,
+
+        [ValidateSet('Info', 'Success', 'Warn', 'Error')]
+        [string]$Type = 'Info',
+
+        [switch]$NoNewline
+    )
+
+    if ($script:CcqOutputMode -eq [CcqOutputMode]::Normal) {
+        if ($Level -gt [CcqOutputLevel]::Essential) {
+            return
+        }
+    }
+
+    switch ($Type) {
+        'Info'    { Write-UiInfo $Message -NoNewline:$NoNewline }
+        'Success' { Write-UiSuccess $Message -NoNewline:$NoNewline }
+        'Warn'    { Write-UiWarn $Message -NoNewline:$NoNewline }
+        'Error'   { Write-UiError $Message -NoNewline:$NoNewline }
+    }
+}
+
+function Set-CcqOutputMode {
+    <#
+    .SYNOPSIS
+    设置全局输出模式
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [CcqOutputMode]$Mode
+    )
+    $script:CcqOutputMode = $Mode
+}
+
+function Get-CcqOutputMode {
+    <#
+    .SYNOPSIS
+    获取当前输出模式
+    #>
+    return $script:CcqOutputMode
 }
 
 function Get-StringDisplayWidth {

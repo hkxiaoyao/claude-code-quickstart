@@ -7,7 +7,9 @@ param(
     [switch]$Resume,
     [switch]$OneClick,
     [switch]$Staged,
-    [switch]$ListSteps
+    [switch]$ListSteps,
+    [ValidateSet("Normal", "Developer")]
+    [string]$OutputMode = "Normal"
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +34,10 @@ $stepFiles = Get-StepFiles
 foreach ($stepFile in $stepFiles) {
     . "$script:InstallerRoot\$stepFile"
 }
+
+# ─── 初始化输出模式（步骤加载之后，避免被重复 dot-source 覆盖）──────────────
+
+Set-CcqOutputMode -Mode ([CcqOutputMode]$OutputMode)
 
 # ─── 步骤注册表（从共享 Registry 获取，消除重复定义）─────────────────────────
 
@@ -204,17 +210,9 @@ function Invoke-StagedMode {
             continue
         }
 
-        # ── 依赖满足 → 确认执行
+        # ── 依赖满足 → 直接执行（确认由步骤内部自行处理）
         Write-Host ""
-        Write-UiInfo "  状态: 依赖已满足，可以执行"
-
-        $confirmIndex = Show-SingleSelectMenu `
-            -Title "  确认执行 步骤 $($stepNum): $($stepConfig.StepName)？" `
-            -Options @("是，执行", "否，返回")
-
-        if ($confirmIndex -ne 0) {
-            continue
-        }
+        Write-UiInfo "  状态: 依赖已满足，开始执行"
 
         # ── 执行步骤
         $results.Total++

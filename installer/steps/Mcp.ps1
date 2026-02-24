@@ -1084,6 +1084,23 @@ function Install-Mcp {
         Write-UiInfo "将安装 $($newServers.Count) 个新的 MCP Server"
         $selectedServers = $newServers
 
+        # 显示安装摘要并确认
+        Write-Host ""
+        Write-UiWarn "即将安装以下 MCP Server："
+        foreach ($serverId in $selectedServers) {
+            $server = $script:McpServers[$serverId]
+            Write-UiInfo "  - $($server.Name): $($server.Description)"
+        }
+        Write-Host ""
+
+        $confirmIndex = Show-SingleSelectMenu `
+            -Title "确认安装？" `
+            -Options @("是，开始安装", "否，取消")
+
+        if ($confirmIndex -ne 0) {
+            throw "用户取消安装"
+        }
+
         $serverStatus = @{}
         foreach ($serverId in $selectedServers) {
             $serverStatus[$serverId] = @{

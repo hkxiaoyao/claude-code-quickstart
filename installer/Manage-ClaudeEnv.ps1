@@ -9,7 +9,9 @@ param(
     [string]$Group = "",
     [ValidateSet("OneClick", "Select", "")]
     [string]$Mode = "",
-    [switch]$Staged
+    [switch]$Staged,
+    [ValidateSet("Normal", "Developer")]
+    [string]$OutputMode = "Normal"
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +35,10 @@ $stepFiles = Get-StepFiles
 foreach ($stepFile in $stepFiles) {
     . "$script:InstallerRoot\$stepFile"
 }
+
+# ─── 初始化输出模式（步骤加载之后，避免被重复 dot-source 覆盖）──────────────
+
+Set-CcqOutputMode -Mode ([CcqOutputMode]$OutputMode)
 
 # ─── 步骤注册表（从共享 Registry 获取，消除重复定义）─────────────────────────
 
@@ -162,7 +168,7 @@ function Get-DependencyClosure {
 function Show-ExecutionPlan {
     <#
     .SYNOPSIS
-    当存在自动补齐的依赖时，显示执行计划并请求确认
+    显示执行计划并请求确认（无条件显示）
     .RETURNS
     $true = 用户确认执行，$false = 取消
     #>
@@ -171,26 +177,26 @@ function Show-ExecutionPlan {
         [string[]]$OriginalSelection,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [string[]]$AutoAdded,
 
         [Parameter(Mandatory = $true)]
         [string[]]$FinalPlan
     )
 
-    if ($AutoAdded.Count -eq 0) {
-        return $true
+    Write-Host ""
+
+    if ($AutoAdded.Count -gt 0) {
+        Write-UiWarn "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
+        foreach ($stepId in $AutoAdded) {
+            $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+            $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
+            Write-UiInfo "  + $name（自动补齐）"
+        }
+        Write-Host ""
     }
 
-    Write-Host ""
-    Write-UiWarn "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
-    foreach ($stepId in $AutoAdded) {
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-        $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-        Write-UiInfo "  + $name（自动补齐）"
-    }
-
-    Write-Host ""
-    Write-UiInfo "完整执行计划："
+    Write-UiInfo "执行计划："
 
     $orderedPlan = Get-ExecutionOrder -StepIds $FinalPlan
     $index = 0
@@ -198,7 +204,7 @@ function Show-ExecutionPlan {
         $index++
         $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
         $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-        $tag = if ($stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
+        $tag = if ($AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
         Write-UiInfo "  $index. $name $tag"
     }
 
@@ -238,17 +244,15 @@ function Invoke-GroupedInstall {
         return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
     }
 
-    # 需要自动补齐时请求确认
-    if ($closure.AutoAdded.Count -gt 0) {
-        $confirmed = Show-ExecutionPlan `
-            -OriginalSelection $closure.OriginalSelection `
-            -AutoAdded $closure.AutoAdded `
-            -FinalPlan $closure.FinalPlan
+    # 无条件显示执行计划并确认
+    $confirmed = Show-ExecutionPlan `
+        -OriginalSelection $closure.OriginalSelection `
+        -AutoAdded $closure.AutoAdded `
+        -FinalPlan $closure.FinalPlan
 
-        if (-not $confirmed) {
-            Write-UiWarn "安装已取消"
-            return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
-        }
+    if (-not $confirmed) {
+        Write-UiWarn "安装已取消"
+        return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
     }
 
     # 拓扑排序
