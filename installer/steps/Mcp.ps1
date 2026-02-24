@@ -72,45 +72,44 @@ $script:McpServers = [ordered]@{
         Priority = 3
         Recommended = $false
     }
-    # Hidden: 需要 Python 环境，待 Python 安装步骤实现后启用
-    "contextweaver" = @{
-        Name = "ContextWeaver"
-        Description = "语义代码检索引擎，基于 Tree-sitter 和向量搜索"
-        McpType = "stdio"
-        Command = "contextweaver"
-        Args = @("mcp")
-        CredentialType = "env-file"
-        RuntimeDeps = $script:DefaultMcpRuntimeDeps
-        PreInstall = @{
-            Type = "npm-global"
-            Package = "@hsingjui/contextweaver"
-            CommandCheck = "contextweaver"
-            InitCommand = "contextweaver init"
-            InitializedPath = "$env:USERPROFILE\.contextweaver"
-        }
-        EnvFile = @{
-            Path = "$env:USERPROFILE\.contextweaver\.env"
-            DefaultProvider = "SiliconFlow"
-            ProviderUrl = "https://cloud.siliconflow.cn/account/ak"
-            SharedCredentialName = "SILICONFLOW_API_KEY"
-            SharedKeyLabel = "SiliconFlow API Key (Embedding + Rerank 共用)"
-            SharedKeyFields = @("EMBEDDINGS_API_KEY", "RERANK_API_KEY")
-            Fields = @(
-                @{ Key = "EMBEDDINGS_API_KEY"; Required = $true; Secret = $true }
-                @{ Key = "EMBEDDINGS_BASE_URL"; Default = "https://api.siliconflow.cn/v1/embeddings" }
-                @{ Key = "EMBEDDINGS_MODEL"; Default = "BAAI/bge-m3" }
-                @{ Key = "EMBEDDINGS_DIMENSIONS"; Default = "1024" }
-                @{ Key = "RERANK_API_KEY"; Required = $true; Secret = $true }
-                @{ Key = "RERANK_BASE_URL"; Default = "https://api.siliconflow.cn/v1/rerank" }
-                @{ Key = "RERANK_MODEL"; Default = "BAAI/bge-reranker-v2-m3" }
-                @{ Key = "RERANK_TOP_N"; Default = "20" }
-            )
-        }
-        Category = "Development"
-        Priority = 4
-        Recommended = $true
-        Hidden = $true
-    }
+    # TODO: ContextWeaver 需要 Python 环境，待 Python 安装步骤实现后启用
+    # "contextweaver" = @{
+    #     Name = "ContextWeaver"
+    #     Description = "语义代码检索引擎，基于 Tree-sitter 和向量搜索"
+    #     McpType = "stdio"
+    #     Command = "contextweaver"
+    #     Args = @("mcp")
+    #     CredentialType = "env-file"
+    #     RuntimeDeps = $script:DefaultMcpRuntimeDeps
+    #     PreInstall = @{
+    #         Type = "npm-global"
+    #         Package = "@hsingjui/contextweaver"
+    #         CommandCheck = "contextweaver"
+    #         InitCommand = "contextweaver init"
+    #         InitializedPath = "$env:USERPROFILE\.contextweaver"
+    #     }
+    #     EnvFile = @{
+    #         Path = "$env:USERPROFILE\.contextweaver\.env"
+    #         DefaultProvider = "SiliconFlow"
+    #         ProviderUrl = "https://cloud.siliconflow.cn/account/ak"
+    #         SharedCredentialName = "SILICONFLOW_API_KEY"
+    #         SharedKeyLabel = "SiliconFlow API Key (Embedding + Rerank 共用)"
+    #         SharedKeyFields = @("EMBEDDINGS_API_KEY", "RERANK_API_KEY")
+    #         Fields = @(
+    #             @{ Key = "EMBEDDINGS_API_KEY"; Required = $true; Secret = $true }
+    #             @{ Key = "EMBEDDINGS_BASE_URL"; Default = "https://api.siliconflow.cn/v1/embeddings" }
+    #             @{ Key = "EMBEDDINGS_MODEL"; Default = "BAAI/bge-m3" }
+    #             @{ Key = "EMBEDDINGS_DIMENSIONS"; Default = "1024" }
+    #             @{ Key = "RERANK_API_KEY"; Required = $true; Secret = $true }
+    #             @{ Key = "RERANK_BASE_URL"; Default = "https://api.siliconflow.cn/v1/rerank" }
+    #             @{ Key = "RERANK_MODEL"; Default = "BAAI/bge-reranker-v2-m3" }
+    #             @{ Key = "RERANK_TOP_N"; Default = "20" }
+    #         )
+    #     }
+    #     Category = "Development"
+    #     Priority = 4
+    #     Recommended = $true
+    # }
     "playwright" = @{
         Name = "Playwright"
         Description = "Microsoft 官方网页自动化，基于可访问性树交互"
@@ -1021,9 +1020,7 @@ function Install-Mcp {
         }
         $selectedMode = if ($modeIndex -eq 0) { "quick" } else { "custom" }
 
-        $orderedServerIds = @($script:McpServers.Keys | Where-Object {
-            -not $script:McpServers[$_].Hidden
-        } | Sort-Object { [int]$script:McpServers[$_].Priority })
+        $orderedServerIds = @($script:McpServers.Keys | Sort-Object { [int]$script:McpServers[$_].Priority })
         if ($selectedMode -eq "quick") {
             $selectedServers = @($orderedServerIds | Where-Object {
                 $script:McpServers[$_].Recommended
@@ -1599,15 +1596,16 @@ function Verify-Mcp {
         Write-UiInfo "  - stdio: $stdioCount"
         Write-UiInfo "  - http: $httpCount"
 
-        if ($claudeJson.mcpServers.PSObject.Properties.Name -contains "contextweaver") {
-            $envPath = $script:McpServers["contextweaver"].EnvFile.Path
-            if (Test-Path $envPath) {
-                Write-UiInfo "  - contextweaver .env: ✓ ($envPath)"
-            }
-            else {
-                throw "contextweaver 已配置但缺少 .env 文件: $envPath"
-            }
-        }
+        # TODO: ContextWeaver 验证逻辑，待 Python 环境支持后启用
+        # if ($claudeJson.mcpServers.PSObject.Properties.Name -contains "contextweaver") {
+        #     $envPath = $script:McpServers["contextweaver"].EnvFile.Path
+        #     if (Test-Path $envPath) {
+        #         Write-UiInfo "  - contextweaver .env: ✓ ($envPath)"
+        #     }
+        #     else {
+        #         throw "contextweaver 已配置但缺少 .env 文件: $envPath"
+        #     }
+        # }
 
         return $true
     }
