@@ -20,12 +20,14 @@ $script:DefaultMcpRuntimeDeps = @(
         Command = "node"
         MinVersion = "20.0.0"
         WingetId = "OpenJS.NodeJS.LTS"
+        ManualUrl = "https://nodejs.org/"
     }
     @{
         Name = "npm"
         Command = "npm"
         MinVersion = "10.0.0"
         WingetId = "OpenJS.NodeJS.LTS"
+        ManualUrl = "https://nodejs.org/"
     }
 )
 
@@ -130,7 +132,7 @@ $script:McpServers = [ordered]@{
         Args = @("-y", "exa-mcp-server")
         CredentialType = "single-key"
         ApiKeyName = "EXA_API_KEY"
-        ApiKeyUrl = "https://exa.ai/"
+        ApiKeyUrl = "https://dashboard.exa.ai/api-keys"
         RuntimeDeps = $script:DefaultMcpRuntimeDeps
         Category = "Search"
         Priority = 6
@@ -360,11 +362,13 @@ function Install-McpRuntimeDeps {
 
         if ($needsInstall) {
             if (-not $dep.WingetId) {
-                throw "依赖 $depName 缺少 WingetId，无法自动安装"
+                $manualHint = if ($dep.ManualUrl) { "，请手动安装: $($dep.ManualUrl)" } else { "" }
+                throw "依赖 $depName 缺少自动安装配置$manualHint"
             }
 
             if (-not (Test-CommandAvailable -Command "winget")) {
-                throw "winget 不可用，无法安装依赖 $depName"
+                $manualHint = if ($dep.ManualUrl) { "`n  手动安装: $($dep.ManualUrl)" } else { "" }
+                throw "winget 不可用，无法自动安装依赖 $depName。请先运行「基础环境」安装，或手动安装后重试。$manualHint"
             }
 
             Invoke-WingetInstall -PackageId $dep.WingetId -PackageName $depName -AcceptLicense -Silent | Out-Null
