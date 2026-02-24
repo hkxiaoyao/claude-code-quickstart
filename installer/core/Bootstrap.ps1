@@ -481,7 +481,7 @@ function Test-StepDependencies {
 function Get-ExecutionOrder {
     <#
     .SYNOPSIS
-    根据依赖关系计算步骤执行顺序
+    根据依赖关系计算步骤执行顺序（优先级拓扑排序：每轮取 Order 最小的可执行步骤）
     .PARAMETER StepIds
     要排序的步骤 ID 数组
     .RETURNS
@@ -496,7 +496,14 @@ function Get-ExecutionOrder {
     $ordered = @()
     $remaining = $StepIds.Clone()
 
-    # 拓扑排序
+    # 预加载 Order 映射（避免循环内重复调用）
+    $registry = Get-StepRegistry
+    $orderMap = @{}
+    foreach ($step in $registry) {
+        $orderMap[$step.StepId] = $step.Order
+    }
+
+    # 优先级拓扑排序：每轮仅取 Order 最小的可执行步骤，保证全局 Order 顺序
     while ($remaining.Count -gt 0) {
         $canExecute = @()
 
@@ -523,17 +530,12 @@ function Get-ExecutionOrder {
             break
         }
 
-        # 使用 Registry 的 Order 字段进行确定性 tie-break 排序
-        $registry = Get-StepRegistry
-        $orderMap = @{}
-        foreach ($step in $registry) {
-            $orderMap[$step.StepId] = $step.Order
-        }
-        $canExecute = $canExecute | Sort-Object { if ($orderMap.ContainsKey($_)) { $orderMap[$_] } else { [int]::MaxValue } }
-        $ordered += $canExecute
+        # 取 Order 最小的单个步骤，确保全局按 Order 递增输出
+        $next = $canExecute | Sort-Object { if ($orderMap.ContainsKey($_)) { $orderMap[$_] } else { [int]::MaxValue } } | Select-Object -First 1
+        $ordered += $next
 
         # 从剩余列表中移除（@() 确保 StrictMode 下结果始终为数组）
-        $remaining = @($remaining | Where-Object { $_ -notin $canExecute })
+        $remaining = @($remaining | Where-Object { $_ -ne $next })
     }
 
     return $ordered

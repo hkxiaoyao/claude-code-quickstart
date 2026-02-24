@@ -348,7 +348,6 @@ function Show-CompletionMessage {
     )
 
     Write-Host ""
-    Show-CcqLogo -Subtitle "引导完成"
 
     Write-UiSuccess "🎉 引导脚本执行完成！"
     Write-Host ""
