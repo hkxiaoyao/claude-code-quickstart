@@ -70,7 +70,7 @@ $script:McpServers = [ordered]@{
         )
         Category = "Search"
         Priority = 3
-        Recommended = $true
+        Recommended = $false
     }
     "contextweaver" = @{
         Name = "ContextWeaver"
@@ -133,7 +133,7 @@ $script:McpServers = [ordered]@{
         RuntimeDeps = $script:DefaultMcpRuntimeDeps
         Category = "Search"
         Priority = 6
-        Recommended = $false
+        Recommended = $true
     }
     "ace-tool" = @{
         Name = "ACE Tool"
