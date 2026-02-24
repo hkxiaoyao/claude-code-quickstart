@@ -91,10 +91,11 @@ function Invoke-StagedMode {
     )
 
     $results = @{
-        Total   = 0
-        Success = 0
-        Failed  = 0
-        Skipped = 0
+        Total           = 0
+        Success         = 0
+        Failed          = 0
+        Skipped         = 0
+        ExecutedStepIds = [System.Collections.ArrayList]::new()
     }
 
     $dependencies = Get-StepDependencies
@@ -216,6 +217,7 @@ function Invoke-StagedMode {
 
         # ── 执行步骤
         $results.Total++
+        [void]$results.ExecutedStepIds.Add($stepId)
 
         $stepParams = @{
             StepId          = $stepConfig.StepId
@@ -332,10 +334,11 @@ function Invoke-AllSteps {
     $orderedStepIds = @($orderedMandatoryIds + $orderedOptionalIds)
 
     $results = @{
-        Total   = $orderedStepIds.Count
-        Success = 0
-        Failed  = 0
-        Skipped = 0
+        Total           = $orderedStepIds.Count
+        Success         = 0
+        Failed          = 0
+        Skipped         = 0
+        ExecutedStepIds = $orderedStepIds
     }
 
     $stepIndex = 0
@@ -426,27 +429,35 @@ function Show-FinalSummary {
 
     Write-Host ""
 
-    # 构建摘要表格
+    # 构建摘要表格（仅本次执行的步骤）
     $summaryItems = @()
 
-    $orderedResults = $State.StepResults.Values | Sort-Object StepId
-    foreach ($stepResult in $orderedResults) {
-        $statusText = switch ($stepResult.Status) {
-            ([StepStatus]::Success) { "成功" }
-            ([StepStatus]::Skipped) { "跳过" }
-            ([StepStatus]::Failed)  { "失败" }
-            ([StepStatus]::Pending) { "未执行" }
-            default                 { "未知" }
-        }
+    foreach ($stepId in $Results.ExecutedStepIds) {
+        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+        $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
 
-        $version = if ($stepResult.Data -and $stepResult.Data.ContainsKey("Version") -and $stepResult.Data["Version"]) {
-            [string]$stepResult.Data["Version"]
+        if ($State.StepResults.ContainsKey($stepId)) {
+            $stepResult = $State.StepResults[$stepId]
+            $statusText = switch ($stepResult.Status) {
+                ([StepStatus]::Success) { "成功" }
+                ([StepStatus]::Skipped) { "跳过" }
+                ([StepStatus]::Failed)  { "失败" }
+                ([StepStatus]::Pending) { "未执行" }
+                default                 { "未知" }
+            }
+
+            $version = if ($stepResult.Data -and $stepResult.Data.ContainsKey("Version") -and $stepResult.Data["Version"]) {
+                [string]$stepResult.Data["Version"]
+            } else {
+                "-"
+            }
         } else {
-            "-"
+            $statusText = "跳过"
+            $version = "-"
         }
 
         $summaryItems += [PSCustomObject]@{
-            Name    = $stepResult.StepName
+            Name    = $stepName
             Status  = $statusText
             Version = $version
         }
@@ -492,9 +503,12 @@ function Show-FinalSummary {
         Write-UiWarn "安装完成，但有 $($Results.Failed) 个步骤失败"
         Write-Host ""
         Write-UiInfo "失败步骤列表："
-        foreach ($stepResult in $orderedResults) {
-            if ($stepResult.Status -eq [StepStatus]::Failed) {
-                Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
+        foreach ($stepId in $Results.ExecutedStepIds) {
+            if ($State.StepResults.ContainsKey($stepId)) {
+                $stepResult = $State.StepResults[$stepId]
+                if ($stepResult.Status -eq [StepStatus]::Failed) {
+                    Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
+                }
             }
         }
         Write-Host ""

@@ -568,10 +568,12 @@ function Show-FinalSummary {
         Write-UiWarn "安装完成，但有 $($Results.Failed) 个步骤失败"
         Write-Host ""
         Write-UiInfo "失败步骤列表："
-        $executedResults = $State.StepResults.Values | Sort-Object StepId
-        foreach ($stepResult in $executedResults) {
-            if ($stepResult.Status -eq [StepStatus]::Failed) {
-                Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
+        foreach ($stepId in $Results.ExecutedStepIds) {
+            if ($State.StepResults.ContainsKey($stepId)) {
+                $stepResult = $State.StepResults[$stepId]
+                if ($stepResult.Status -eq [StepStatus]::Failed) {
+                    Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
+                }
             }
         }
         Write-Host ""

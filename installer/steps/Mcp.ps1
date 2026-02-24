@@ -1489,7 +1489,7 @@ function Verify-Mcp {
                 continue
             }
 
-            if (-not $script:McpServers.ContainsKey($serverId)) {
+            if (-not $script:McpServers.Contains($serverId)) {
                 continue
             }
 
