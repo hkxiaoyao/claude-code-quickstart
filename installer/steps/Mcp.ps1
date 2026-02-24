@@ -72,6 +72,7 @@ $script:McpServers = [ordered]@{
         Priority = 3
         Recommended = $false
     }
+    # Hidden: 需要 Python 环境，待 Python 安装步骤实现后启用
     "contextweaver" = @{
         Name = "ContextWeaver"
         Description = "语义代码检索引擎，基于 Tree-sitter 和向量搜索"
@@ -108,6 +109,7 @@ $script:McpServers = [ordered]@{
         Category = "Development"
         Priority = 4
         Recommended = $true
+        Hidden = $true
     }
     "playwright" = @{
         Name = "Playwright"
@@ -1010,7 +1012,7 @@ function Install-Mcp {
         }
 
         $modeOptions = @(
-            "一键模式 (推荐) - 自动安装核心 5 个 MCP Server",
+            "一键模式 (推荐) - 自动安装核心 4 个 MCP Server",
             "自定义模式 - 手动选择需要的 MCP Server"
         )
         $modeIndex = Show-SingleSelectMenu -Options $modeOptions -Title "MCP Server 安装模式"
@@ -1019,7 +1021,9 @@ function Install-Mcp {
         }
         $selectedMode = if ($modeIndex -eq 0) { "quick" } else { "custom" }
 
-        $orderedServerIds = @($script:McpServers.Keys | Sort-Object { [int]$script:McpServers[$_].Priority })
+        $orderedServerIds = @($script:McpServers.Keys | Where-Object {
+            -not $script:McpServers[$_].Hidden
+        } | Sort-Object { [int]$script:McpServers[$_].Priority })
         if ($selectedMode -eq "quick") {
             $selectedServers = @($orderedServerIds | Where-Object {
                 $script:McpServers[$_].Recommended
