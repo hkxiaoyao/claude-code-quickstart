@@ -1,3 +1,6 @@
-- ContextWeaver MCP的安装
+- python安装，ContextWeaver MCP安装，其他MCP测试
+- 用户级提示词中有关ace的部分需要调整，还有其他MCP的调用
+- codex gemini测试
 - 更新脚本
 - 一键卸载
+- 现有ccg工作流加入pencil生成UI图
