@@ -1025,12 +1025,7 @@ function Install-Mcp {
                 $script:McpServers[$_].Recommended
             })
 
-            Write-UiInfo "一键模式将安装以下 MCP Server:"
-            foreach ($serverId in $selectedServers) {
-                $server = $script:McpServers[$serverId]
-                $installedTag = if ($existingServers -contains $serverId) { " [已安装]" } else { "" }
-                Write-UiInfo "  - [$($server.Category)] $($server.Name) [$($server.McpType)]$installedTag"
-            }
+            # 一键模式：选中所有推荐的 MCP Server（后续统一在确认环节显示详情）
         }
         else {
             $displayOptions = @()

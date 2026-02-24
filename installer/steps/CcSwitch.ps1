@@ -230,9 +230,6 @@ function Install-CcSwitch {
         Write-Host "    - 项目环境管理" -ForegroundColor Gray
         Write-Host "    - 工作流程优化" -ForegroundColor Gray
         Write-Host ""
-        Write-Host "  安装后可能需要重启系统或重新登录才能完全生效" -ForegroundColor Yellow
-
-        Write-Host ""
         Write-Host "✓ CC-Switch 安装完成" -ForegroundColor Green
 
         $result.Success = $true
