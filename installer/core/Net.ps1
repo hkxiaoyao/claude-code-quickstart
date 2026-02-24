@@ -238,8 +238,8 @@ function Invoke-FileDownload {
     .SYNOPSIS
     统一的文件下载函数，带进度条显示
     .DESCRIPTION
-    使用 HttpWebRequest + 流式读取实现带实时进度条的文件下载，支持错误处理。
-    进度条在主线程中更新，避免 WebClient 事件队列阻塞导致进度不显示的问题。
+    使用 HttpWebRequest + 异步轮询（APM 模式）实现带实时进度条的文件下载。
+    所有网络 I/O 均为异步发起 + Start-Sleep 轮询，确保 CTRL+C 可随时中断。
     .PARAMETER Url
     下载地址
     .PARAMETER OutputPath
@@ -293,10 +293,10 @@ function Invoke-FileDownload {
         }
         Write-Host "  下载地址: $Url" -ForegroundColor Gray
 
-        # [M1] 仅允许 TLS 1.2+，禁用不安全的旧协议
+        # 仅允许 TLS 1.2+，禁用不安全的旧协议
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
 
-        # 使用 HttpWebRequest + 流式读取（主线程进度更新）
+        # 使用 HttpWebRequest + 异步轮询（CTRL+C 可中断）
         $request = [System.Net.HttpWebRequest]::Create($Url)
         $request.Method = "GET"
         $request.Timeout = $TimeoutSeconds * 1000
@@ -312,7 +312,22 @@ function Invoke-FileDownload {
         $downloadSuccess = $false
 
         try {
-            $response = $request.GetResponse()
+            # ── 阶段 1：异步连接（CTRL+C 可中断） ──
+            Write-Host "  正在连接..." -NoNewline -ForegroundColor Gray
+            $asyncConnect = $request.BeginGetResponse($null, $null)
+            $connectDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+            while (-not $asyncConnect.IsCompleted) {
+                if ((Get-Date) -gt $connectDeadline) {
+                    $request.Abort()
+                    throw "连接超时 ($TimeoutSeconds 秒)"
+                }
+                Start-Sleep -Milliseconds 300
+            }
+
+            $response = $request.EndGetResponse($asyncConnect)
+            Write-Host " 已连接" -ForegroundColor Green
+
             $totalBytes = $response.ContentLength  # -1 if unknown
             $responseStream = $response.GetResponseStream()
             $fileStream = [System.IO.File]::Create($OutputPath)
@@ -323,8 +338,15 @@ function Invoke-FileDownload {
             $lastProgressTime = [DateTime]::MinValue
             $startTime = Get-Date
 
+            # ── 阶段 2：异步读取 + 进度显示（CTRL+C 可中断） ──
             while ($true) {
-                $bytesRead = $responseStream.Read($buffer, 0, $buffer.Length)
+                $asyncRead = $responseStream.BeginRead($buffer, 0, $buffer.Length, $null, $null)
+
+                while (-not $asyncRead.IsCompleted) {
+                    Start-Sleep -Milliseconds 50
+                }
+
+                $bytesRead = $responseStream.EndRead($asyncRead)
                 if ($bytesRead -le 0) { break }
 
                 $fileStream.Write($buffer, 0, $bytesRead)
@@ -339,7 +361,7 @@ function Invoke-FileDownload {
 
                 if ($totalBytes -gt 0) {
                     # 已知总大小：显示百分比进度条
-                    $percent = [math]::Min([math]::Floor($totalRead * 100 / $totalBytes), 100)  # [m1] 钳制上限
+                    $percent = [math]::Min([math]::Floor($totalRead * 100 / $totalBytes), 100)
                     if ($percent -ne $lastPercent) {
                         $lastPercent = $percent
                         $totalMB = [math]::Round($totalBytes / 1MB, 2)
@@ -352,7 +374,7 @@ function Invoke-FileDownload {
                         Write-Host "`r  $bar $percent% ($receivedMB/$totalMB MB) $speedMB MB/s    " -NoNewline -ForegroundColor Cyan
                     }
                 } else {
-                    # [M2] 未知总大小：节流刷新（每 500ms 更新一次，避免控制台闪烁）
+                    # 未知总大小：节流刷新（每 500ms 更新一次）
                     if (($now - $lastProgressTime).TotalMilliseconds -ge 500) {
                         $lastProgressTime = $now
                         Write-Host "`r  正在下载... $receivedMB MB | $speedMB MB/s    " -NoNewline -ForegroundColor Cyan
@@ -367,7 +389,7 @@ function Invoke-FileDownload {
             # 下载完成后换行
             Write-Host ""
 
-            # [C1] 完整性校验：已知长度时验证实际字节数
+            # 完整性校验：已知长度时验证实际字节数
             if ($totalBytes -gt 0 -and $totalRead -ne $totalBytes) {
                 throw "下载不完整: 预期 $totalBytes 字节，实际接收 $totalRead 字节"
             }
@@ -388,11 +410,13 @@ function Invoke-FileDownload {
             Write-Host "  ✓ 下载完成: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Green
 
         } finally {
+            # 中止请求，取消任何挂起的异步操作
+            try { $request.Abort() } catch { }
             if ($fileStream)     { $fileStream.Close() }
             if ($responseStream) { $responseStream.Close() }
             if ($response)       { $response.Close() }
 
-            # [C2] 失败时清理残留的部分文件，防止污染后续重试
+            # 失败时清理残留的部分文件，防止污染后续重试
             if (-not $downloadSuccess -and (Test-Path $OutputPath)) {
                 try { Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue } catch { }
             }
@@ -403,7 +427,7 @@ function Invoke-FileDownload {
         Write-Host ""
         Write-Host "  下载失败: $($result.ErrorMessage)" -ForegroundColor Red
 
-        # 清理失败的文件（兜底，覆盖 finally 未触及的场景）
+        # 清理失败的文件（兜底）
         if (Test-Path $OutputPath) {
             try {
                 Remove-Item $OutputPath -Force -ErrorAction SilentlyContinue
