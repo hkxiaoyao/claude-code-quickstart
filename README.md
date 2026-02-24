@@ -103,7 +103,7 @@ pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 #### 第一步：克隆仓库并运行引导脚本
 
 ```powershell
-git clone https://github.com/your-repo/claude-code-quickstart.git
+git clone https://github.com/MrNine-666/claude-code-quickstart.git
 cd claude-code-quickstart
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\installer\Bootstrap-ClaudeEnv.ps1
@@ -327,7 +327,7 @@ pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Resume
 ```
 
-> **注意**：v1.2.0 版本已完成架构重构，步骤文件和函数名采用语义化命名。旧版状态文件会自动迁移，用户无需手动操作。安装失败时使用 `-Resume` 重试失败步骤即可。
+> **提示**：步骤文件和函数名采用语义化命名。旧版状态文件会自动迁移，用户无需手动操作。安装失败时使用 `-Resume` 重试失败步骤即可。
 
 **Q：想重新配置 API Key？**
 
