@@ -360,21 +360,14 @@ function Install-NodeFnm {
             throw $errorMsg
         }
 
-        # 5. 配置 npm 镜像源（可选优化）
-        Write-UiInfo "🌐 配置 npm 镜像源..."
+        # 5. 配置 npm 镜像源
+        Write-UiInfo "配置 npm 镜像源..."
         try {
-            # 检查网络连通性决定是否使用镜像
-            $registryTest = Test-EndpointReachable -Url "https://registry.npmjs.org" -TimeoutSeconds 5
-            if (-not $registryTest.Reachable) {
-                Write-UiInfo "npm 官方源连接失败，配置淘宝镜像源..."
-                $configResult = Invoke-ExternalCommand -Command "npm" -Arguments @("config", "set", "registry", "https://registry.npmmirror.com") -TimeoutSeconds 30
-                if ($configResult.Success) {
-                    Write-UiSuccess "✓ npm 镜像源配置成功"
-                } else {
-                    Write-UiWarn "⚠ npm 镜像源配置失败，使用默认源"
-                }
+            $configResult = Invoke-ExternalCommand -Command "npm" -Arguments @("config", "set", "registry", "https://registry.npmmirror.com") -TimeoutSeconds 30
+            if ($configResult.ExitCode -eq 0) {
+                Write-UiSuccess "npm 镜像源已设置为 registry.npmmirror.com"
             } else {
-                Write-UiSuccess "✓ npm 官方源连接正常，使用默认配置"
+                Write-UiWarn "npm 镜像源配置失败，将使用默认源"
             }
         } catch {
             Write-UiWarn "⚠ npm 镜像源配置过程中出现错误: $($_.Exception.Message)"

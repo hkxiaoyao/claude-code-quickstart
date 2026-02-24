@@ -658,7 +658,7 @@ function Test-InternetConnection {
         [string[]]$TestUrls = @(
             "https://www.google.com",
             "https://github.com",
-            "https://registry.npmjs.org"
+            "https://registry.npmmirror.com"
         ),
 
         [int]$TimeoutSeconds = 10

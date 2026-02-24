@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 
 # 需要测试的关键端点
 $script:KeyEndpoints = @{
-    NpmRegistry = "https://registry.npmjs.org"
+    NpmRegistry = "https://registry.npmmirror.com"
     GitHub      = "https://github.com"
     ClaudeApi   = "https://api.anthropic.com"
     WingetSrc   = "https://cdn.winget.microsoft.com"
