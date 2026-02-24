@@ -284,15 +284,14 @@ claude
 # 查看帮助
 claude --help
 
-# 切换 Claude Code 版本（需已安装 cc-switch）
-cc-switch
-
 # 使用 Codex CLI（需已安装）
 codex --help
 
 # 使用 Gemini CLI（需已安装）
 gemini --help
 ```
+
+> **cc-switch**：安装后可在开始菜单或桌面快捷方式启动，提供 Claude Code / Codex / Gemini CLI 的图形化辅助管理。
 
 ---
 

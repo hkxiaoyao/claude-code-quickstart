@@ -216,11 +216,11 @@ $script:ApiProviders = @{
 ## CcSwitch — cc-switch
 
 **文件**：`CcSwitch.ps1`
-**依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
+**依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Admin.ps1`, `Net.ps1`
 
-**功能**：Claude Code / Codex / Gemini CLI 全方位辅助工具
+**功能**：Claude Code / Codex / Gemini CLI 全方位辅助桌面软件
 
-**安装**：npm 全局安装 cc-switch + 写入 `$PROFILE`。
+**安装**：从 GitHub Release (`farion1231/cc-switch`) 下载 MSI/EXE → 静默安装（需管理员权限）。非 CLI 工具，安装后通过开始菜单或桌面快捷方式启动。
 
 ---
 

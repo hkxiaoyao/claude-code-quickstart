@@ -84,7 +84,7 @@ ClaudeMd (无依赖)
 ~/.claude/settings.json     # Claude Code 主配置（API Key + env + 权限）
 ~/.claude.json              # Claude Code 初始化标记（hasCompletedOnboarding）
 ~/.claude/CLAUDE.md         # 全局 Claude 工作规范（ClaudeMd 写入）
-$PROFILE                    # PowerShell 配置文件（ccline/cc-switch PATH）
+$PROFILE                    # PowerShell 配置文件（ccline PATH）
 %TEMP%\ClaudeEnvInstaller\  # 安装状态 + 备份目录
 ```
 

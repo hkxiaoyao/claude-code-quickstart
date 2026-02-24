@@ -184,7 +184,7 @@ class InstallState {
 "Ccline"        = @("ClaudeCode")
 "CcSwitch"      = @("ClaudeCode")
 "ClaudeConfig"  = @("ClaudeCode")
-"ClaudeMd"      = @("ClaudeConfig")
+"ClaudeMd"      = @()
 "Mcp"           = @("ClaudeCode")
 "CcgWorkflow"   = @("NodeFnm")
 "CodexCli"      = @("NodeFnm")

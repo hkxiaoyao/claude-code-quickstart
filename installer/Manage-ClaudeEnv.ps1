@@ -552,18 +552,6 @@ function Show-FinalSummary {
         Write-UiInfo "快速开始："
         Write-UiInfo "  claude          - 启动 Claude Code"
         Write-UiInfo "  claude --help   - 查看帮助信息"
-        if ($State.StepResults.ContainsKey("CcSwitch") -and
-            $State.StepResults["CcSwitch"].Status -eq [StepStatus]::Success) {
-            Write-UiInfo "  cc-switch       - Claude Code / Codex / Gemini CLI 全方位辅助工具"
-        }
-        if ($State.StepResults.ContainsKey("CodexCli") -and
-            $State.StepResults["CodexCli"].Status -eq [StepStatus]::Success) {
-            Write-UiInfo "  codex --help    - Codex CLI 帮助"
-        }
-        if ($State.StepResults.ContainsKey("GeminiCli") -and
-            $State.StepResults["GeminiCli"].Status -eq [StepStatus]::Success) {
-            Write-UiInfo "  gemini --help   - Gemini CLI 帮助"
-        }
     } else {
         Write-UiWarn "安装完成，但有 $($Results.Failed) 个步骤失败"
         Write-Host ""
