@@ -144,14 +144,15 @@ function Install-CcgWorkflow {
         Write-UiSuccess "环境检查: Node.js & npm 已就绪"
 
         # ── MCP 快照（安装前）──
-        $settingsPath = "$script:ClaudeDir\settings.json"
+        # mcpServers 配置在 ~/.claude.json，不在 settings.json
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
         $mcpSnapshotBefore = $null
-        if (Test-Path $settingsPath) {
-            $settingsJson = Get-Content $settingsPath -Raw -ErrorAction SilentlyContinue
-            if ($settingsJson) {
-                $settings = $settingsJson | ConvertFrom-Json -ErrorAction SilentlyContinue
-                if ($null -ne $settings -and $null -ne $settings.mcpServers) {
-                    $mcpSnapshotBefore = $settings.mcpServers | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
+        if (Test-Path $claudeJsonPath) {
+            $claudeJsonRaw = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
+            if ($claudeJsonRaw) {
+                $claudeJson = $claudeJsonRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($null -ne $claudeJson -and $claudeJson.ContainsKey("mcpServers")) {
+                    $mcpSnapshotBefore = $claudeJson["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                 }
             }
         }
@@ -187,14 +188,14 @@ function Install-CcgWorkflow {
         Write-UiSuccess "成功部署 CCG 目录结构与配置文件"
 
         # ── MCP 快照（安装后比对）──
-        if ($null -ne $mcpSnapshotBefore -and (Test-Path $settingsPath)) {
-            $settingsJsonAfter = Get-Content $settingsPath -Raw -ErrorAction SilentlyContinue
-            if ($settingsJsonAfter) {
-                $settingsAfter = $settingsJsonAfter | ConvertFrom-Json -ErrorAction SilentlyContinue
-                if ($null -ne $settingsAfter -and $null -ne $settingsAfter.mcpServers) {
-                    $mcpSnapshotAfter = $settingsAfter.mcpServers | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
+        if ($null -ne $mcpSnapshotBefore -and (Test-Path $claudeJsonPath)) {
+            $claudeJsonRawAfter = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
+            if ($claudeJsonRawAfter) {
+                $claudeJsonAfter = $claudeJsonRawAfter | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
+                    $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                     if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                        Write-UiWarn "检测到 settings.json 中的 mcpServers 配置在安装过程中被修改，请手动检查"
+                        Write-UiWarn "检测到 .claude.json 中的 mcpServers 配置在安装过程中被修改，请手动检查"
                     }
                 }
             }
@@ -296,12 +297,13 @@ function Verify-CcgWorkflow {
         }
 
         # ── MCP 保护验证 ──
-        $settingsPath = "$script:ClaudeDir\settings.json"
-        if (Test-Path $settingsPath) {
-            $settingsJson = Get-Content $settingsPath -Raw -ErrorAction SilentlyContinue
-            if ($settingsJson) {
-                $settings = $settingsJson | ConvertFrom-Json -ErrorAction SilentlyContinue
-                if ($null -ne $settings -and $null -ne $settings.mcpServers) {
+        # mcpServers 配置在 ~/.claude.json，不在 settings.json
+        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        if (Test-Path $claudeJsonPath) {
+            $claudeJsonRaw = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
+            if ($claudeJsonRaw) {
+                $claudeJson = $claudeJsonRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($null -ne $claudeJson -and $claudeJson.ContainsKey("mcpServers")) {
                     Write-UiInfo "  - MCP 配置: 未被覆盖 [PASS]"
                 }
                 else {
@@ -309,11 +311,11 @@ function Verify-CcgWorkflow {
                 }
             }
             else {
-                Write-UiInfo "  - MCP 配置: settings.json 为空 [SKIP]"
+                Write-UiInfo "  - MCP 配置: .claude.json 为空 [SKIP]"
             }
         }
         else {
-            Write-UiInfo "  - MCP 配置: settings.json 不存在 [SKIP]"
+            Write-UiInfo "  - MCP 配置: .claude.json 不存在 [SKIP]"
         }
 
         # ── 最终判定 ──
