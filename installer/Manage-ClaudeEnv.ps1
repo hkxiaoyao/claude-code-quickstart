@@ -443,7 +443,7 @@ function Select-AdvancedAction {
     param()
 
     $options = @(
-        "一键安装 - 安装全部 8 个进阶组件"
+        "一键安装 - 安装全部必选进阶组件（不含可选的 Codex/Gemini CLI）"
         "可选安装 - 选择要安装的组件"
     )
 
@@ -651,10 +651,14 @@ function Main {
                     }
                 }
                 else {
-                    # 进阶：一键安装（默认）
+                    # 进阶：一键安装（默认，排除可选步骤）
                     Write-UiInfo "进阶扩展一键安装模式"
                     Write-Host ""
-                    $advancedStepIds = $script:StepGroups["Advanced"].StepIds
+                    $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {
+                        $sid = $_
+                        $stepCfg = $script:StepRegistry | Where-Object { $_.StepId -eq $sid } | Select-Object -First 1
+                        if (-not $stepCfg.IsOptional) { $sid }
+                    })
                     $results = Invoke-GroupedInstall -StepIds $advancedStepIds -State $state
                     if ($results.Total -gt 0) {
                         Show-FinalSummary -State $state -Results $results
@@ -705,12 +709,16 @@ function Main {
                 }
 
                 if ($advChoice -eq 0) {
-                    # 一键安装
+                    # 一键安装（排除可选步骤）
                     Write-Host ""
                     Write-UiInfo "进阶扩展一键安装"
                     Write-Host ""
 
-                    $advancedStepIds = $script:StepGroups["Advanced"].StepIds
+                    $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {
+                        $sid = $_
+                        $stepCfg = $script:StepRegistry | Where-Object { $_.StepId -eq $sid } | Select-Object -First 1
+                        if (-not $stepCfg.IsOptional) { $sid }
+                    })
                     $results = Invoke-GroupedInstall -StepIds $advancedStepIds -State $state
 
                     if ($results.Total -gt 0) {
