@@ -1413,12 +1413,12 @@ function Install-Mcp {
             Write-UiInfo "  - $($server.Name): $status"
         }
 
-        foreach ($serverId in $settingsCredentials.Keys) {
-            foreach ($key in $settingsCredentials[$serverId].Keys) {
+        foreach ($serverId in @($settingsCredentials.Keys)) {
+            foreach ($key in @($settingsCredentials[$serverId].Keys)) {
                 $settingsCredentials[$serverId][$key] = $null
             }
         }
-        foreach ($key in $sharedCredentials.Keys) {
+        foreach ($key in @($sharedCredentials.Keys)) {
             $sharedCredentials[$key] = $null
         }
 
