@@ -85,11 +85,6 @@ $script:ClaudeMdTemplate = @'
 ### 敢于说不
 发现问题直接指出，不妥协于错误方案
 
-### 环境特定（Windows / PowerShell）
-- 不支持 `&&`，使用 `;` 分隔命令
-- 中文路径用引号包裹
-- 管道传参：`"内容" | command` 替代 heredoc
-
 ### 输出设置
 - 中文响应；禁用表情符号；禁止截断输出
 '@
@@ -139,58 +134,76 @@ TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
 ```
 '@
 
-$script:RulesTemplates['ccg-tools.md'] = @'
+$script:RulesTemplates['tools.md'] = @'
 # 工具速查与知识获取
 
 ## 知识获取（强制）
 
 遇到不熟悉的知识，必须联网搜索，严禁猜测：
 
-- 通用搜索：`mcp__exa__web_search_exa` / `WebSearch`
-- 库文档：`mcp___upstash_context7-mcp__resolve-library-id` → `query-docs`
-- 开源项目：`mcp__mcp-deepwiki__deepwiki_fetch`
-
-## 设计图数据获取
-
-当用户明确说根据设计图，并输入 MasterGo 链接时：
-
-- 使用：`mcp__mastergo__mcp__getDsl`
+- 通用搜索：`mcp__exa__web_search_exa`（首选）→ `mcp__tavily__tavily_search`（次选）→ `WebSearch`（兜底）
+  - 深度研究场景：`mcp__tavily__tavily_research`
+  - exa 不可用时自动回退到 tavily
+- 库文档：`mcp__context7__resolve-library-id` → `mcp__context7__query-docs`
+- 开源项目：`mcp__deepwiki__ask_question` / `mcp__deepwiki__read_wiki_structure` / `mcp__deepwiki__read_wiki_contents`
 
 ## 工具速查表
 
+### 代码检索
+
 | 场景 | 推荐工具 |
 |------|----------|
-| 代码语义检索 | `mcp__ace-tool__search_context` |
+| 代码语义检索（首选） | `mcp__ace-tool__search_context` |
+| 混合检索（语义+精确匹配） | `mcp__contextweaver__codebase-retrieval` |
 | 精确字符串/正则 | `Grep` |
 | 文件名匹配 | `Glob` |
-| 代码库探索 | `Task` + `subagent_type=Explore` |
-| 技术方案规划 | `EnterPlanMode` 或 `Task` + `subagent_type=Plan` |
-| 库官方文档 | `mcp___upstash_context7-mcp__query-docs` |
-| 开源项目文档 | `mcp__mcp-deepwiki__deepwiki_fetch` |
-| 联网搜索 | `mcp__exa__web_search_exa` / `WebSearch` |
-| 快捷操作 | Skill（`/commit`、`/debug`、`/review` 等） |
+| 深度代码库探索 | `Task` + `subagent_type=Explore` |
 
-**选择原则**：语义理解用 `ace-tool`，精确匹配用 `Grep`
+### 知识与文档
+
+| 场景 | 推荐工具 |
+|------|----------|
+| 库官方文档 | `mcp__context7__resolve-library-id` → `mcp__context7__query-docs` |
+| GitHub 开源项目 | `mcp__deepwiki__ask_question` / `read_wiki_structure` / `read_wiki_contents` |
+| 联网搜索 | `mcp__exa__web_search_exa` → `mcp__tavily__tavily_search` → `WebSearch` |
+| URL 内容提取 | `mcp__tavily__tavily_extract` |
+| 综合深度研究 | `mcp__tavily__tavily_research` |
+| 网站爬取/结构映射 | `mcp__tavily__tavily_crawl` / `mcp__tavily__tavily_map` |
+
+### 开发辅助
+
+| 场景 | 推荐工具 |
+|------|----------|
+| 技术方案规划 | `EnterPlanMode` 或 `Task` + `subagent_type=Plan` |
+
+### 专项工具（按需使用）
+
+| 场景 | 工具类别 |
+|------|----------|
+| 设计图解析 | `mcp__mastergo__*`（getDsl / getComponentLink / getMeta / getComponentGenerator） |
+| 浏览器自动化 | `mcp__playwright__browser_*`（navigate / click / snapshot / screenshot 等） |
+| Chrome 调试 | `mcp__chrome-devtools__*` |
+
+**选择原则**：语义理解用 `ace-tool`，精确匹配用 `Grep`，联网搜索优先 `exa`
 '@
 
-$script:RulesTemplates['ccg-workflow.md'] = @'
+$script:RulesTemplates['workflow.md'] = @'
 # 工作流增强（CCG）
 
 ## 上下文检索（生成代码前执行）
 
-**工具**：`mcp__ace-tool__search_context`
+**工具优先级**：
+
+1. `mcp__ace-tool__search_context`（首选）- 纯语义搜索，适合开放性探索
+2. `mcp__contextweaver__codebase-retrieval`（次选）- 混合引擎（语义+精确匹配），适合已知符号名 + 语义理解结合
+3. `Glob` + `Grep`（回退）- MCP 不可用时的兜底方案
 
 **检索策略**：
 
 - 使用自然语言构建语义查询（Where/What/How）
 - 完整性检查：获取相关类、函数、变量的完整定义与签名
 - 若上下文不足，递归检索直至信息完整
-
-## Prompt 增强（复杂任务推荐）
-
-**工具**：`mcp__ace-tool__enhance_prompt`
-
-**触发**：用户使用 `-enhance` 标记，或任务模糊需要结构化
+- ContextWeaver 的 `technical_terms` 参数适合精确符号过滤
 
 ## 需求对齐
 
@@ -263,8 +276,8 @@ function Test-ClaudeMdInstalled {
         # 每个 rules 文件的关键标识（与 Verify 对齐）
         $rulesValidation = @{
             'ccg-multimodel.md' = '# 多模型协作'
-            'ccg-tools.md'      = '# 工具速查与知识获取'
-            'ccg-workflow.md'   = '# 工作流增强'
+            'tools.md'          = '# 工具速查与知识获取'
+            'workflow.md'       = '# 工作流增强'
         }
 
         foreach ($fileName in $rulesValidation.Keys) {
@@ -339,6 +352,16 @@ function Install-ClaudeMd {
         if (-not (Test-Path $rulesDir)) {
             New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
             Write-UiInfo "已创建目录: $rulesDir"
+        }
+
+        # 清理旧文件名（避免提示词臃肿）
+        $oldFileNames = @('ccg-workflow.md', 'ccg-tools.md')
+        foreach ($oldFile in $oldFileNames) {
+            $oldPath = Join-Path $rulesDir $oldFile
+            if (Test-Path $oldPath) {
+                Remove-Item $oldPath -Force
+                Write-UiInfo "已清理旧文件: $oldFile"
+            }
         }
 
         foreach ($fileName in $script:RulesTemplates.Keys) {
@@ -435,8 +458,8 @@ function Verify-ClaudeMd {
         # 每个 rules 文件的关键标识
         $rulesValidation = @{
             'ccg-multimodel.md' = '# 多模型协作'
-            'ccg-tools.md'      = '# 工具速查与知识获取'
-            'ccg-workflow.md'   = '# 工作流增强'
+            'tools.md'          = '# 工具速查与知识获取'
+            'workflow.md'       = '# 工作流增强'
         }
 
         foreach ($fileName in $rulesValidation.Keys) {
