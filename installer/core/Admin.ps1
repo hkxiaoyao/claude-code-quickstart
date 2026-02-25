@@ -31,8 +31,6 @@ function Invoke-SelfElevated {
     要重新运行的脚本路径（默认 $PSCommandPath）
     .PARAMETER ArgumentList
     传递给重新运行脚本的额外参数
-    .PARAMETER StateFilePath
-    状态文件路径（用于 --resume，传递给重新运行的脚本）
     .DESCRIPTION
     通过 Start-Process pwsh/powershell -Verb RunAs 实现提权。
     提权后原进程退出，新进程继承 ScriptPath + ArgumentList。
@@ -40,9 +38,7 @@ function Invoke-SelfElevated {
     param(
         [string]$ScriptPath = $PSCommandPath,
 
-        [string[]]$ArgumentList = @(),
-
-        [string]$StateFilePath
+        [string[]]$ArgumentList = @()
     )
 
     if (Test-IsAdministrator) {
@@ -54,10 +50,6 @@ function Invoke-SelfElevated {
 
     # 构造传递给提权进程的参数
     $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$ScriptPath`"")
-
-    if ($StateFilePath) {
-        $args += "--resume", "`"$StateFilePath`""
-    }
 
     foreach ($a in $ArgumentList) {
         $args += $a
@@ -91,8 +83,6 @@ function Assert-StepPrivilege {
     是否必须管理员（$true = 硬性要求，$false = 软性建议）
     .PARAMETER ScriptPath
     提权时重新运行的脚本路径
-    .PARAMETER StateFilePath
-    状态文件路径（用于 --resume）
     .RETURNS
     $true  = 权限满足，可继续
     $false = 权限不足且用户选择跳过
@@ -103,9 +93,7 @@ function Assert-StepPrivilege {
 
         [bool]$RequiresAdmin = $true,
 
-        [string]$ScriptPath = $PSCommandPath,
-
-        [string]$StateFilePath
+        [string]$ScriptPath = $PSCommandPath
     )
 
     if (Test-IsAdministrator) {
@@ -119,7 +107,7 @@ function Assert-StepPrivilege {
         $key = Read-Host
         if ($key -match "^[Yy]?$") {
             # 用户同意提权：重启脚本，当前进程退出
-            $elevated = Invoke-SelfElevated -ScriptPath $ScriptPath -StateFilePath $StateFilePath
+            $elevated = Invoke-SelfElevated -ScriptPath $ScriptPath
             # Invoke-SelfElevated 成功时已 exit 0；走到这里说明提权失败
             if (-not $elevated) {
                 Write-Host "✗ 无法获取管理员权限，步骤 [$StepName] 已跳过" -ForegroundColor Red

@@ -3,7 +3,6 @@
 # 功能: 两级分组安装（基础环境 / 进阶扩展），支持一键、多选、断点续传
 
 param(
-    [switch]$Resume,
     [switch]$ListSteps,
     [ValidateSet("Basic", "Advanced", "")]
     [string]$Group = "",
@@ -102,10 +101,8 @@ function Get-GroupStatus {
             $InformationPreference = 'SilentlyContinue'
             $WarningPreference = 'SilentlyContinue'
 
-            # 调用 TestFunction 并抑制所有输出流（不使用 Out-Null 以保留返回值）
-            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null *>&1 |
-                Where-Object { $_ -isnot [string] -and $_ -isnot [System.Management.Automation.InformationRecord] } |
-                Select-Object -First 1
+            # 调用 TestFunction 并抑制所有输出流（移除 *>&1 避免 WarningRecord/ErrorRecord 污染）
+            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
 
             # 恢复原始设置
             $VerbosePreference = $originalVerbose
@@ -380,10 +377,8 @@ function Show-AdvancedSelectMenu {
             $InformationPreference = 'SilentlyContinue'
             $WarningPreference = 'SilentlyContinue'
 
-            # 调用 TestFunction 并抑制所有输出流（不使用 Out-Null 以保留返回值）
-            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null *>&1 |
-                Where-Object { $_ -isnot [string] -and $_ -isnot [System.Management.Automation.InformationRecord] } |
-                Select-Object -First 1
+            # 调用 TestFunction 并抑制所有输出流（移除 *>&1 避免 WarningRecord/ErrorRecord 污染）
+            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
 
             # 恢复原始设置
             $VerbosePreference = $originalVerbose
@@ -579,14 +574,12 @@ function Show-FinalSummary {
             }
         }
         Write-Host ""
-        Write-UiInfo "使用 -Resume 参数重试失败步骤："
-        Write-UiInfo "  pwsh -File `"$PSCommandPath`" -Resume"
+        Write-UiInfo "重新运行安装器可重试失败步骤"
     }
 
     Write-Host ""
 
     $State.IsCompleted = ($Results.Failed -eq 0)
-    $null = Save-InstallState -State $State
 }
 
 # ─── 主函数 ──────────────────────────────────────────────────────────────────
@@ -607,13 +600,8 @@ function Main {
         Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
         Write-Host ""
 
-        # 加载安装状态
-        $state = Load-InstallState
-
-        if ($Resume) {
-            $state = Resume-Installation
-            Write-Host ""
-        }
+        # 创建新的安装状态（纯内存，不持久化）
+        $state = [InstallState]::new()
 
         # ── 参数组合校验
         if ($Mode -ne "" -and $Group -eq "") {

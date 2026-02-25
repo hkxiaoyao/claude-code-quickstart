@@ -4,7 +4,6 @@
 # 功能: PS7+ 主安装脚本，提供一键和分阶段安装模式，支持断点续传
 
 param(
-    [switch]$Resume,
     [switch]$OneClick,
     [switch]$Staged,
     [switch]$ListSteps,
@@ -514,15 +513,13 @@ function Show-FinalSummary {
             }
         }
         Write-Host ""
-        Write-UiInfo "使用 -Resume 参数重试失败步骤："
-        Write-UiInfo "  pwsh -File `"$PSCommandPath`" -Resume"
+        Write-UiInfo "重新运行安装器可重试失败步骤"
     }
 
     Write-Host ""
 
     # 标记安装完成状态
     $State.IsCompleted = ($Results.Failed -eq 0)
-    $null = Save-InstallState -State $State
 }
 
 # ─── 主函数 ──────────────────────────────────────────────────────────────────
@@ -548,7 +545,7 @@ function Main {
             Write-UiInfo "💡 新版脚本优势："
             Write-UiInfo "  • 分组安装（基础环境 + 进阶扩展）"
             Write-UiInfo "  • 更好的用户体验"
-            Write-UiInfo "  • 完整的断点续传支持（-Resume）"
+            Write-UiInfo "  • 实时检测，无状态漂移问题"
             Write-Host ""
             Write-UiInfo "🔧 如需继续（仅供开发/测试）："
             Write-UiInfo "  设置环境变量：`$env:CCQ_ALLOW_LEGACY_INSTALL = `"true`""
@@ -574,13 +571,8 @@ function Main {
         Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
         Write-Host ""
 
-        # ── 加载安装状态（支持断点续传）
-        $state = Load-InstallState
-
-        if ($Resume) {
-            $state = Resume-Installation
-            Write-Host ""
-        }
+        # ── 创建新的安装状态（纯内存，不持久化）
+        $state = [InstallState]::new()
 
         # ── 确定安装模式
         $installMode = ""
@@ -591,10 +583,6 @@ function Main {
         } elseif ($Staged) {
             $installMode = "Staged"
             Write-UiInfo "使用命令行参数：分阶段安装模式"
-        } elseif ($Resume -and $state.Mode -ne "") {
-            # 恢复模式复用上次的安装模式
-            $installMode = $state.Mode
-            Write-UiInfo "恢复安装，沿用上次模式: $installMode"
         } else {
             $installMode = Select-InstallMode
         }

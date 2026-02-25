@@ -146,7 +146,7 @@ function Install-ClaudeCode {
             }
             Write-UiInfo "💡 这可能是因为 fnm 环境变量尚未在当前会话中生效"
             Write-UiInfo "💡 请尝试以下操作之一："
-            Write-UiInfo "   1. 重新启动 PowerShell 后运行: pwsh -File installer/Install-ClaudeEnv.ps1 -Resume"
+            Write-UiInfo "   1. 重新启动 PowerShell 后重新运行安装器"
             Write-UiInfo "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器"
             throw "Node.js 未安装或不可用，请先完成 NodeFnm 步骤并重新启动 PowerShell"
         }

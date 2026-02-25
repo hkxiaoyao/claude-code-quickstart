@@ -300,7 +300,7 @@ function Install-NodeFnm {
                 # fnm use 失败时提供友好的中文指引
                 $friendlyMsg = "Node.js 版本激活失败。"
                 $friendlyMsg += "`n  原因: fnm 环境变量未正确初始化"
-                $friendlyMsg += "`n  建议: 关闭当前终端，打开新的 PowerShell 7 窗口后重新运行安装程序（-Resume）"
+                $friendlyMsg += "`n  建议: 关闭当前终端，打开新的 PowerShell 7 窗口后重新运行安装程序"
                 $friendlyMsg += "`n  或手动执行: fnm env --use-on-cd | Out-String | Invoke-Expression; fnm use lts-latest"
                 throw $friendlyMsg
             }
