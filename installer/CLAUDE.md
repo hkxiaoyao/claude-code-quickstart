@@ -48,7 +48,6 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `-Resume` | switch | 从上次失败点继续（加载 `install-state.json`） |
 | `-OneClick` | switch | 跳过模式选择，直接一键安装所有步骤 |
 | `-Staged` | switch | 跳过模式选择，直接进入分阶段选择菜单 |
 | `-ListSteps` | switch | 列出所有注册步骤及依赖后退出 |
@@ -108,20 +107,20 @@ $script:StepGroups = Get-StepGroups  # Manage-ClaudeEnv.ps1 使用
 | `Invoke-StagedMode` | 单选迭代式分阶段安装（循环选择 → 依赖检查 → 执行 → 返回） |
 | `Invoke-AllSteps` | 拓扑排序 → 依赖检查 → `Invoke-StepLifecycle`（OneClick 模式使用） |
 | `Show-FinalSummary` | 调用 `Show-InstallSummary` 展示结果表格 |
-| `Main` | 总入口；处理 `-ListSteps` / `-Resume` / 模式选择 |
+| `Main` | 总入口；处理 `-ListSteps` / 模式选择 |
 
 ### 执行流
 
 ```
 Main()
   ├── [if -ListSteps] Show-StepList → exit
-  ├── Load-InstallState 或 Resume-Installation
+  ├── 创建新的安装状态（纯内存，不持久化）
   ├── Select-InstallMode（或读取参数）
   ├── [if OneClick]
   │   ├── Invoke-AllSteps（全部步骤）
   │   │   ├── Get-ExecutionOrder  # 拓扑排序
   │   │   └── foreach stepId:
-  │   │       ├── Test-StepDependencies  # 前置依赖检查
+  │   │       ├── Test-StepDependencies  # 前置依赖检查（实时检测）
   │   │       └── Invoke-StepLifecycle   # Test → Install → Verify
   │   └── Show-FinalSummary（无 Logo，简化快速开始）
   └── [if Staged]
@@ -129,7 +128,7 @@ Main()
           ├── 构建步骤列表（带状态标签 PASS/FAIL/LOCK/空）
           ├── Show-SingleSelectMenu → 用户选择一个步骤
           ├── Esc → 退出循环 → Show-FinalSummary
-          ├── Test-StepDependencies → 依赖检查
+          ├── Test-StepDependencies → 依赖检查（实时检测）
           ├── 依赖未满足 → 提示 → 回到选择
           └── Invoke-StepLifecycle → 展示结果 → 回到选择
 ```
@@ -155,7 +154,6 @@ Main()
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `-Resume` | switch | 从上次失败点继续 |
 | `-ListSteps` | switch | 列出所有步骤（按分组显示）后退出 |
 | `-Group` | string | 指定分组：`Basic`（基础环境）或 `Advanced`（进阶扩展） |
 | `-Mode` | string | 进阶扩展安装模式：`OneClick` 或 `Select` |
@@ -186,8 +184,7 @@ Main()
 Main()
   ├── [if -ListSteps] Show-StepList（按分组显示） → exit
   ├── Show-AsciiBanner
-  ├── Load-InstallState
-  ├── [if -Resume] Resume-Installation
+  ├── 创建新的安装状态（纯内存，不持久化）
   │
   ├── [CLI 模式]（-Group 参数）
   │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary（无 Logo，简化快速开始）

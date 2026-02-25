@@ -28,12 +28,23 @@ function Test-CodexCliInstalled {
     }
 
     try {
-        if (-not (Test-CommandAvailable -Command "codex")) {
+        # 使用 -ReturnDetails 一次性获取命令可用性和版本输出，避免重复执行
+        $details = Test-CommandAvailable -Command "codex" -ReturnDetails
+
+        if (-not $details.Available) {
             $result.Message = "codex 命令不可用"
             return $result
         }
 
-        $version = Get-CommandVersion -Command "codex"
+        # 从 details.Output 中提取版本号，避免再次执行 codex --version
+        $version = ""
+        if ($details.Output -match '(\d+\.[\d\.]+[\w\-]*)') {
+            $version = $matches[1]
+        } elseif ($details.Output) {
+            # 如果没有匹配到标准版本格式，返回第一行
+            $version = ($details.Output -split "`n")[0].Trim()
+        }
+
         if ([string]::IsNullOrWhiteSpace($version)) {
             $result.Message = "无法获取 codex 版本信息"
             return $result

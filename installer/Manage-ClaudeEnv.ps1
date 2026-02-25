@@ -164,10 +164,25 @@ function Get-DependencyClosure {
 
     # 不在此处过滤已安装步骤，避免与 Test-StepDependencies 的状态判定冲突
     # 已安装步骤由 Invoke-StepLifecycle 的 SkipIfInstalled 机制自动处理
-    $finalPlan = Get-ExecutionOrder -StepIds @($allRequired)
+
+    # 安全地将 HashSet 转换为数组
+    $allRequiredArray = @()
+    if ($allRequired.Count -gt 0) {
+        $allRequiredArray = @($allRequired)
+    }
+
+    # 强制类型声明确保 $finalPlan 始终是数组
+    [string[]]$finalPlan = if ($allRequiredArray.Count -gt 0) {
+        Get-ExecutionOrder -StepIds $allRequiredArray
+    } else {
+        @()
+    }
 
     # 识别自动补齐的依赖
-    $autoAdded = @($finalPlan | Where-Object { $_ -notin $SelectedStepIds })
+    [string[]]$autoAdded = @()
+    if ($finalPlan -and $finalPlan.Count -gt 0) {
+        $autoAdded = @($finalPlan | Where-Object { $_ -notin $SelectedStepIds })
+    }
 
     return @{
         OriginalSelection = $SelectedStepIds
@@ -197,7 +212,7 @@ function Show-ExecutionPlan {
 
     Write-Host ""
 
-    if ($AutoAdded.Count -gt 0) {
+    if ($AutoAdded -and $AutoAdded.Count -gt 0) {
         Write-UiWarn "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
         foreach ($stepId in $AutoAdded) {
             $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
@@ -215,7 +230,7 @@ function Show-ExecutionPlan {
         $index++
         $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
         $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-        $tag = if ($AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
+        $tag = if ($AutoAdded -and $AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
         Write-UiInfo "  $index. $name $tag"
     }
 
@@ -249,7 +264,7 @@ function Invoke-GroupedInstall {
     # 计算依赖闭包
     $closure = Get-DependencyClosure -SelectedStepIds $StepIds
 
-    if ($closure.FinalPlan.Count -eq 0) {
+    if (-not $closure.FinalPlan -or $closure.FinalPlan.Count -eq 0) {
         Write-Host ""
         Write-UiSuccess "所有选定步骤已安装，无需操作"
         return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
@@ -297,7 +312,7 @@ function Invoke-GroupedInstall {
         # 检查前置依赖
         $depCheck = Test-StepDependencies -StepId $stepId -State $State
         if (-not $depCheck.CanExecute) {
-            if ($depCheck.FailedDependencies.Count -gt 0) {
+            if ($depCheck.FailedDependencies -and $depCheck.FailedDependencies.Count -gt 0) {
                 Write-UiError "前置依赖失败，跳过此步骤: $($depCheck.FailedDependencies -join ', ')"
             } else {
                 Write-UiWarn "前置依赖未完成，跳过此步骤: $($depCheck.MissingDependencies -join ', ')"
@@ -411,7 +426,8 @@ function Show-AdvancedSelectMenu {
         -Options $options `
         -DefaultSelected $defaultSelected)
 
-    if ($selectedIndices.Count -eq 0) {
+    # 安全的空值检查：处理 $null 或空数组
+    if (-not $selectedIndices -or $selectedIndices.Count -eq 0) {
         return @()
     }
 
@@ -486,7 +502,7 @@ function Show-StepList {
             Write-UiInfo "  $stepIndex. $tag $($step.StepName)"
             Write-Host "       $($step.Description)" -ForegroundColor Gray
             $deps = (Get-StepDependencies)[$stepId]
-            Write-Host "       依赖: $(if ($deps.Count -eq 0) { '无' } else { $deps -join ', ' })" -ForegroundColor Gray
+            Write-Host "       依赖: $(if (-not $deps -or $deps.Count -eq 0) { '无' } else { $deps -join ', ' })" -ForegroundColor Gray
             Write-Host ""
         }
     }
@@ -540,7 +556,7 @@ function Show-FinalSummary {
         }
     }
 
-    if ($summaryItems.Count -gt 0) {
+    if ($summaryItems -and $summaryItems.Count -gt 0) {
         Show-InstallSummary -Items $summaryItems
     }
 
@@ -633,7 +649,7 @@ function Main {
                     Write-UiInfo "进阶扩展可选安装模式"
                     Write-Host ""
                     $selectedIds = @(Show-AdvancedSelectMenu)
-                    if ($selectedIds.Count -gt 0) {
+                    if ($selectedIds -and $selectedIds.Count -gt 0) {
                         $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state
                         if ($results.Total -gt 0) {
                             Show-FinalSummary -State $state -Results $results
@@ -726,7 +742,7 @@ function Main {
                     Write-Host ""
                     $selectedIds = @(Show-AdvancedSelectMenu)
 
-                    if ($selectedIds.Count -gt 0) {
+                    if ($selectedIds -and $selectedIds.Count -gt 0) {
                         $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state
 
                         if ($results.Total -gt 0) {

@@ -2,7 +2,7 @@
 
 > 生成时间：2026-02-23 | 覆盖率：92% (24/26 文件)
 
-Windows 10/11 平台的 **Claude Code 开发环境自动化安装器**。双阶段 PowerShell 架构，PS 5.1 引导 + PS 7 主安装，12 步依赖链，支持断点续传。
+Windows 10/11 平台的 **Claude Code 开发环境自动化安装器**。双阶段 PowerShell 架构，PS 5.1 引导 + PS 7 主安装，12 步依赖链，实时检测机制。
 
 ---
 
@@ -72,7 +72,7 @@ ClaudeMd (无依赖)
 |------|------|
 | **HC-12** | ApiKey 管 API 连接：`env.ANTHROPIC_AUTH_TOKEN` + `env.ANTHROPIC_BASE_URL` + `modelMapping`；ClaudeConfig 管常用配置：语言、模型、权限、超时、归因等（仅补缺失，不覆盖）；供应商支持 智谱GLM / MiniMax / Kimi / 自定义 |
 | **HC-4** | `$PROFILE` 编辑使用标记块 `# >>> Claude Code Quickstart >>>` / `# <<< Claude Code Quickstart <<<` |
-| **HC-3** | 状态文件：`%TEMP%\ClaudeEnvInstaller\install-state.json`（支持旧 StepId 自动迁移） |
+| **HC-3** | 实时检测：每次运行都实时检测组件状态，无持久化状态文件 |
 | **SC-3** | 状态指示器：`[PASS]` / `[FAIL]` / `[SKIP]` |
 | **SC-5** | 错误展示：友好信息 + 按 `D` 展开技术详情 |
 
@@ -85,7 +85,7 @@ ClaudeMd (无依赖)
 ~/.claude.json              # Claude Code 初始化标记（hasCompletedOnboarding）
 ~/.claude/CLAUDE.md         # 全局 Claude 工作规范（ClaudeMd 写入）
 $PROFILE                    # PowerShell 配置文件（ccline PATH）
-%TEMP%\ClaudeEnvInstaller\  # 安装状态 + 备份目录
+%TEMP%\ClaudeEnvInstaller\  # 备份目录
 ```
 
 ---
@@ -96,8 +96,8 @@ $PROFILE                    # PowerShell 配置文件（ccline PATH）
 # 验证全部文件语法
 pwsh -File test-syntax.ps1
 
-# 断点续传安装
-pwsh -File installer/Manage-ClaudeEnv.ps1 -Resume
+# 重新运行安装（实时检测，自动跳过已安装组件）
+pwsh -File installer/Manage-ClaudeEnv.ps1
 
 # 查看步骤列表
 pwsh -File installer/Manage-ClaudeEnv.ps1 -ListSteps

@@ -25,8 +25,10 @@ function Test-CclineInstalled {
     param()
 
     try {
-        # 检查 ccline 命令是否可用
-        if (-not (Test-CommandAvailable -Command "ccline")) {
+        # 使用 -ReturnDetails 一次性获取命令可用性和版本输出，避免重复执行
+        $details = Test-CommandAvailable -Command "ccline" -ReturnDetails
+
+        if (-not $details.Available) {
             return $false
         }
 
@@ -37,8 +39,17 @@ function Test-CclineInstalled {
                 if ($settings.statusLine -and
                     $settings.statusLine.type -eq "command" -and
                     $settings.statusLine.command -eq "ccline") {
+
+                    # 从 details.Output 中提取版本号，避免再次执行 ccline --version
+                    $version = ""
+                    if ($details.Output -match '(\d+\.[\d\.]+[\w\-]*)') {
+                        $version = $matches[1]
+                    } elseif ($details.Output) {
+                        $version = ($details.Output -split "`n")[0].Trim()
+                    }
+
                     Write-Host "检测到已安装和配置的 CCometixLine:" -ForegroundColor Green
-                    Write-Host "  版本: $(Get-CommandVersion -Command 'ccline')" -ForegroundColor Gray
+                    Write-Host "  版本: $version" -ForegroundColor Gray
                     Write-Host "  状态栏: 已启用" -ForegroundColor Gray
                     return $true
                 }
@@ -48,9 +59,7 @@ function Test-CclineInstalled {
         }
 
         # ccline 已安装但未配置
-        if (Test-CommandAvailable -Command "ccline") {
-            Write-Host "CCometixLine 已安装但未配置状态栏" -ForegroundColor Yellow
-        }
+        Write-Host "CCometixLine 已安装但未配置状态栏" -ForegroundColor Yellow
 
         return $false
 

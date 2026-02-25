@@ -192,7 +192,7 @@ function Invoke-StagedMode {
             $depIds = @($dependencies[$stepId])
         }
 
-        if ($depIds.Count -gt 0) {
+        if ($depIds -and $depIds.Count -gt 0) {
             foreach ($depId in $depIds) {
                 $depStep = $script:StepRegistry | Where-Object { $_.StepId -eq $depId } | Select-Object -First 1
                 $depName = if ($depStep) { $depStep.StepName } else { $depId }
@@ -300,7 +300,8 @@ function Show-StepList {
         $tag = if ($step.IsOptional) { "[可选]" } else { "[必选]" }
         Write-UiInfo "  $index. $tag $($step.StepName)"
         Write-Host "       $($step.Description)" -ForegroundColor Gray
-        Write-Host "       依赖: $(if ((Get-StepDependencies)[$step.StepId].Count -eq 0) { '无' } else { (Get-StepDependencies)[$step.StepId] -join ', ' })" -ForegroundColor Gray
+        $stepDeps = (Get-StepDependencies)[$step.StepId]
+        Write-Host "       依赖: $(if (-not $stepDeps -or $stepDeps.Count -eq 0) { '无' } else { $stepDeps -join ', ' })" -ForegroundColor Gray
         Write-Host ""
     }
 }
@@ -340,8 +341,8 @@ function Invoke-AllSteps {
     }
 
     # 分别对必选和可选步骤进行拓扑排序
-    $orderedMandatoryIds = if ($mandatoryIds.Count -gt 0) { Get-ExecutionOrder -StepIds $mandatoryIds } else { @() }
-    $orderedOptionalIds = if ($optionalIds.Count -gt 0) { Get-ExecutionOrder -StepIds $optionalIds } else { @() }
+    $orderedMandatoryIds = if ($mandatoryIds -and $mandatoryIds.Count -gt 0) { Get-ExecutionOrder -StepIds $mandatoryIds } else { @() }
+    $orderedOptionalIds = if ($optionalIds -and $optionalIds.Count -gt 0) { Get-ExecutionOrder -StepIds $optionalIds } else { @() }
 
     # 合并：必选步骤在前，可选步骤在后
     $orderedStepIds = @($orderedMandatoryIds + $orderedOptionalIds)
@@ -378,7 +379,7 @@ function Invoke-AllSteps {
         $depCheck = Test-StepDependencies -StepId $stepId -State $State
 
         if (-not $depCheck.CanExecute) {
-            if ($depCheck.FailedDependencies.Count -gt 0) {
+            if ($depCheck.FailedDependencies -and $depCheck.FailedDependencies.Count -gt 0) {
                 Write-UiError "前置依赖失败，跳过此步骤: $($depCheck.FailedDependencies -join ', ')"
             } else {
                 Write-UiWarn "前置依赖未完成，跳过此步骤: $($depCheck.MissingDependencies -join ', ')"
@@ -476,7 +477,7 @@ function Show-FinalSummary {
         }
     }
 
-    if ($summaryItems.Count -gt 0) {
+    if ($summaryItems -and $summaryItems.Count -gt 0) {
         Show-InstallSummary -Items $summaryItems
     }
 

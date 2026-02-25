@@ -1,5 +1,7 @@
 - python安装，ContextWeaver MCP安装，其他MCP测试
-- 用户级提示词中有关ace的部分需要调整，还有其他MCP的调用
+- 检测机制重构
+- 去掉CLAUDE.md的备份
+- fnm与node脚本检测是否已有node、nvm
 - codex gemini测试
 - 更新脚本
 - 一键卸载

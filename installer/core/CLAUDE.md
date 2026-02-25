@@ -112,8 +112,8 @@ $script:BackupDirectory = "$env:TEMP\ClaudeEnvInstaller\Backups"
 | 函数 | 签名 | 返回 |
 |------|------|------|
 | `Test-IsAdministrator` | — | `$true/$false` |
-| `Invoke-SelfElevated` | `-ScriptPath -ArgumentList [-StateFilePath]` | void（重启进程） |
-| `Assert-StepPrivilege` | `-StepName [-RequiresAdmin=$true] [-ScriptPath] [-StateFilePath]` | **`$true/$false`（布尔，非对象）** |
+| `Invoke-SelfElevated` | `-ScriptPath -ArgumentList` | void（重启进程） |
+| `Assert-StepPrivilege` | `-StepName [-RequiresAdmin=$true] [-ScriptPath]` | **`$true/$false`（布尔，非对象）** |
 
 > **关键**：`Assert-StepPrivilege` 返回 **布尔值**，调用方直接用 `if (-not $privilegeResult)` 判断，不能用 `.Success`。
 
@@ -164,13 +164,11 @@ class StepResult {
 }
 
 class InstallState {
-    [string]$Version          # "1.0"
-    [datetime]$StartTime; [datetime]$LastUpdateTime
-    [string]$Mode             # "OneClick" | "Staged"
-    [hashtable]$StepResults   # key = StepId
+    [datetime]$StartTime
+    [string]$Mode             # "OneClick" | "Staged" | "Manage-Basic" | "Manage-Advanced"
+    [hashtable]$StepResults   # key = StepId（仅本次会话内的结果）
     [hashtable]$GlobalData
     [string]$CurrentStep; [bool]$IsCompleted
-    [string]$InstallationId   # GUID
 }
 ```
 
@@ -195,13 +193,11 @@ class InstallState {
 
 | 函数 | 职责 |
 |------|------|
-| `Save-InstallState / Load-InstallState` | JSON 持久化（原子写入），Load 含旧 StepId 自动迁移 |
-| `Resume-Installation` | 加载状态并显示进度摘要 |
-| `Invoke-StepLifecycle` | 执行 Test → Install → Verify 三阶段 |
-| `Test-StepDependencies` | 检查前置依赖是否 Success/Skipped |
+| `Invoke-StepLifecycle` | 执行 Test → Install → Verify 三阶段（完全基于实时检测） |
+| `Test-StepDependencies` | 检查前置依赖（实时检测 + 会话状态）|
 | `Get-ExecutionOrder` | Kahn 拓扑排序 + Registry Order 字段 tie-break |
 
-> **注意**：回滚功能已移除，安装失败时仅记录状态，用户可使用 `-Resume` 重试。
+> **重要变更**：移除了所有持久化函数（`Save-InstallState`、`Load-InstallState`、`Resume-Installation`、`Clear-InstallState`），采用纯内存状态管理 + 实时检测机制。
 
 ### `Invoke-StepLifecycle` 兼容性
 
@@ -219,8 +215,10 @@ $success = if ($result -is [bool]) { $result }
            else { $false }
 ```
 
-### 状态文件路径
+### 实时检测机制
 
-```powershell
-$script:StateFilePath = "$env:TEMP\ClaudeEnvInstaller\install-state.json"
-```
+**核心原则**：每次运行都实时检测组件状态，不依赖缓存的历史记录。
+
+- `Invoke-StepLifecycle`：每次都执行 `Test` 函数检测当前环境
+- `Test-StepDependencies`：优先检查本次会话内的失败状态（阻止执行），然后实时调用依赖的 `Test` 函数检测是否真的已安装
+- 已安装的组件自动跳过，无需手动管理状态文件

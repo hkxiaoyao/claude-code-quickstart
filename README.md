@@ -10,7 +10,7 @@
 
 **Claude Code Quickstart** — Windows 平台的 Claude Code 开发环境自动化安装器
 
-一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，支持断点续传**。
+一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
 
 </div>
 
@@ -22,7 +22,7 @@
 - **双阶段架构**：PS 5.1 引导脚本 → PS 7 主安装脚本，兼容未升级 PowerShell 的系统
 - **单文件分发**：支持构建为独立可执行的单文件脚本，无需携带整个源码目录
 - **依赖自动排序**：步骤按拓扑依赖顺序执行，无需手动关心安装顺序
-- **断点续传**：安装中途失败或中断后，使用 `-Resume` 从断点继续，无需重头再来
+- **实时检测**：每次运行都实时检测组件状态，已安装组件自动跳过，无状态漂移问题
 - **两种安装模式**：一键安装全部组件 / 分阶段手动选择需要的组件
 - **国内 AI 供应商适配**：支持智谱 GLM、MiniMax、Kimi（月之暗面），开箱即用
 - **智能命令验证**：验证命令实际可执行性，避免 PATH 记录存在但文件缺失的误报
@@ -148,17 +148,19 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 - **基础环境**：Node.js、Git、Claude Code、API Key — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
-### 断点续传
+### 重新运行
+
+如果安装过程中遇到失败，直接重新运行安装器即可：
 
 ```powershell
 # 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
 # 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Resume
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
-从上次失败或中断的步骤继续，已成功的步骤自动跳过。Manage 脚本完整支持断点续传功能。
+安装器会实时检测所有组件状态，已安装的组件自动跳过，只安装缺失的部分。
 
 ### 查看步骤列表
 
@@ -313,21 +315,21 @@ gemini --help
 
 **Q：安装中途失败了怎么办？**
 
-安装状态保存在 `%TEMP%\ClaudeEnvInstaller\install-state.json`，使用 `-Resume` 参数继续：
+直接重新运行安装器即可：
 
 ```powershell
 # 如果使用云端执行，需要先下载脚本到本地
 Invoke-RestMethod -Uri "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1" -OutFile "Manage-ClaudeEnv.built.ps1"
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
 # 或使用本地单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Resume
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
 # 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Resume
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
-> **提示**：步骤文件和函数名采用语义化命名。旧版状态文件会自动迁移，用户无需手动操作。安装失败时使用 `-Resume` 重试失败步骤即可。
+> **提示**：安装器采用实时检测机制，每次运行都会检测所有组件的当前状态。已安装的组件会自动跳过，只安装缺失的部分，无需担心重复安装。
 
 **Q：想重新配置 API Key？**
 

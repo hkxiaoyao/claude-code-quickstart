@@ -368,7 +368,9 @@ function Get-ExecutionOrder {
         $remaining = @($remaining | Where-Object { $_ -ne $next })
     }
 
-    return $ordered
+    # 使用 , 操作符防止 PowerShell 自动解包单元素数组
+    # 这确保即使只有一个元素，返回值仍然是数组类型
+    return ,$ordered
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
