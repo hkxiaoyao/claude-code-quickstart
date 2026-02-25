@@ -17,6 +17,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# ─── PS 版本运行时拦截（#Requires 对 irm|iex 无效，需运行时二次校验）────────
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Host ""
+    Write-Host "  [ERROR] Manage-ClaudeEnv.ps1 需要 PowerShell 7.0 或更高版本" -ForegroundColor Red
+    Write-Host "  当前版本: PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  解决方案：" -ForegroundColor Yellow
+    Write-Host "    1. 安装 PowerShell 7:  winget install Microsoft.PowerShell" -ForegroundColor White
+    Write-Host "    2. 使用 pwsh 运行:     pwsh -File Manage-ClaudeEnv.ps1" -ForegroundColor White
+    Write-Host ""
+    exit 1
+}
+
 $script:InstallerRoot = $PSScriptRoot
 
 # ─── Dot-source 核心模块 ────────────────────────────────────────────────────
