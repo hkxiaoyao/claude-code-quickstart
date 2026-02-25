@@ -265,6 +265,9 @@ function Get-LatestCcSwitchRelease {
     try {
         Write-Host "  正在获取 GitHub Release 信息..." -ForegroundColor Gray
 
+        # 强制使用 TLS 1.2+（GitHub API 要求，防止 PS 5.1 默认 TLS 1.0 导致连接失败）
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
+
         # 使用 Invoke-RestMethod 获取最新版本信息
         $headers = @{
             "User-Agent" = "ClaudeEnvInstaller/1.0"
