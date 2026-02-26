@@ -15,7 +15,17 @@ Set-StrictMode -Version Latest
 # 配置
 $script:CcSwitchRepo = "farion1231/cc-switch"
 $script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
-$script:TempDownloadDir = "$env:TEMP\CcSwitchInstall"
+# 解析 $env:TEMP 为长路径，避免 8.3 短路径导致 msiexec 失败
+$script:TempDownloadDir = try {
+    $tempLong = if (Test-Path $env:TEMP) {
+        (Get-Item $env:TEMP).FullName
+    } else {
+        [System.IO.Path]::GetFullPath($env:TEMP)
+    }
+    Join-Path $tempLong "CcSwitchInstall"
+} catch {
+    "$env:TEMP\CcSwitchInstall"
+}
 
 function Test-CcSwitchInstalled {
     <#
@@ -377,6 +387,17 @@ function Install-CcSwitchPackage {
     )
 
     try {
+        # 解析 InstallerPath 为长路径，避免 8.3 短路径导致 msiexec 失败
+        $InstallerPath = try {
+            if (Test-Path $InstallerPath) {
+                (Get-Item $InstallerPath).FullName
+            } else {
+                [System.IO.Path]::GetFullPath($InstallerPath)
+            }
+        } catch {
+            $InstallerPath
+        }
+
         $fileExtension = [System.IO.Path]::GetExtension($InstallerPath).ToLower()
 
         switch ($fileExtension) {
@@ -396,20 +417,37 @@ function Install-CcSwitchPackage {
                 if ($result.Success) {
                     Write-Host "  ✓ MSI 安装完成" -ForegroundColor Green
                 } else {
-                    # 检查安装日志
-                    $logPath = "$script:TempDownloadDir\install.log"
-                    $errorDetails = ""
-                    if (Test-Path $logPath) {
-                        try {
-                            $logContent = Get-Content $logPath -Tail 20 -ErrorAction SilentlyContinue
-                            $errorLines = $logContent | Where-Object { $_ -match "(error|failed|exception)" }
-                            if ($errorLines) {
-                                $errorDetails = "`n安装日志错误: $($errorLines -join '; ')"
-                            }
-                        } catch { }
-                    }
+                    # 尝试 per-user 安装降级
+                    Write-Host "  ⚠ 静默安装失败 (退出码: $($result.ExitCode))，尝试 per-user 安装..." -ForegroundColor Yellow
+                    $perUserArgs = @(
+                        "/i", "`"$InstallerPath`"",
+                        "/qn",
+                        "ALLUSERS=2",
+                        "MSIINSTALLPERUSER=1",
+                        "REBOOT=ReallySuppress",
+                        "/norestart",
+                        "/l*v", "`"$script:TempDownloadDir\install-peruser.log`""
+                    )
+                    $perUserResult = Invoke-ExternalCommand -Command "msiexec" -Arguments $perUserArgs -TimeoutSeconds 300
 
-                    throw "MSI 安装失败 (退出码: $($result.ExitCode))$errorDetails"
+                    if ($perUserResult.Success) {
+                        Write-Host "  ✓ MSI per-user 安装完成" -ForegroundColor Green
+                    } else {
+                        # 检查安装日志
+                        $logPath = "$script:TempDownloadDir\install.log"
+                        $errorDetails = ""
+                        if (Test-Path $logPath) {
+                            try {
+                                $logContent = Get-Content $logPath -Tail 20 -ErrorAction SilentlyContinue
+                                $errorLines = $logContent | Where-Object { $_ -match "(error|failed|exception)" }
+                                if ($errorLines) {
+                                    $errorDetails = "`n安装日志错误: $($errorLines -join '; ')"
+                                }
+                            } catch { }
+                        }
+
+                        throw "MSI 安装失败 (退出码: $($result.ExitCode), per-user 退出码: $($perUserResult.ExitCode))$errorDetails"
+                    }
                 }
             }
 

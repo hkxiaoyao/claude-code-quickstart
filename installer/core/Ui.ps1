@@ -528,6 +528,9 @@ function Show-SingleSelectMenu {
 
     function Show-Menu {
         for ($i = 0; $i -lt $Options.Count; $i++) {
+            # 清除当前行（使用 ANSI 序列）
+            Write-Host "`e[2K" -NoNewline
+
             if ($i -eq $selectedIndex) {
                 Write-UiSuccess "  ► $($Options[$i])"
             } else {
@@ -548,17 +551,17 @@ function Show-SingleSelectMenu {
             switch ($key.Key) {
                 'UpArrow' {
                     $selectedIndex = ($selectedIndex - 1 + $Options.Count) % $Options.Count
-                    # 清除之前的菜单
+                    # 向上移动到菜单起始位置
                     for ($i = 0; $i -lt $Options.Count; $i++) {
-                        Write-Host "`e[A`e[2K" -NoNewline
+                        Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
                 'DownArrow' {
                     $selectedIndex = ($selectedIndex + 1) % $Options.Count
-                    # 清除之前的菜单
+                    # 向上移动到菜单起始位置
                     for ($i = 0; $i -lt $Options.Count; $i++) {
-                        Write-Host "`e[A`e[2K" -NoNewline
+                        Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
@@ -655,6 +658,9 @@ function Show-MultiSelectMenu {
 
     function Show-Menu {
         for ($i = 0; $i -lt $Options.Count; $i++) {
+            # 清除当前行（使用 ANSI 序列）
+            Write-Host "`e[2K" -NoNewline
+
             $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
 
             if ($i -eq $selectedIndex) {
@@ -677,17 +683,17 @@ function Show-MultiSelectMenu {
             switch ($key.Key) {
                 'UpArrow' {
                     $selectedIndex = ($selectedIndex - 1 + $Options.Count) % $Options.Count
-                    # 清除之前的菜单
+                    # 向上移动到菜单起始位置
                     for ($i = 0; $i -lt $Options.Count; $i++) {
-                        Write-Host "`e[A`e[2K" -NoNewline
+                        Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
                 'DownArrow' {
                     $selectedIndex = ($selectedIndex + 1) % $Options.Count
-                    # 清除之前的菜单
+                    # 向上移动到菜单起始位置
                     for ($i = 0; $i -lt $Options.Count; $i++) {
-                        Write-Host "`e[A`e[2K" -NoNewline
+                        Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
@@ -697,9 +703,9 @@ function Show-MultiSelectMenu {
                     } else {
                         $selectedItems[$selectedIndex] = $true
                     }
-                    # 清除之前的菜单
+                    # 向上移动到菜单起始位置
                     for ($i = 0; $i -lt $Options.Count; $i++) {
-                        Write-Host "`e[A`e[2K" -NoNewline
+                        Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
