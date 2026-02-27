@@ -473,6 +473,24 @@ function Show-CcqLogo {
     Write-Host ""
 }
 
+function Get-MenuItemPhysicalLines {
+    <#
+    .SYNOPSIS
+    计算菜单项在终端中占用的物理行数（考虑自动换行和中日韩宽字符）
+    #>
+    param(
+        [string]$Prefix,
+        [string]$OptionText
+    )
+
+    $displayWidth = (Get-StringDisplayWidth -Text $Prefix) + (Get-StringDisplayWidth -Text $OptionText)
+    $termWidth = 80
+    try { $termWidth = [Console]::WindowWidth } catch { }
+    if ($termWidth -le 0) { $termWidth = 80 }
+
+    return [int][Math]::Max(1, [Math]::Ceiling($displayWidth / $termWidth))
+}
+
 function Show-SingleSelectMenu {
     <#
     .SYNOPSIS
@@ -527,16 +545,19 @@ function Show-SingleSelectMenu {
     Write-Host ""
 
     function Show-Menu {
+        Write-Host "`e[J" -NoNewline
         for ($i = 0; $i -lt $Options.Count; $i++) {
-            # 清除当前行（使用 ANSI 序列）
-            Write-Host "`e[2K" -NoNewline
-
             if ($i -eq $selectedIndex) {
                 Write-UiSuccess "  ► $($Options[$i])"
             } else {
                 Write-Host "    $($Options[$i])"
             }
         }
+    }
+
+    $totalPhysicalLines = 0
+    for ($i = 0; $i -lt $Options.Count; $i++) {
+        $totalPhysicalLines += Get-MenuItemPhysicalLines -Prefix "    " -OptionText $Options[$i]
     }
 
     # 隐藏光标
@@ -551,16 +572,16 @@ function Show-SingleSelectMenu {
             switch ($key.Key) {
                 'UpArrow' {
                     $selectedIndex = ($selectedIndex - 1 + $Options.Count) % $Options.Count
-                    # 向上移动到菜单起始位置
-                    for ($i = 0; $i -lt $Options.Count; $i++) {
+                    # 向上移动到菜单起始位置（按物理行数而非选项数）
+                    for ($i = 0; $i -lt $totalPhysicalLines; $i++) {
                         Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
                 'DownArrow' {
                     $selectedIndex = ($selectedIndex + 1) % $Options.Count
-                    # 向上移动到菜单起始位置
-                    for ($i = 0; $i -lt $Options.Count; $i++) {
+                    # 向上移动到菜单起始位置（按物理行数而非选项数）
+                    for ($i = 0; $i -lt $totalPhysicalLines; $i++) {
                         Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
@@ -657,10 +678,8 @@ function Show-MultiSelectMenu {
     Write-Host ""
 
     function Show-Menu {
+        Write-Host "`e[J" -NoNewline
         for ($i = 0; $i -lt $Options.Count; $i++) {
-            # 清除当前行（使用 ANSI 序列）
-            Write-Host "`e[2K" -NoNewline
-
             $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
 
             if ($i -eq $selectedIndex) {
@@ -669,6 +688,11 @@ function Show-MultiSelectMenu {
                 Write-Host "    $checked $($Options[$i])"
             }
         }
+    }
+
+    $totalPhysicalLines = 0
+    for ($i = 0; $i -lt $Options.Count; $i++) {
+        $totalPhysicalLines += Get-MenuItemPhysicalLines -Prefix "    [ ] " -OptionText $Options[$i]
     }
 
     # 隐藏光标
@@ -683,16 +707,16 @@ function Show-MultiSelectMenu {
             switch ($key.Key) {
                 'UpArrow' {
                     $selectedIndex = ($selectedIndex - 1 + $Options.Count) % $Options.Count
-                    # 向上移动到菜单起始位置
-                    for ($i = 0; $i -lt $Options.Count; $i++) {
+                    # 向上移动到菜单起始位置（按物理行数而非选项数）
+                    for ($i = 0; $i -lt $totalPhysicalLines; $i++) {
                         Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
                 }
                 'DownArrow' {
                     $selectedIndex = ($selectedIndex + 1) % $Options.Count
-                    # 向上移动到菜单起始位置
-                    for ($i = 0; $i -lt $Options.Count; $i++) {
+                    # 向上移动到菜单起始位置（按物理行数而非选项数）
+                    for ($i = 0; $i -lt $totalPhysicalLines; $i++) {
                         Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu
@@ -703,8 +727,8 @@ function Show-MultiSelectMenu {
                     } else {
                         $selectedItems[$selectedIndex] = $true
                     }
-                    # 向上移动到菜单起始位置
-                    for ($i = 0; $i -lt $Options.Count; $i++) {
+                    # 向上移动到菜单起始位置（按物理行数而非选项数）
+                    for ($i = 0; $i -lt $totalPhysicalLines; $i++) {
                         Write-Host "`e[A" -NoNewline
                     }
                     Show-Menu

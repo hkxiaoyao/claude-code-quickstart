@@ -14,6 +14,23 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# ─── PS5 中文编码修复（版本拦截前必须设置，否则中文乱码）─────────────────────
+try {
+    if (-not ([System.Management.Automation.PSTypeName]'_InstallKernel32Cp').Type) {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+public class _InstallKernel32Cp {
+    [DllImport("kernel32.dll")] public static extern bool SetConsoleOutputCP(uint cp);
+    [DllImport("kernel32.dll")] public static extern bool SetConsoleCP(uint cp);
+}
+'@ -ErrorAction SilentlyContinue
+    }
+    [_InstallKernel32Cp]::SetConsoleOutputCP(65001) | Out-Null
+    [_InstallKernel32Cp]::SetConsoleCP(65001) | Out-Null
+} catch { }
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 # ─── PS 版本运行时拦截（#Requires 对 irm|iex 无效，需运行时二次校验）────────
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
@@ -22,8 +39,10 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     Write-Host "  当前版本: PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Red
     Write-Host ""
     Write-Host "  解决方案：" -ForegroundColor Yellow
-    Write-Host "    1. 安装 PowerShell 7:  winget install Microsoft.PowerShell" -ForegroundColor White
-    Write-Host "    2. 使用 pwsh 运行:     pwsh -File Install-ClaudeEnv.ps1" -ForegroundColor White
+    Write-Host "    1. 先运行引导脚本:" -ForegroundColor White
+    Write-Host "       Set-ExecutionPolicy Bypass -Scope Process -Force" -ForegroundColor Gray
+    Write-Host "       [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex" -ForegroundColor Gray
+    Write-Host "    2. 或在 Windows Terminal 中打开 PowerShell 7 后执行此脚本" -ForegroundColor White
     Write-Host ""
     exit 1
 }

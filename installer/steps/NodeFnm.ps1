@@ -340,18 +340,26 @@ function Backup-NpmGlobalPackages {
             throw "npm 命令不可用，无法备份全局包"
         }
 
-        $listResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--json", "--depth=0") -SuppressOutput -TimeoutSeconds 60 -RetryCount 0
-        if (-not $listResult.Success) {
-            throw "npm list -g 执行失败: $($listResult.Error)"
-        }
-
-        if (-not $listResult.Output) {
+        $listOutput = & npm list -g --json --depth=0 2>$null
+        $npmExitCode = $LASTEXITCODE
+        if (-not $listOutput) {
+            if ($npmExitCode -ne 0) {
+                throw "npm list -g 无输出且退出码为 $npmExitCode，无法安全备份全局包"
+            }
             Write-UiWarn "⚠ npm list -g 返回为空，将按无全局包处理"
             $result.Success = $true
             return $result
         }
 
-        $json = $listResult.Output | ConvertFrom-Json -ErrorAction Stop
+        $jsonText = ($listOutput -join "`n").Trim()
+        try {
+            $json = $jsonText | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            throw "npm list -g 输出解析失败，无法安全备份全局包: $($_.Exception.Message)"
+        }
+        if ($npmExitCode -ne 0) {
+            Write-UiWarn "⚠ npm list -g 退出码为 $npmExitCode，但已成功解析 JSON，继续迁移流程"
+        }
         if ($json -and $json.dependencies) {
             foreach ($pkg in $json.dependencies.PSObject.Properties) {
                 $pkgName = [string]$pkg.Name
@@ -786,7 +794,7 @@ function Install-NodeFnm {
                 return $result
             }
 
-            $confirm = Show-SingleSelectMenu -Title "⚠ 将执行卸载操作（可能影响现有开发环境），是否继续？" -Options @("继续执行", "取消") -DefaultIndex 1
+            $confirm = Show-SingleSelectMenu -Title "⚠ 将执行卸载操作（可能影响现有开发环境），是否继续？" -Options @("继续执行", "取消") -DefaultIndex 0
             if ($confirm -ne 0) {
                 throw "用户取消了卸载操作"
             }
