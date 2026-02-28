@@ -565,6 +565,82 @@ function Get-CommandVersion {
     }
 }
 
+function New-TestResult {
+    <#
+    .SYNOPSIS
+    创建标准检测结果对象（步骤契约 HC-2）
+    .RETURNS
+    标准检测结果 hashtable
+    #>
+    param()
+
+    return @{
+        IsInstalled = $false
+        Version     = ""
+        Data        = @{}
+        Message     = ""
+    }
+}
+
+function Test-CliToolInstalled {
+    <#
+    .SYNOPSIS
+    通用 CLI 工具检测函数，封装命令可用性检查和版本提取
+    .DESCRIPTION
+    适用于通过命令行检测的 CLI 工具（codex, gemini 等），
+    一次调用完成：命令可用性验证 + 版本号提取 + 标准结果构造。
+    .PARAMETER Command
+    CLI 工具的命令名（如 "codex", "gemini"）
+    .PARAMETER DisplayName
+    工具显示名称（如 "Codex CLI"），用于日志输出
+    .RETURNS
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Command,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName
+    )
+
+    $result = New-TestResult
+
+    try {
+        # 一次性获取命令可用性和版本输出
+        $details = Test-CommandAvailable -Command $Command -ReturnDetails
+
+        if (-not $details.Available) {
+            $result.Message = "$Command 命令不可用"
+            return $result
+        }
+
+        # 从 details.Output 中提取版本号，避免再次执行命令
+        $version = ""
+        if ($details.Output -match '(\d+\.[\d\.]+[\w\-]*)') {
+            $version = $matches[1]
+        } elseif ($details.Output) {
+            $version = ($details.Output -split "`n")[0].Trim()
+        }
+
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $result.Message = "无法获取 $Command 版本信息"
+            return $result
+        }
+
+        Write-UiSuccess "✓ $DisplayName 已安装 (版本: $version)"
+        $result.IsInstalled = $true
+        $result.Version     = $version
+        $result.Message     = "$DisplayName 已安装"
+    }
+    catch {
+        $result.Message = "检测 $DisplayName 时出错: $($_.Exception.Message)"
+        Write-UiError $result.Message
+    }
+
+    return $result
+}
+
 function Refresh-SessionPath {
     <#
     .SYNOPSIS

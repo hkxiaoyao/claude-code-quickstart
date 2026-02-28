@@ -64,6 +64,28 @@ class InstallState {
     }
 }
 
+function Resolve-TestResultBool {
+    <#
+    .SYNOPSIS
+    统一解析步骤函数返回值为布尔值（兼容 bool 和 hashtable 两种返回类型）
+    .PARAMETER TestResult
+    步骤函数的返回值（可能是 bool 或 hashtable）
+    .PARAMETER PropertyName
+    要提取的属性名（Test 函数用 "IsInstalled"，Install/Verify 函数用 "Success"）
+    .RETURNS
+    布尔值
+    #>
+    param(
+        $TestResult,
+
+        [string]$PropertyName = "IsInstalled"
+    )
+
+    if ($TestResult -is [bool]) { return $TestResult }
+    elseif ($TestResult) { return [bool]$TestResult.$PropertyName }
+    else { return $false }
+}
+
 function Invoke-StepLifecycle {
     <#
     .SYNOPSIS
@@ -127,10 +149,7 @@ function Invoke-StepLifecycle {
         Write-UiOutput "  🔍 测试阶段: $TestFunction" -Level Debug -Type Info
         $testResult = & $TestFunction
 
-        # 兼容 bool 和 hashtable 两种返回类型
-        $isInstalled = if ($testResult -is [bool]) { $testResult }
-                       elseif ($testResult) { [bool]$testResult.IsInstalled }
-                       else { $false }
+        $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
 
         if ($isInstalled -and $SkipIfInstalled) {
             $stepResult.Status = [StepStatus]::Skipped
@@ -144,10 +163,7 @@ function Invoke-StepLifecycle {
         Write-UiOutput "  🔧 安装阶段: $InstallFunction" -Level Debug -Type Info
         $installResult = & $InstallFunction
 
-        # 兼容 bool 和 hashtable 两种返回类型
-        $installSuccess = if ($installResult -is [bool]) { $installResult }
-                          elseif ($installResult) { [bool]$installResult.Success }
-                          else { $false }
+        $installSuccess = Resolve-TestResultBool -TestResult $installResult -PropertyName "Success"
 
         if (-not $installSuccess) {
             $installError = if ($installResult -is [bool]) { "安装函数返回失败" }
@@ -161,10 +177,7 @@ function Invoke-StepLifecycle {
             Write-UiOutput "  ✅ 验证阶段: $VerifyFunction" -Level Debug -Type Info
             $verifyResult = & $VerifyFunction
 
-            # 兼容 bool 和 hashtable 两种返回类型
-            $verifySuccess = if ($verifyResult -is [bool]) { $verifyResult }
-                             elseif ($verifyResult) { [bool]$verifyResult.Success }
-                             else { $false }
+            $verifySuccess = Resolve-TestResultBool -TestResult $verifyResult -PropertyName "Success"
 
             if (-not $verifySuccess) {
                 $verifyError = if ($verifyResult -is [bool]) { "验证函数返回失败" }
@@ -284,9 +297,7 @@ function Test-StepDependencies {
                     # 静默调用 TestFunction，抑制所有输出流（移除 *>&1 避免 WarningRecord/ErrorRecord 污染）
                     $depTestResult = & $depStepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
 
-                    $depInstalled = if ($depTestResult -is [bool]) { $depTestResult }
-                                    elseif ($depTestResult) { [bool]$depTestResult.IsInstalled }
-                                    else { $false }
+                    $depInstalled = Resolve-TestResultBool -TestResult $depTestResult -PropertyName "IsInstalled"
 
                     if (-not $depInstalled) {
                         $result.CanExecute = $false

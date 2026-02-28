@@ -318,6 +318,112 @@ function Test-NodeFnmInstalled {
     return $result
 }
 
+function Resolve-NpmForBackup {
+    <#
+    .SYNOPSIS
+    利用 snapshot 中的环境信息，主动定位并激活 npm（修复 PATH 缺失问题）
+    .PARAMETER EnvSnapshot
+    Test-NodeFnmInstalled 返回的 Data 哈希表
+    .RETURNS
+    @{ Available = [bool]; Method = [string]; ErrorMessage = [string] }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$EnvSnapshot
+    )
+
+    # 1. npm 已在 PATH，无需修复
+    if (Test-CommandAvailable -Command "npm") {
+        return @{ Available = $true; Method = "already-in-path"; ErrorMessage = "" }
+    }
+
+    Write-UiWarn "npm 不在当前 PATH 中，尝试定位..."
+
+    # 2. 尝试通过 snapshot 中记录的 NpmPath 直接定位
+    $npmPath = [string]$EnvSnapshot["NpmPath"]
+    if ($npmPath -and (Test-Path $npmPath -PathType Leaf)) {
+        $npmDir = Split-Path -Parent $npmPath
+        Write-UiInfo "  从 snapshot 定位到 npm: $npmDir"
+        $env:PATH = "$npmDir;$env:PATH"
+        if (Test-CommandAvailable -Command "npm") {
+            Write-UiSuccess "通过 snapshot 路径恢复 npm 可用性"
+            return @{ Available = $true; Method = "snapshot-path"; ErrorMessage = "" }
+        }
+    }
+
+    # 3. nvm 场景：尝试激活 nvm 或从 NvmHome 子目录查找
+    if ([bool]$EnvSnapshot["NvmDetected"]) {
+        # 3a. nvm 命令可用 - 尝试 nvm use
+        if ([bool]$EnvSnapshot["NvmCommandAvailable"]) {
+            Write-UiInfo "  尝试通过 nvm 激活 Node.js 环境..."
+            try {
+                $nvmListResult = Invoke-ExternalCommand -Command "nvm" -Arguments @("list") -SuppressOutput -TimeoutSeconds 15 -RetryCount 0
+                if ($nvmListResult.Success -and $nvmListResult.Output) {
+                    $versions = $nvmListResult.Output -split "`n" | ForEach-Object {
+                        if ($_ -match '(\d+\.\d+\.\d+)') { $matches[1] }
+                    } | Where-Object { $_ }
+                    if ($versions) {
+                        $targetVersion = $versions | Select-Object -First 1
+                        Write-UiInfo "  执行 nvm use $targetVersion..."
+                        $useResult = Invoke-ExternalCommand -Command "nvm" -Arguments @("use", $targetVersion) -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
+                        Refresh-SessionPath
+                        if (Test-CommandAvailable -Command "npm") {
+                            Write-UiSuccess "通过 nvm use $targetVersion 恢复 npm 可用性"
+                            return @{ Available = $true; Method = "nvm-use"; ErrorMessage = "" }
+                        }
+                    }
+                }
+            } catch {
+                Write-UiWarn "  nvm 激活失败: $($_.Exception.Message)"
+            }
+        }
+
+        # 3b. 直接扫描 NvmHome 子目录
+        $nvmHome = [string]$EnvSnapshot["NvmHome"]
+        if ([string]::IsNullOrWhiteSpace($nvmHome)) {
+            $nvmHome = [string]$EnvSnapshot["NvmDefaultPath"]
+        }
+        if ($nvmHome -and (Test-Path $nvmHome)) {
+            $nvmNodeDirs = Get-ChildItem -Path $nvmHome -Directory -ErrorAction SilentlyContinue |
+                Where-Object { Test-Path (Join-Path $_.FullName "npm.cmd") }
+            if ($nvmNodeDirs) {
+                $bestDir = $nvmNodeDirs | Sort-Object Name -Descending | Select-Object -First 1
+                Write-UiInfo "  从 NvmHome 定位到 npm: $($bestDir.FullName)"
+                $env:PATH = "$($bestDir.FullName);$env:PATH"
+                if (Test-CommandAvailable -Command "npm") {
+                    Write-UiSuccess "通过 NvmHome 目录恢复 npm 可用性"
+                    return @{ Available = $true; Method = "nvm-dir-scan"; ErrorMessage = "" }
+                }
+            }
+        }
+    }
+
+    # 4. 直接安装场景：从 ProgramFiles\nodejs 定位
+    if ([bool]$EnvSnapshot["DirectNodeDetected"]) {
+        $directPath = [string]$EnvSnapshot["DirectNodePath"]
+        if ([string]::IsNullOrWhiteSpace($directPath)) {
+            $directPath = "$env:ProgramFiles\nodejs"
+        }
+        if ((Test-Path $directPath) -and (Test-Path (Join-Path $directPath "npm.cmd"))) {
+            Write-UiInfo "  从直接安装路径定位到 npm: $directPath"
+            $env:PATH = "$directPath;$env:PATH"
+            if (Test-CommandAvailable -Command "npm") {
+                Write-UiSuccess "通过直接安装路径恢复 npm 可用性"
+                return @{ Available = $true; Method = "direct-path"; ErrorMessage = "" }
+            }
+        }
+    }
+
+    # 5. 最终回退：PATH 刷新后重试
+    Refresh-SessionPath
+    if (Test-CommandAvailable -Command "npm") {
+        Write-UiSuccess "PATH 刷新后 npm 可用"
+        return @{ Available = $true; Method = "path-refresh"; ErrorMessage = "" }
+    }
+
+    return @{ Available = $false; Method = "none"; ErrorMessage = "所有定位策略均失败，npm 无法激活" }
+}
+
 function Backup-NpmGlobalPackages {
     <#
     .SYNOPSIS
@@ -336,8 +442,12 @@ function Backup-NpmGlobalPackages {
     try {
         Write-UiInfo "📦 备份 npm 全局包列表..."
 
+        # 注意：调用方应在调用前先执行 Resolve-NpmForBackup 确保 npm 可用
         if (-not (Test-CommandAvailable -Command "npm")) {
-            throw "npm 命令不可用，无法备份全局包"
+            Write-UiWarn "npm 命令不可用（已尝试所有定位策略），跳过全局包备份"
+            $result.Success = $true
+            $result.Packages = @()
+            return $result
         }
 
         $listOutput = & npm list -g --json --depth=0 2>$null
@@ -774,9 +884,15 @@ function Install-NodeFnm {
                 }
             }
 
+            $npmInPath = [bool]$snapshot.Data["NpmAvailable"]
+            $restoreLabel = if ($npmInPath) {
+                "迁移到 fnm（卸载冲突工具并恢复 npm 全局包）[推荐]"
+            } else {
+                "迁移到 fnm（卸载冲突工具，将尝试定位 npm 恢复全局包）"
+            }
             $options = @(
                 "保留现有环境（跳过 fnm 安装）",
-                "迁移到 fnm（卸载冲突工具并恢复 npm 全局包）[推荐]",
+                $restoreLabel,
                 "全新安装 fnm（卸载冲突工具，不恢复全局包）"
             )
             $choice = Show-SingleSelectMenu -Title "检测到冲突，选择处理方式：" -Options $options -DefaultIndex 1
@@ -807,13 +923,43 @@ function Install-NodeFnm {
             }
 
             if ($shouldRestoreGlobalPackages) {
-                $backupResult = Backup-NpmGlobalPackages
-                if (-not $backupResult.Success) {
-                    throw "npm 全局包备份失败，已中止迁移: $($backupResult.ErrorMessage)"
+                # 主动探测并修复 npm 可用性
+                $npmResolve = Resolve-NpmForBackup -EnvSnapshot $snapshot.Data
+                if ($npmResolve.Available) {
+                    Write-UiInfo "npm 已就绪（方式: $($npmResolve.Method)），开始备份..."
+                } else {
+                    Write-UiWarn "$($npmResolve.ErrorMessage)"
+                    Write-UiWarn "  无法备份 npm 全局包，您可以选择："
+                    $failChoice = Show-SingleSelectMenu -Title "npm 定位失败，请选择处理方式：" -Options @(
+                        "继续迁移（跳过全局包恢复，后续可手动安装）",
+                        "中止迁移（保留现有环境不做任何更改）"
+                    ) -DefaultIndex 0
+                    if ($failChoice -eq 1 -or $failChoice -eq -1) {
+                        $result.Success = $true
+                        $result.Message = "用户选择中止迁移，保留现有环境"
+                        $result.Data["MigrationMode"] = "AbortedByUser"
+                        Write-UiWarn "已中止迁移，保留现有环境"
+                        return $result
+                    }
+                    $shouldRestoreGlobalPackages = $false
+                    $result.Data["BackupSkipped"] = $true
+                    $result.Data["BackupSkipReason"] = $npmResolve.ErrorMessage
                 }
-                $globalPackagesBackup = @($backupResult.Packages)
-                $result.Data["GlobalPackagesBackupCount"] = $globalPackagesBackup.Count
-                $result.Data["GlobalPackagesBackup"] = $globalPackagesBackup
+
+                if ($shouldRestoreGlobalPackages) {
+                    $backupResult = Backup-NpmGlobalPackages
+                    if (-not $backupResult.Success) {
+                        Write-UiWarn "npm 全局包备份失败: $($backupResult.ErrorMessage)"
+                        Write-UiWarn "  将继续迁移但跳过全局包恢复"
+                        $shouldRestoreGlobalPackages = $false
+                        $result.Data["BackupSkipped"] = $true
+                        $result.Data["BackupSkipReason"] = $backupResult.ErrorMessage
+                    } else {
+                        $globalPackagesBackup = @($backupResult.Packages)
+                        $result.Data["GlobalPackagesBackupCount"] = $globalPackagesBackup.Count
+                        $result.Data["GlobalPackagesBackup"] = $globalPackagesBackup
+                    }
+                }
             }
 
             $uninstallResult = Uninstall-ExistingNode -EnvSnapshot $snapshot.Data

@@ -273,7 +273,7 @@ $script:ApiProviders = @{
 - `rules/ccg-tools.md`：工具速查表 + 知识获取 + 设计图获取
 - `rules/ccg-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
 
-**写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用备份 + 原子覆写。
+**写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用原子覆写（直接替换，无备份）。
 
 **检测条件**：`Test-ClaudeMdInstalled` 检查主文件 3 个关键标识 + 3 个 rules 文件存在性。
 

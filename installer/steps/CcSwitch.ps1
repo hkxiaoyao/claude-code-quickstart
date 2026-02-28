@@ -17,10 +17,25 @@ $script:CcSwitchRepo = "farion1231/cc-switch"
 $script:CcSwitchApiUrl = "https://api.github.com/repos/$script:CcSwitchRepo/releases/latest"
 # 解析 $env:TEMP 为长路径，避免 8.3 短路径导致 msiexec 失败
 $script:TempDownloadDir = try {
-    $tempLong = if (Test-Path $env:TEMP) {
-        (Get-Item $env:TEMP).FullName
-    } else {
-        [System.IO.Path]::GetFullPath($env:TEMP)
+    # 多重策略解析长路径，避免 8.3 短路径
+    $tempLong = $env:TEMP
+    try {
+        if (Test-Path $tempLong) {
+            $tempLong = (Get-Item $tempLong).FullName
+        }
+    } catch { }
+    # 回退：通过 GetFullPath 解析
+    if ($tempLong -match '~') {
+        try {
+            $tempLong = [System.IO.Path]::GetFullPath($tempLong)
+        } catch { }
+    }
+    # 最终回退：构建无短路径的临时目录
+    if ($tempLong -match '~') {
+        $tempLong = Join-Path $env:LOCALAPPDATA "Temp"
+        if (-not (Test-Path $tempLong)) {
+            $tempLong = $env:TEMP
+        }
     }
     Join-Path $tempLong "CcSwitchInstall"
 } catch {
@@ -143,15 +158,16 @@ function Install-CcSwitch {
             }
         }
 
-        # 3. 检查管理员权限
+        # 3. 检查安装权限（非硬性要求，per-user 安装不需要管理员）
         Write-Host ""
         Write-Host "3. 检查安装权限..." -ForegroundColor Gray
 
-        if (-not (Assert-StepPrivilege -StepName "安装 CC-Switch" -RequiresAdmin $true)) {
-            throw "CC-Switch 安装需要管理员权限"
+        $isAdmin = Test-IsAdministrator
+        if (-not $isAdmin) {
+            Write-Host "  当前非管理员权限，将优先尝试 per-user 安装" -ForegroundColor Gray
+        } else {
+            Write-Host "✓ 管理员权限确认" -ForegroundColor Green
         }
-
-        Write-Host "✓ 管理员权限确认" -ForegroundColor Green
 
         # 4. 获取最新版本信息
         Write-Host ""
@@ -372,6 +388,30 @@ function Download-CcSwitchInstaller {
     }
 }
 
+function Get-MsiLogErrors {
+    <#
+    .SYNOPSIS
+    从 MSI 安装日志中提取错误信息
+    #>
+    $errorDetails = ""
+    $logFiles = @(
+        "$script:TempDownloadDir\install.log",
+        "$script:TempDownloadDir\install-peruser.log"
+    )
+    foreach ($logPath in $logFiles) {
+        if (Test-Path $logPath) {
+            try {
+                $logContent = Get-Content $logPath -Tail 30 -ErrorAction SilentlyContinue
+                $errorLines = $logContent | Where-Object { $_ -match "(error|failed|exception)" }
+                if ($errorLines) {
+                    $errorDetails += "`n$([System.IO.Path]::GetFileName($logPath)): $($errorLines[-3..-1] -join '; ')"
+                }
+            } catch { }
+        }
+    }
+    return $errorDetails
+}
+
 function Install-CcSwitchPackage {
     <#
     .SYNOPSIS
@@ -402,51 +442,48 @@ function Install-CcSwitchPackage {
 
         switch ($fileExtension) {
             ".msi" {
-                Write-Host "  正在执行 MSI 静默安装..." -ForegroundColor Gray
+                Write-Host "  正在执行 MSI 安装..." -ForegroundColor Gray
 
-                # MSI 静默安装参数
-                $arguments = @(
+                # 策略 1：per-user 安装（不需要管理员权限）
+                Write-Host "  尝试 per-user 安装模式..." -ForegroundColor Gray
+                $perUserArgs = @(
                     "/i", "`"$InstallerPath`"",
-                    "/quiet",
+                    "/qn",
+                    "ALLUSERS=2",
+                    "MSIINSTALLPERUSER=1",
+                    "REBOOT=ReallySuppress",
                     "/norestart",
-                    "/l*v", "`"$script:TempDownloadDir\install.log`""
+                    "/l*v", "`"$script:TempDownloadDir\install-peruser.log`""
                 )
+                $perUserResult = Invoke-ExternalCommand -Command "msiexec" -Arguments $perUserArgs -TimeoutSeconds 300
 
-                $result = Invoke-ExternalCommand -Command "msiexec" -Arguments $arguments -TimeoutSeconds 300
-
-                if ($result.Success) {
-                    Write-Host "  ✓ MSI 安装完成" -ForegroundColor Green
+                if ($perUserResult.Success -or $perUserResult.ExitCode -eq 3010) {
+                    $rebootHint = if ($perUserResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
+                    Write-Host "  ✓ MSI per-user 安装完成$rebootHint" -ForegroundColor Green
                 } else {
-                    # 尝试 per-user 安装降级
-                    Write-Host "  ⚠ 静默安装失败 (退出码: $($result.ExitCode))，尝试 per-user 安装..." -ForegroundColor Yellow
-                    $perUserArgs = @(
+                    # 策略 2：全局静默安装（需要管理员）
+                    Write-Host "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..." -ForegroundColor Yellow
+                    $globalArgs = @(
                         "/i", "`"$InstallerPath`"",
-                        "/qn",
-                        "ALLUSERS=2",
-                        "MSIINSTALLPERUSER=1",
-                        "REBOOT=ReallySuppress",
+                        "/quiet",
                         "/norestart",
-                        "/l*v", "`"$script:TempDownloadDir\install-peruser.log`""
+                        "/l*v", "`"$script:TempDownloadDir\install.log`""
                     )
-                    $perUserResult = Invoke-ExternalCommand -Command "msiexec" -Arguments $perUserArgs -TimeoutSeconds 300
+                    $globalResult = Invoke-ExternalCommand -Command "msiexec" -Arguments $globalArgs -TimeoutSeconds 300
 
-                    if ($perUserResult.Success) {
-                        Write-Host "  ✓ MSI per-user 安装完成" -ForegroundColor Green
+                    if ($globalResult.Success -or $globalResult.ExitCode -eq 3010) {
+                        $rebootHint = if ($globalResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
+                        Write-Host "  ✓ MSI 全局安装完成$rebootHint" -ForegroundColor Green
                     } else {
-                        # 检查安装日志
-                        $logPath = "$script:TempDownloadDir\install.log"
-                        $errorDetails = ""
-                        if (Test-Path $logPath) {
-                            try {
-                                $logContent = Get-Content $logPath -Tail 20 -ErrorAction SilentlyContinue
-                                $errorLines = $logContent | Where-Object { $_ -match "(error|failed|exception)" }
-                                if ($errorLines) {
-                                    $errorDetails = "`n安装日志错误: $($errorLines -join '; ')"
-                                }
-                            } catch { }
-                        }
+                        # 策略 3：GUI 安装降级（让用户手动操作）
+                        Write-Host "  静默安装均失败，启动 GUI 安装..." -ForegroundColor Yellow
+                        Write-Host "  请在弹出的安装向导中手动完成安装" -ForegroundColor Cyan
+                        $guiResult = Invoke-ExternalCommand -Command "msiexec" -Arguments @("/i", "`"$InstallerPath`"") -TimeoutSeconds 600
 
-                        throw "MSI 安装失败 (退出码: $($result.ExitCode), per-user 退出码: $($perUserResult.ExitCode))$errorDetails"
+                        if (-not $guiResult.Success -and $guiResult.ExitCode -ne 3010) {
+                            $errorDetails = Get-MsiLogErrors
+                            throw "MSI 安装失败（per-user: $($perUserResult.ExitCode), 全局: $($globalResult.ExitCode), GUI: $($guiResult.ExitCode)）$errorDetails"
+                        }
                     }
                 }
             }

@@ -331,6 +331,20 @@ function Install-McpRuntimeDeps {
         [hashtable]$Server
     )
 
+    # 确保 fnm 环境已初始化（前置步骤可能已安装 fnm 但当前会话未加载）
+    if ((Test-CommandAvailable -Command "fnm") -and -not (Test-CommandAvailable -Command "node")) {
+        Write-UiInfo "初始化 fnm 环境..."
+        try {
+            $fnmEnvOutput = & fnm env --use-on-cd 2>&1 | Out-String
+            if ($fnmEnvOutput) {
+                Invoke-Expression $fnmEnvOutput
+            }
+            Refresh-SessionPath
+        } catch {
+            Write-UiWarn "fnm 环境初始化失败: $($_.Exception.Message)"
+        }
+    }
+
     $deps = @()
     if ($Server.ContainsKey("RuntimeDeps") -and $Server["RuntimeDeps"]) {
         $deps = @($Server["RuntimeDeps"])
@@ -538,8 +552,8 @@ function Get-McpCredentials {
         }
         "args-multi" {
             foreach ($argCredential in @($Server.ArgsCredentials)) {
-                if ($argCredential.Url) {
-                    Write-UiInfo "$($argCredential.Label) 获取地址: $($argCredential.Url)"
+                if ($argCredential.ContainsKey("Url") -and $argCredential["Url"]) {
+                    Write-UiInfo "$($argCredential.Label) 获取地址: $($argCredential["Url"])"
                 }
 
                 $value = Read-McpCredentialValue `
@@ -927,29 +941,29 @@ function Test-McpInstalled {
             return $false
         }
 
-        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
         if (-not $claudeJson) {
             return $false
         }
 
-        $hasMcpServers = $claudeJson.PSObject.Properties.Name -contains "mcpServers" -and $claudeJson.mcpServers
+        $hasMcpServers = $claudeJson.ContainsKey("mcpServers") -and $claudeJson["mcpServers"]
 
         $stdioCount = 0
         $httpCount = 0
         if ($hasMcpServers) {
-            foreach ($serverId in @($claudeJson.mcpServers.PSObject.Properties.Name)) {
-                $serverConfig = $claudeJson.mcpServers.PSObject.Properties[$serverId].Value
-                $hasType = Test-ObjectProperty -InputObject $serverConfig -PropertyName "type"
-                $hasUrl = Test-ObjectProperty -InputObject $serverConfig -PropertyName "url"
-                $hasCommand = Test-ObjectProperty -InputObject $serverConfig -PropertyName "command"
-                $hasArgs = Test-ObjectProperty -InputObject $serverConfig -PropertyName "args"
+            foreach ($serverId in @($claudeJson["mcpServers"].Keys)) {
+                $serverConfig = $claudeJson["mcpServers"][$serverId]
+                $hasType = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("type")
+                $hasUrl = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("url")
+                $hasCommand = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("command")
+                $hasArgs = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("args")
 
-                if ($hasType -and [string]$serverConfig.type -eq "http" -and $hasUrl -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig.url)) {
+                if ($hasType -and [string]$serverConfig["type"] -eq "http" -and $hasUrl -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["url"])) {
                     $httpCount++
                     continue
                 }
 
-                if ($hasCommand -and $hasArgs -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig.command) -and $serverConfig.args) {
+                if ($hasCommand -and $hasArgs -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["command"]) -and $serverConfig["args"]) {
                     $stdioCount++
                 }
             }
@@ -966,9 +980,11 @@ function Test-McpInstalled {
         $settingsPath = Get-ClaudeSettingsPath
         $hasPermissions = $false
         if (Test-Path $settingsPath) {
-            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
             if ($settings) {
-                $hasPermissions = $settings.PSObject.Properties.Name -contains "permissions" -and $settings.permissions -and $settings.permissions.allow
+                $hasPermissions = $settings -is [hashtable] -and $settings.ContainsKey("permissions") -and
+                    $settings["permissions"] -is [hashtable] -and $settings["permissions"].ContainsKey("allow") -and
+                    $settings["permissions"]["allow"]
             }
         }
 
@@ -1001,9 +1017,9 @@ function Install-Mcp {
         $existingServers = @()
         if (Test-Path $claudeJsonPath) {
             try {
-                $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-                if ($claudeJson -and $claudeJson.PSObject.Properties.Name -contains "mcpServers" -and $claudeJson.mcpServers) {
-                    $existingServers = @($claudeJson.mcpServers.PSObject.Properties.Name)
+                $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($claudeJson -and $claudeJson.ContainsKey("mcpServers") -and $claudeJson["mcpServers"]) {
+                    $existingServers = @($claudeJson["mcpServers"].Keys)
                     if ($existingServers.Count -gt 0) {
                         Write-UiInfo "已安装的 MCP Server: $($existingServers -join ', ')"
                     }
@@ -1157,44 +1173,44 @@ function Install-Mcp {
             $server = $script:McpServers[$serverId]
             switch ($server.CredentialType) {
                 "single-key" {
-                    if ($server.ApiKeyUrl) {
-                        $hint = "  - $($server.Name): $($server.ApiKeyUrl)"
+                    if ($server.ContainsKey("ApiKeyUrl") -and $server["ApiKeyUrl"]) {
+                        $hint = "  - $($server.Name): $($server["ApiKeyUrl"])"
                         if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                     }
                 }
                 "url-embedded" {
                     foreach ($item in @($server.Credentials)) {
-                        if ($item.Url) {
-                            $hint = "  - $($server.Name): $($item.Url)"
+                        if ($item.ContainsKey("Url") -and $item["Url"]) {
+                            $hint = "  - $($server.Name): $($item["Url"])"
                             if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                         }
                     }
                 }
                 "multi-field" {
                     foreach ($item in @($server.Credentials)) {
-                        if ($item.Url) {
-                            $hint = "  - $($server.Name): $($item.Url)"
+                        if ($item.ContainsKey("Url") -and $item["Url"]) {
+                            $hint = "  - $($server.Name): $($item["Url"])"
                             if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                         }
                     }
                 }
                 "args-multi" {
                     foreach ($item in @($server.ArgsCredentials)) {
-                        if ($item.Url) {
-                            $hint = "  - $($server.Name): $($item.Url)"
+                        if ($item.ContainsKey("Url") -and $item["Url"]) {
+                            $hint = "  - $($server.Name): $($item["Url"])"
                             if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                         }
                     }
                 }
                 "args-token" {
-                    if ($server.TokenUrl) {
-                        $hint = "  - $($server.Name): $($server.TokenUrl)"
+                    if ($server.ContainsKey("TokenUrl") -and $server["TokenUrl"]) {
+                        $hint = "  - $($server.Name): $($server["TokenUrl"])"
                         if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                     }
                 }
                 "env-file" {
-                    if ($server.EnvFile -and $server.EnvFile.ProviderUrl) {
-                        $hint = "  - $($server.Name): $($server.EnvFile.ProviderUrl)"
+                    if ($server.ContainsKey("EnvFile") -and $server["EnvFile"] -and $server["EnvFile"].ContainsKey("ProviderUrl")) {
+                        $hint = "  - $($server.Name): $($server["EnvFile"]["ProviderUrl"])"
                         if (-not $credentialHints.Contains($hint)) { [void]$credentialHints.Add($hint) }
                     }
                 }
@@ -1443,12 +1459,12 @@ function Verify-Mcp {
             throw ".claude.json 不存在"
         }
 
-        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json
-        if (-not (Test-ObjectProperty -InputObject $claudeJson -PropertyName "mcpServers") -or -not $claudeJson.mcpServers) {
+        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable
+        if (-not $claudeJson.ContainsKey("mcpServers") -or -not $claudeJson["mcpServers"]) {
             throw "缺少 MCP Server 配置"
         }
 
-        $configuredServers = @($claudeJson.mcpServers.PSObject.Properties.Name)
+        $configuredServers = @($claudeJson["mcpServers"].Keys)
         if ($configuredServers.Count -eq 0) {
             throw "未配置任何 MCP Server"
         }
@@ -1457,30 +1473,30 @@ function Verify-Mcp {
         $httpCount = 0
 
         foreach ($serverId in $configuredServers) {
-            $serverConfig = $claudeJson.mcpServers.PSObject.Properties[$serverId].Value
+            $serverConfig = $claudeJson["mcpServers"][$serverId]
             if (-not $serverConfig) {
                 Write-UiWarn "跳过空配置: $serverId"
                 continue
             }
 
-            $hasType = Test-ObjectProperty -InputObject $serverConfig -PropertyName "type"
-            $hasUrl = Test-ObjectProperty -InputObject $serverConfig -PropertyName "url"
-            $hasCommand = Test-ObjectProperty -InputObject $serverConfig -PropertyName "command"
-            $hasArgs = Test-ObjectProperty -InputObject $serverConfig -PropertyName "args"
-            $typeValue = if ($hasType) { [string]$serverConfig.type } else { "" }
+            $hasType = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("type")
+            $hasUrl = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("url")
+            $hasCommand = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("command")
+            $hasArgs = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("args")
+            $typeValue = if ($hasType) { [string]$serverConfig["type"] } else { "" }
 
             if ($typeValue -eq "http") {
                 $httpCount++
-                if (-not $hasUrl -or [string]::IsNullOrWhiteSpace([string]$serverConfig.url)) {
+                if (-not $hasUrl -or [string]::IsNullOrWhiteSpace([string]$serverConfig["url"])) {
                     throw "MCP Server '$serverId' 缺少 http.url"
                 }
-                if ([string]$serverConfig.url -match "\{[A-Za-z0-9_]+\}") {
-                    throw "MCP Server '$serverId' URL 仍包含占位符: $($serverConfig.url)"
+                if ([string]$serverConfig["url"] -match "\{[A-Za-z0-9_]+\}") {
+                    throw "MCP Server '$serverId' URL 仍包含占位符: $($serverConfig["url"])"
                 }
             }
-            elseif ($hasCommand -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig.command)) {
+            elseif ($hasCommand -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["command"])) {
                 $stdioCount++
-                if (-not $hasArgs -or -not $serverConfig.args) {
+                if (-not $hasArgs -or -not $serverConfig["args"]) {
                     throw "MCP Server '$serverId' 缺少 stdio.args"
                 }
             }
@@ -1495,23 +1511,23 @@ function Verify-Mcp {
 
             $serverDef = $script:McpServers[$serverId]
             $credentialType = if ($serverDef.CredentialType) { [string]$serverDef.CredentialType } else { "none" }
-            $argsList = if ($hasArgs) { @($serverConfig.args) } else { @() }
+            $argsList = if ($hasArgs) { @($serverConfig["args"]) } else { @() }
 
             switch ($credentialType) {
                 "single-key" {
                     # 检查 settings.json 中的 API Key
                     $settingsPath = Get-ClaudeSettingsPath
                     if (Test-Path $settingsPath) {
-                        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
+                        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable
                         $apiKeyName = [string]$serverDef.ApiKeyName
-                        $hasServerEnv = (Test-ObjectProperty -InputObject $serverConfig -PropertyName "env") -and
-                            $serverConfig.env -and
-                            ($serverConfig.env.PSObject.Properties.Name -contains $apiKeyName) -and
-                            -not [string]::IsNullOrWhiteSpace([string]$serverConfig.env.$apiKeyName)
-                        $hasGlobalEnv = (Test-ObjectProperty -InputObject $settings -PropertyName "env") -and
-                            $settings.env -and
-                            ($settings.env.PSObject.Properties.Name -contains $apiKeyName) -and
-                            -not [string]::IsNullOrWhiteSpace([string]$settings.env.$apiKeyName)
+                        $hasServerEnv = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("env") -and
+                            $serverConfig["env"] -is [hashtable] -and
+                            $serverConfig["env"].ContainsKey($apiKeyName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$serverConfig["env"][$apiKeyName])
+                        $hasGlobalEnv = $settings -is [hashtable] -and $settings.ContainsKey("env") -and
+                            $settings["env"] -is [hashtable] -and
+                            $settings["env"].ContainsKey($apiKeyName) -and
+                            -not [string]::IsNullOrWhiteSpace([string]$settings["env"][$apiKeyName])
                         if (-not ($hasServerEnv -or $hasGlobalEnv)) {
                             Write-UiWarn "MCP Server '$serverId' 缺少 API Key: $apiKeyName"
                         }
@@ -1544,11 +1560,11 @@ function Verify-Mcp {
                     }
                 }
                 "url-embedded" {
-                    if ($serverConfig.type -ne "http") {
+                    if ($serverConfig["type"] -ne "http") {
                         throw "MCP Server '$serverId' 应为 http 配置"
                     }
-                    if ([string]$serverConfig.url -match "\{[A-Za-z0-9_]+\}") {
-                        throw "MCP Server '$serverId' URL 占位符未替换: $($serverConfig.url)"
+                    if ([string]$serverConfig["url"] -match "\{[A-Za-z0-9_]+\}") {
+                        throw "MCP Server '$serverId' URL 占位符未替换: $($serverConfig["url"])"
                     }
                 }
                 "env-file" {
@@ -1581,16 +1597,16 @@ function Verify-Mcp {
             throw "settings.json 不存在"
         }
 
-        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json
-        if (-not (Test-ObjectProperty -InputObject $settings -PropertyName "permissions") -or
-            -not $settings.permissions -or
-            -not (Test-ObjectProperty -InputObject $settings.permissions -PropertyName "allow") -or
-            -not $settings.permissions.allow) {
+        $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable
+        if (-not $settings.ContainsKey("permissions") -or
+            -not ($settings["permissions"] -is [hashtable]) -or
+            -not $settings["permissions"].ContainsKey("allow") -or
+            -not $settings["permissions"]["allow"]) {
             throw "缺少权限配置"
         }
         $requiredPermissions = @("mcp", "read", "write")
         foreach ($permission in $requiredPermissions) {
-            if ($settings.permissions.allow -notcontains $permission) {
+            if ($settings["permissions"]["allow"] -notcontains $permission) {
                 Write-UiWarn "⚠ 缺少权限: $permission"
             }
         }

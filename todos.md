@@ -1,8 +1,5 @@
 - python安装，ContextWeaver MCP安装，其他MCP测试
 - 检测机制重构
-- 去掉CLAUDE.md的备份
-- fnm与node脚本检测是否已有node、nvm
 - codex gemini测试
-- 更新脚本
+- 更新脚本，同时去掉CLAUDE.md的清理旧文件名
 - 一键卸载
-- 现有ccg工作流加入pencil生成UI图

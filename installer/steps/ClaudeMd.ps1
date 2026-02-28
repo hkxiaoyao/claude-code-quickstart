@@ -334,14 +334,6 @@ function Install-ClaudeMd {
             Write-UiInfo "已创建目录: $claudeMdDir"
         }
 
-        # 备份并写入 CLAUDE.md
-        if (Test-Path $claudeMdPath) {
-            Write-UiWarn "检测到现有 CLAUDE.md 文件"
-            $backupPath = "$claudeMdPath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-            Copy-Item $claudeMdPath $backupPath -Force
-            Write-UiInfo "已备份现有文件到: $backupPath"
-        }
-
         Write-UiInfo "写入 CLAUDE.md 配置..."
         $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
 
@@ -372,13 +364,6 @@ function Install-ClaudeMd {
         foreach ($fileName in $script:RulesTemplates.Keys) {
             $rulePath = Join-Path $rulesDir $fileName
             $ruleContent = $script:RulesTemplates[$fileName]
-
-            # 备份已存在的 rules 文件
-            if (Test-Path $rulePath) {
-                $ruleBackup = "$rulePath.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-                Copy-Item $rulePath $ruleBackup -Force
-                Write-UiInfo "已备份: $fileName"
-            }
 
             $ruleWriteResult = Write-FileAtomically -FilePath $rulePath -Content $ruleContent
 
