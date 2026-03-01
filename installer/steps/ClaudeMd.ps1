@@ -95,9 +95,10 @@ $script:ClaudeMdTemplate = @'
 '@
 
 # Rules 拆分文件模板（写入 ~/.claude/rules/ 目录，Claude Code 无条件加载）
+# 命名约定：统一 ccq- 前缀（CCQ = Claude Code Quickstart），与用户自定义 rules 隔离
 $script:RulesTemplates = @{}
 
-$script:RulesTemplates['ccg-multimodel.md'] = @'
+$script:RulesTemplates['ccq-multimodel.md'] = @'
 # 多模型协作
 
 ## 后端任务 → Codex
@@ -139,7 +140,7 @@ TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
 ```
 '@
 
-$script:RulesTemplates['tools.md'] = @'
+$script:RulesTemplates['ccq-tools.md'] = @'
 # 工具速查与知识获取
 
 ## 知识获取（强制）
@@ -192,7 +193,7 @@ $script:RulesTemplates['tools.md'] = @'
 **选择原则**：语义理解用 `ace-tool`，精确匹配用 `Grep`，联网搜索优先 `exa`
 '@
 
-$script:RulesTemplates['workflow.md'] = @'
+$script:RulesTemplates['ccq-workflow.md'] = @'
 # 工作流增强（CCG）
 
 ## 上下文检索（生成代码前执行）
@@ -280,9 +281,9 @@ function Test-ClaudeMdInstalled {
 
         # 每个 rules 文件的关键标识（与 Verify 对齐）
         $rulesValidation = @{
-            'ccg-multimodel.md' = '# 多模型协作'
-            'tools.md'          = '# 工具速查与知识获取'
-            'workflow.md'       = '# 工作流增强'
+            'ccq-multimodel.md' = '# 多模型协作'
+            'ccq-tools.md'      = '# 工具速查与知识获取'
+            'ccq-workflow.md'   = '# 工作流增强'
         }
 
         foreach ($fileName in $rulesValidation.Keys) {
@@ -349,16 +350,6 @@ function Install-ClaudeMd {
         if (-not (Test-Path $rulesDir)) {
             New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
             Write-UiInfo "已创建目录: $rulesDir"
-        }
-
-        # 清理旧文件名（避免提示词臃肿）
-        $oldFileNames = @('ccg-workflow.md', 'ccg-tools.md')
-        foreach ($oldFile in $oldFileNames) {
-            $oldPath = Join-Path $rulesDir $oldFile
-            if (Test-Path $oldPath) {
-                Remove-Item $oldPath -Force
-                Write-UiInfo "已清理旧文件: $oldFile"
-            }
         }
 
         foreach ($fileName in $script:RulesTemplates.Keys) {
@@ -447,9 +438,9 @@ function Verify-ClaudeMd {
 
         # 每个 rules 文件的关键标识
         $rulesValidation = @{
-            'ccg-multimodel.md' = '# 多模型协作'
-            'tools.md'          = '# 工具速查与知识获取'
-            'workflow.md'       = '# 工作流增强'
+            'ccq-multimodel.md' = '# 多模型协作'
+            'ccq-tools.md'      = '# 工具速查与知识获取'
+            'ccq-workflow.md'   = '# 工作流增强'
         }
 
         foreach ($fileName in $rulesValidation.Keys) {
