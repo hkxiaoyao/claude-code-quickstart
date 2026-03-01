@@ -24,6 +24,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-NodeFnmInstalled"
             InstallFunction = "Install-NodeFnm"
             VerifyFunction  = "Verify-NodeFnm"
+            UpdateFunction  = ""
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 10
@@ -39,6 +40,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-GitInstalled"
             InstallFunction = "Install-Git"
             VerifyFunction  = "Verify-Git"
+            UpdateFunction  = ""
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 20
@@ -54,6 +56,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-ClaudeCodeInstalled"
             InstallFunction = "Install-ClaudeCode"
             VerifyFunction  = "Verify-ClaudeCode"
+            UpdateFunction  = "Update-ClaudeCode"
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 30
@@ -69,6 +72,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-ApiKeyInstalled"
             InstallFunction = "Install-ApiKey"
             VerifyFunction  = "Verify-ApiKey"
+            UpdateFunction  = ""
             SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 40
@@ -84,6 +88,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-CclineInstalled"
             InstallFunction = "Install-Ccline"
             VerifyFunction  = "Verify-Ccline"
+            UpdateFunction  = "Update-Ccline"
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 50
@@ -99,6 +104,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-CcSwitchInstalled"
             InstallFunction = "Install-CcSwitch"
             VerifyFunction  = "Verify-CcSwitch"
+            UpdateFunction  = ""
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 60
@@ -114,6 +120,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-ClaudeConfigInstalled"
             InstallFunction = "Install-ClaudeConfig"
             VerifyFunction  = "Verify-ClaudeConfig"
+            UpdateFunction  = "Update-ClaudeConfig"
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 70
@@ -129,6 +136,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-ClaudeMdInstalled"
             InstallFunction = "Install-ClaudeMd"
             VerifyFunction  = "Verify-ClaudeMd"
+            UpdateFunction  = "Update-ClaudeMd"
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 80
@@ -144,6 +152,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-McpInstalled"
             InstallFunction = "Install-Mcp"
             VerifyFunction  = "Verify-Mcp"
+            UpdateFunction  = "Update-Mcp"
             SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 90
@@ -159,6 +168,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-CcgWorkflowInstalled"
             InstallFunction = "Install-CcgWorkflow"
             VerifyFunction  = "Verify-CcgWorkflow"
+            UpdateFunction  = "Update-CcgWorkflow"
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 100
@@ -174,6 +184,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-CodexCliInstalled"
             InstallFunction = "Install-CodexCli"
             VerifyFunction  = "Verify-CodexCli"
+            UpdateFunction  = "Update-CodexCli"
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 110
@@ -189,12 +200,29 @@ function Get-StepRegistry {
             TestFunction    = "Test-GeminiCliInstalled"
             InstallFunction = "Install-GeminiCli"
             VerifyFunction  = "Verify-GeminiCli"
+            UpdateFunction  = "Update-GeminiCli"
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 120
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
             LegacyIds       = @("Step12.GeminiCli")
+        },
+        @{
+            StepId          = "OpenSpec"
+            StepName        = "OpenSpec CLI"
+            Description     = "安装 OpenSpec CLI（规范驱动开发工具）"
+            StepFile        = "steps/OpenSpec.ps1"
+            TestFunction    = "Test-OpenSpecInstalled"
+            InstallFunction = "Install-OpenSpec"
+            VerifyFunction  = "Verify-OpenSpec"
+            UpdateFunction  = "Update-OpenSpec"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 130
+            Dependencies    = @("NodeFnm")
+            Group           = "Advanced"
+            LegacyIds       = @()
         }
     )
 }

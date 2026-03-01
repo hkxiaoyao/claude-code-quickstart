@@ -24,6 +24,9 @@ $script:ClaudeConfigEnvDefaults = @{
     "MAX_THINKING_TOKENS"                      = "31999"
 }
 
+# ClaudeConfig 废弃的 env 键（Update 时从 settings.env 中删除）
+$script:ClaudeConfigDeprecatedEnvKeys = @()
+
 # ClaudeConfig 负责的基础权限列表（合并策略：只添加缺失项，不删除已有项）
 $script:ClaudeConfigBasePermissions = @(
     "Bash",
@@ -315,9 +318,148 @@ function Verify-ClaudeConfig {
     return $result
 }
 
+function Update-ClaudeConfig {
+    <#
+    .SYNOPSIS
+    声明式对齐 ClaudeConfig 管辖的 env 键到最新默认值
+    .DESCRIPTION
+    与 Install 的"仅补缺失"策略不同，Update 使用"声明式对齐"：
+    - 白名单键：强制覆盖为最新值
+    - 废弃键：从 env 中删除
+    - 其他键：完全不触碰
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    # 禁区键集合
+    $forbiddenKeys = @("ANTHROPIC_AUTH_TOKEN")
+    $forbiddenPattern = ".*_API_KEY$"
+
+    try {
+        $settingsPath = Get-ClaudeSettingsPath
+        if (-not (Test-Path $settingsPath)) {
+            throw "settings.json 不存在，请先执行安装"
+        }
+
+        $settingsRaw = Get-Content $settingsPath -Raw
+        $settings = $settingsRaw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if (-not $settings) { throw "settings.json 无法解析" }
+
+        $updatedItems = [System.Collections.ArrayList]::new()
+
+        # 确保 env 节存在
+        if (-not $settings.ContainsKey("env")) {
+            $settings["env"] = @{}
+        }
+
+        # 声明式对齐：白名单键强制覆盖
+        foreach ($entry in $script:ClaudeConfigEnvDefaults.GetEnumerator()) {
+            $key = $entry.Key
+
+            # 禁区检查（区分大小写）
+            if ($key -cin $forbiddenKeys -or $key -cmatch $forbiddenPattern) {
+                continue
+            }
+
+            if (-not $settings["env"].ContainsKey($key)) {
+                $settings["env"][$key] = $entry.Value
+                [void]$updatedItems.Add("config::env.${key}::added")
+            } elseif ($settings["env"][$key] -cne $entry.Value) {
+                $oldVal = $settings["env"][$key]
+                $settings["env"][$key] = $entry.Value
+                [void]$updatedItems.Add("config::env.${key}::${oldVal}->${entry.Value}")
+            }
+        }
+
+        # 废弃键删除
+        foreach ($depKey in $script:ClaudeConfigDeprecatedEnvKeys) {
+            if ($depKey -cin $forbiddenKeys -or $depKey -cmatch $forbiddenPattern) {
+                continue
+            }
+            if ($settings["env"].ContainsKey($depKey)) {
+                $settings["env"].Remove($depKey)
+                [void]$updatedItems.Add("config::env.${depKey}::removed")
+            }
+        }
+
+        # permissions.allow：仅追加缺失项
+        if (-not $settings.ContainsKey("permissions") -or -not $settings["permissions"]) {
+            $settings["permissions"] = @{}
+        }
+        if (-not $settings["permissions"].ContainsKey("allow") -or -not $settings["permissions"]["allow"]) {
+            $settings["permissions"]["allow"] = @()
+        }
+
+        $allowList = [System.Collections.ArrayList]::new()
+        foreach ($perm in @($settings["permissions"]["allow"])) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$perm) -and ($allowList -notcontains [string]$perm)) {
+                [void]$allowList.Add([string]$perm)
+            }
+        }
+        foreach ($perm in $script:ClaudeConfigBasePermissions) {
+            if ($allowList -notcontains $perm) {
+                [void]$allowList.Add($perm)
+                [void]$updatedItems.Add("config::permissions.allow.${perm}::added")
+            }
+        }
+        $settings["permissions"]["allow"] = @($allowList)
+
+        # language / model / attribution：仅补缺失
+        if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
+            $settings["language"] = "简体中文"
+            [void]$updatedItems.Add("config::language::added")
+        }
+        if (-not $settings.ContainsKey("model") -or [string]::IsNullOrWhiteSpace([string]$settings["model"])) {
+            $settings["model"] = "sonnet"
+            [void]$updatedItems.Add("config::model::added")
+        }
+        if (-not $settings.ContainsKey("attribution") -or -not $settings["attribution"]) {
+            $settings["attribution"] = @{ "commit" = ""; "pr" = "" }
+            [void]$updatedItems.Add("config::attribution::added")
+        }
+
+        # 原子写入
+        $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+        for ($retry = 0; $retry -lt 3; $retry++) {
+            try {
+                Move-Item $tempPath $settingsPath -Force
+                break
+            } catch {
+                if ($retry -eq 2) { throw }
+                Start-Sleep -Seconds ([math]::Pow(2, $retry))
+            }
+        }
+
+        # 结果
+        if ($updatedItems.Count -eq 0) {
+            $result.UpdatedItems = @("noop::ClaudeConfig::no-change")
+            Write-UiInfo "ClaudeConfig 已是最新，无需更新"
+        } else {
+            $result.UpdatedItems = @($updatedItems)
+            Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)"
+        }
+
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 ClaudeConfig 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
+}
+
 # 辅助函数：获取 Claude Code settings.json 路径（HC-12: ~/.claude/settings.json）
 function Get-ClaudeSettingsPath {
-    return "$env:USERPROFILE\.claude\settings.json"
+    return "$(Get-UserHome)\.claude\settings.json"
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

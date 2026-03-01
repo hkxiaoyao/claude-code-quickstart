@@ -386,6 +386,131 @@ function Invoke-NpmGlobalInstall {
     }
 }
 
+# npm 全局过期包缓存（会话级，避免重复查询）
+$script:NpmOutdatedCache = $null
+
+function Get-NpmOutdatedGlobal {
+    <#
+    .SYNOPSIS
+    查询所有全局 npm 包的过期状态（带会话缓存）
+    .DESCRIPTION
+    调用 npm outdated -g --json，返回过期包的 hashtable。
+    结果缓存在 $script:NpmOutdatedCache，同一会话内只查询一次。
+    .PARAMETER Force
+    忽略缓存强制重新查询
+    .RETURNS
+    hashtable: packageName -> @{ Current; Latest }
+    仅包含有更新的包，不在结果中 = 已最新
+    #>
+    param([switch]$Force)
+
+    if (-not $Force -and $null -ne $script:NpmOutdatedCache) {
+        return $script:NpmOutdatedCache
+    }
+
+    $outdated = @{}
+
+    try {
+        # npm outdated -g 有过期包时 exit 1（正常行为），无过期时 exit 0
+        $npmResult = Invoke-ExternalCommand `
+            -Command "npm" `
+            -Arguments @("outdated", "-g", "--json") `
+            -TimeoutSeconds 60 `
+            -RetryCount 0 `
+            -SuppressOutput
+
+        $jsonOutput = $npmResult.Output
+        if (-not [string]::IsNullOrWhiteSpace($jsonOutput)) {
+            $parsed = $jsonOutput | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+            if ($null -ne $parsed) {
+                foreach ($pkg in $parsed.Keys) {
+                    $info = $parsed[$pkg]
+                    $outdated[$pkg] = @{
+                        Current = $info["current"]
+                        Latest  = $info["latest"]
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        # 查询失败不阻塞，返回空 hashtable（各步骤降级为旧行为）
+    }
+
+    $script:NpmOutdatedCache = $outdated
+    return $outdated
+}
+
+function Test-NpmUpdateAvailable {
+    <#
+    .SYNOPSIS
+    检测 npm 包是否有新版本可用（统一入口）
+    .DESCRIPTION
+    全局安装包：优先使用 Get-NpmOutdatedGlobal 缓存（1 次查全部）
+    非全局包（如 npx 安装的）：使用 -NonGlobal 开关回退到 npm view 单独查询
+    .PARAMETER PackageName
+    npm 包名（如 @anthropic-ai/claude-code）
+    .PARAMETER CurrentVersion
+    当前本地安装的版本号
+    .PARAMETER NonGlobal
+    非全局安装的包（如 npx 安装的 ccg-workflow），使用 npm view 查询
+    .RETURNS
+    @{ Available = $true/$false/$null; CurrentVersion; LatestVersion }
+    Available: $true=有更新, $false=已最新, $null=查询失败(应降级为旧行为)
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PackageName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$CurrentVersion,
+
+        [switch]$NonGlobal
+    )
+
+    $checkResult = @{
+        Available      = $null
+        CurrentVersion = $CurrentVersion
+        LatestVersion  = ""
+    }
+
+    if ($NonGlobal) {
+        # 非全局包：npm view 单独查询
+        try {
+            $npmResult = Invoke-ExternalCommand `
+                -Command "npm" `
+                -Arguments @("view", $PackageName, "version") `
+                -TimeoutSeconds 30 `
+                -RetryCount 0 `
+                -SuppressOutput
+
+            if ($npmResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($npmResult.Output)) {
+                $checkResult.LatestVersion = $npmResult.Output.Trim()
+                $checkResult.Available = ($CurrentVersion -ne $checkResult.LatestVersion)
+            }
+        }
+        catch {
+            # 查询失败不阻塞
+        }
+    }
+    else {
+        # 全局包：使用 npm outdated -g 缓存（1 次查全部）
+        $outdated = Get-NpmOutdatedGlobal
+        if ($outdated.ContainsKey($PackageName)) {
+            $checkResult.LatestVersion = $outdated[$PackageName].Latest
+            $checkResult.CurrentVersion = $outdated[$PackageName].Current
+            $checkResult.Available = $true
+        }
+        else {
+            # 不在 outdated 列表中 = 已最新（或未安装）
+            $checkResult.Available = $false
+            $checkResult.LatestVersion = $CurrentVersion
+        }
+    }
+
+    return $checkResult
+}
+
 function Test-CommandAvailable {
     <#
     .SYNOPSIS

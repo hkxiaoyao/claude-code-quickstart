@@ -10,8 +10,9 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1`（维护中） | **7.0+** | 全量安装：动态加载 Registry → 选择模式 → 拓扑排序执行 12 步 → 摘要 |
-| `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（NodeFnm~ApiKey）/ 进阶扩展（Ccline~GeminiCli）两级分组 |
+| `Install-ClaudeEnv.ps1`（维护中） | **7.0+** | 全量安装：动态加载 Registry → 选择模式 → 拓扑排序执行 13 步 → 摘要 |
+| `Manage-ClaudeEnv.ps1` | **7.0+** | 分组安装（推荐）：基础环境（NodeFnm~ApiKey）/ 进阶扩展（Ccline~OpenSpec）两级分组 |
+| `Update-ClaudeEnv.ps1` | **7.0+** | 统一更新：声明式更新已安装组件，支持交互多选 / CLI 指定 / 全量更新 |
 
 ---
 
@@ -42,7 +43,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 > **状态**：维护中，暂不推荐使用。请使用 `Manage-ClaudeEnv.ps1`。
 
-**用途**：PS 7 主安装入口，协调全部 12 个步骤。
+**用途**：PS 7 主安装入口，协调全部 13 个步骤。
 
 ### 参数
 
@@ -56,7 +57,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 ```powershell
 # 核心模块（顺序敏感：Registry 在 Bootstrap 之前）
-. core/Ui.ps1 → Process.ps1 → Profile.ps1 → Admin.ps1 → Net.ps1 → Registry.ps1 → Bootstrap.ps1
+. core/Ui.ps1 → Process.ps1 → Profile.ps1 → Admin.ps1 → Net.ps1 → Registry.ps1 → Bootstrap.ps1 → McpManager.ps1
 
 # 步骤模块（从 Registry 动态加载，按 Order 字段排序）
 $stepFiles = Get-StepFiles
@@ -149,7 +150,7 @@ Main()
 
 ## Manage-ClaudeEnv.ps1
 
-**用途**：PS 7 分组安装入口（推荐），将 12 个步骤分为**基础环境**和**进阶扩展**两组。
+**用途**：PS 7 分组安装入口（推荐），将 13 个步骤分为**基础环境**和**进阶扩展**两组。
 
 ### 参数
 
@@ -165,7 +166,7 @@ Main()
 | 分组 | 步骤 | 安装模式 |
 |------|------|----------|
 | **基础环境** | NodeFnm, Git, ClaudeCode, ApiKey | 仅一键安装 |
-| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, GeminiCli | 一键或多选 |
+| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, GeminiCli, OpenSpec | 一键或多选 |
 
 ### 核心函数
 
@@ -176,7 +177,7 @@ Main()
 | `Show-ExecutionPlan` | 显示执行计划（含自动补齐的依赖）并确认 |
 | `Invoke-GroupedInstall` | 依赖闭包 → 确认 → 拓扑排序 → 执行 |
 | `Show-AdvancedSelectMenu` | 进阶多选菜单（带状态标签和智能默认勾选） |
-| `Select-TopLevelAction` | 顶层菜单：基础环境 / 进阶扩展 |
+| `Select-TopLevelAction` | 顶层菜单：基础环境 / 进阶扩展 / MCP 管理 |
 | `Select-AdvancedAction` | 进阶子菜单：一键安装 / 可选安装 |
 
 ### 执行流
@@ -190,7 +191,8 @@ Main()
   ├── [CLI 模式]（-Group 参数）
   │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary（无 Logo，简化快速开始）
   │   ├── Advanced/OneClick → Invoke-GroupedInstall(进阶步骤) → Show-FinalSummary
-  │   └── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
+  │   ├── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
+  │   └── Mcp → Show-McpManageMenu（查看状态 / 切换 / 删除）
   │
   └── [交互模式]（无 -Group 参数） while($true):
       ├── Select-TopLevelAction
@@ -199,5 +201,64 @@ Main()
       │   ├── [一键] → Invoke-GroupedInstall(进阶步骤)
       │   ├── [可选] → Show-AdvancedSelectMenu → Invoke-GroupedInstall
       │   └── [Esc] → 回到顶层
+      ├── [MCP 管理] → Show-McpManageMenu（查看状态 / 切换 / 删除）
       └── [Esc] → 退出
+```
+
+---
+
+## Update-ClaudeEnv.ps1
+
+**用途**：PS 7 统一更新入口，声明式更新已安装组件。
+
+### 参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `-ListUpdates` | switch | 列出所有可更新步骤及状态后退出 |
+| `-All` | switch | 更新全部已安装的可更新组件 |
+| `-Steps` | string[] | 指定要更新的步骤 ID |
+| `-OnMissing` | string | 未安装时处理策略：`Ask`/`Skip`/`Install`/`Fail`（默认：有 `-All`/`-Steps` 时 `Skip`，否则 `Ask`） |
+
+### 可更新步骤（9 个）
+
+| StepId | UpdateFunction | 更新策略 |
+|--------|---------------|---------|
+| ClaudeCode | Update-ClaudeCode | npm install @latest + 版本回退 |
+| ClaudeConfig | Update-ClaudeConfig | 声明式对齐 env 键 + 废弃键清理 |
+| ClaudeMd | Update-ClaudeMd | 原子覆写 CLAUDE.md + ccq- rules |
+| Mcp | Update-Mcp | 更新已安装的 MCP Server 配置 |
+| Ccline | Update-Ccline | npm @latest + 重新 patch |
+| CcgWorkflow | Update-CcgWorkflow | npx ccg-workflow@latest init |
+| CodexCli | Update-CodexCli | npm install @latest |
+| GeminiCli | Update-GeminiCli | npm install @latest |
+| OpenSpec | Update-OpenSpec | npm install @latest |
+
+### 不可更新步骤（4 个）
+
+NodeFnm、Git、ApiKey、CcSwitch — 需通过 Manage 重新安装。
+
+### 核心机制
+
+- **Mutex**: `Global\CCQ.Update.Lock`，防止并发更新
+- **快照备份**: 更新前创建 `update_*` 目录，保留最近 5 个
+- **UpdatedItems 契约**: `<Scope>::<Target>::<Change>` 格式（如 `npm::claude-code::1.2.3->1.3.0`）
+- **依赖闭包**: 自动补齐更新依赖 + ClaudeCode→Ccline 后置联动
+
+### 执行流
+
+```
+Main()
+  ├── [if -ListUpdates] 列出可更新步骤 → exit
+  ├── Mutex 获取（不等待，失败则退出）
+  ├── try:
+  │   ├── 构建执行计划（Build-UpdatePlan）
+  │   │   ├── [-All] 全部已安装的可更新步骤
+  │   │   ├── [-Steps] 指定步骤 + 依赖闭包
+  │   │   └── [交互] Select-UpdateSteps 多选菜单
+  │   ├── 创建快照（New-UpdateSnapshot）
+  │   ├── 遍历执行计划 → Invoke-UpdateLifecycle
+  │   ├── 清理旧快照（Clear-OldUpdateSnapshots）
+  │   └── Show-UpdateSummary（分四类：Updated/Up-to-Date/Failed/Skipped）
+  └── finally: 释放 Mutex
 ```

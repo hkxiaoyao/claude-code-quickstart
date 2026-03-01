@@ -33,9 +33,14 @@ Set-StrictMode -Version Latest
 # Set-StrictMode -Version Latest 下，在 iex 管道场景中访问
 # $MyInvocation.MyCommand.Path 会因属性不存在而直接抛异常，
 # if 条件判断本身也无法阻止该异常，必须用 try/catch 捕获。
+# 同时保存完整脚本路径（用于提权时 -ScriptPath 传递）
+$script:BootstrapScriptPath = $null
 $scriptRoot = try {
     $p = $MyInvocation.MyCommand.Path
-    if ($p) { Split-Path -Parent $p } else { $null }
+    if ($p) {
+        $script:BootstrapScriptPath = $p
+        Split-Path -Parent $p
+    } else { $null }
 } catch {
     $null  # iex 管道场景，依赖已内联，无需本地路径
 }
@@ -382,6 +387,20 @@ function Show-CompletionMessage {
     }
 }
 
+function Wait-KeyBeforeExit {
+    <#
+    .SYNOPSIS
+    退出前等待用户按键，防止终端闪退（仅交互式终端生效）
+    #>
+    param()
+
+    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Write-Host ""
+        Write-Host "按任意键退出..." -ForegroundColor Gray
+        try { $null = [Console]::ReadKey($true) } catch { }
+    }
+}
+
 function Main {
     <#
     .SYNOPSIS
@@ -397,12 +416,14 @@ function Main {
         Write-Host ""
 
         # 检查管理员权限
+        # 显式传递 -ScriptPath 避免 $PSCommandPath 在 dot-source 函数中解析为 Admin.ps1
         Write-UiInfo "🔐 检查权限..."
-        $privilegeResult = Assert-StepPrivilege -StepName "引导脚本" -RequiresAdmin $true
+        $privilegeResult = Assert-StepPrivilege -StepName "引导脚本" -RequiresAdmin $true -ScriptPath $script:BootstrapScriptPath
 
         if (-not $privilegeResult) {
             Write-UiError "✗ 引导脚本需要管理员权限才能安装必要组件"
             Write-UiError "请以管理员身份运行此脚本"
+            Wait-KeyBeforeExit
             exit 1
         }
 
@@ -411,6 +432,7 @@ function Main {
         $windowsResult = Test-WindowsVersion
         if (-not $windowsResult.IsSupported) {
             Write-UiError "✗ 系统不兼容，无法继续安装"
+            Wait-KeyBeforeExit
             exit 1
         }
 
@@ -428,6 +450,7 @@ function Main {
         if (-not $ps7Result.Success) {
             Write-UiError "✗ PowerShell 7 安装失败，无法继续"
             Write-UiError "请手动安装 PowerShell 7 后重新运行此脚本"
+            Wait-KeyBeforeExit
             exit 1
         }
 
@@ -437,6 +460,7 @@ function Main {
     } catch {
         Write-UiError "✗ 引导脚本执行失败: $($_.Exception.Message)"
         Write-UiError "请检查错误信息并重新运行脚本"
+        Wait-KeyBeforeExit
         exit 1
     }
 }

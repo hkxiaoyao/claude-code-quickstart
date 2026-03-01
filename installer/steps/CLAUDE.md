@@ -35,27 +35,51 @@ function Verify-<StepId> {
 }
 ```
 
-> **注意**：回滚功能已移除，后续将在更新环境脚本中重新设计。
-> Bootstrap.ps1 的 `Invoke-StepLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
+### Update 函数契约（可选）
+
+可更新步骤额外实现 `Update-<StepId>` 函数，由 Registry 的 `UpdateFunction` 字段注册：
+
+```powershell
+# 执行更新（仅可更新步骤需要实现）
+function Update-<StepId> {
+    return @{
+        Success      = [bool]
+        ErrorMessage = [string]
+        Data         = @{}
+        UpdatedItems = @(        # 变更记录数组
+            "<Scope>::<Target>::<Change>"
+            # 示例: "npm::claude-code::1.2.3->1.3.0"
+            # 示例: "config::env.KEY::added"
+            # 示例: "noop::StepId::no-change"
+        )
+    }
+}
+```
+
+> 9 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Mcp、Ccline、CcgWorkflow、CodexCli、GeminiCli、OpenSpec。
+> 4 个步骤不可更新（UpdateFunction 为空）：NodeFnm、Git、ApiKey、CcSwitch。
+
+> **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
 ---
 
 ## 步骤总览
 
-| StepId | 名称 | 文件 | 可选 | SkipIfInstalled | 主要依赖 | 分组 |
-|--------|------|------|:----:|:---------------:|---------|------|
-| NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | 无 | 基础 |
-| Git | Git | `Git.ps1` | — | ✓ | 无 | 基础 |
-| ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | NodeFnm | 基础 |
-| ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | — | ClaudeCode | 基础 |
-| Ccline | ccline | `Ccline.ps1` | — | ✓ | ClaudeCode | 进阶 |
-| CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | ClaudeCode | 进阶 |
-| ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ClaudeCode | 进阶 |
-| ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ClaudeConfig | 进阶 |
-| Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | ClaudeCode | 进阶 |
-| CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | NodeFnm | 进阶 |
-| CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | NodeFnm | 进阶 |
-| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | NodeFnm | 进阶 |
+| StepId | 名称 | 文件 | 可选 | SkipIfInstalled | 可更新 | 主要依赖 | 分组 |
+|--------|------|------|:----:|:---------------:|:------:|---------|------|
+| NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | — | 无 | 基础 |
+| Git | Git | `Git.ps1` | — | ✓ | — | 无 | 基础 |
+| ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | ✓ | NodeFnm | 基础 |
+| ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | — | — | ClaudeCode | 基础 |
+| Ccline | ccline | `Ccline.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
+| CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
+| ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
+| ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
+| Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
+| CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeFnm | 进阶 |
+| CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
+| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
+| OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeFnm | 进阶 |
 
 ---
 
@@ -311,7 +335,7 @@ ccp zhipu        # 直接切换到智谱
 - `rules/ccq-tools.md`：工具速查表 + 知识获取 + 设计图获取
 - `rules/ccq-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
 
-**命名约定**：CCQ 管理的 rules 文件统一使用 `ccq-` 前缀，与用户自定义 rules 隔离。旧版文件名（无前缀 / `ccg-` 前缀）由用户自行清理。
+**命名约定**：CCQ 管理的 rules 文件统一使用 `ccq-` 前缀，与用户自定义 rules 隔离。
 
 **写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用原子覆写（直接替换，无备份）。
 
@@ -341,6 +365,13 @@ ccp zhipu        # 直接切换到智谱
 1. 修复了 Pencil 软件存在时错误跳过 MCP 配置的问题
 2. 修复了配置文件路径错误：MCP Server 配置应写入 `~/.claude.json`，而不是 `settings.json`
 3. 现在只有当 .claude.json 中有实际的 stdio/http MCP Server 配置时才返回 true（但不会跳过安装）
+
+**Vault 集成（mcp-lifecycle）**：
+- Install-Mcp Phase 3：凭据收集前读取 `~/.ccq/mcp-meta.json` 检查历史凭据，提示 `[Y/n]` 自动填充
+- Install-Mcp Phase 5：`.claude.json` 写入成功后，通过 `Invoke-WithMcpLock` 将凭据持久化到 vault
+- Update-Mcp：新增 `Clear-NpxCache` 清理 npx 缓存 + PreInstall npm-global 包更新
+- 凭据在 vault 写入后立即清零（安全）
+- Vault 读写失败不阻塞主流程（仅 warning）
 
 ---
 
@@ -388,6 +419,15 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
 # 正确调用方式（无 -DisplayName 参数）
 $installOut = Invoke-NpmGlobalInstall -PackageName "gemini-cli"
 ```
+
+---
+
+## OpenSpec — OpenSpec CLI（可选）
+
+**文件**：`OpenSpec.ps1`
+**依赖核心模块**：`Process.ps1`, `Ui.ps1`
+
+**安装流程**：`npm install -g @fission-ai/openspec` → PATH 刷新 → 验证 `openspec --version` / `openspec --help`
 
 ---
 

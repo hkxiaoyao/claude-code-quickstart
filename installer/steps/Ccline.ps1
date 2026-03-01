@@ -9,10 +9,11 @@ Set-StrictMode -Version Latest
 # 导入依赖模块
 . "$PSScriptRoot\..\core\Process.ps1"
 . "$PSScriptRoot\..\core\Ui.ps1"
+. "$PSScriptRoot\..\core\Profile.ps1"
 
 # 配置
 $script:CclinePackage = "@cometix/ccline"
-$script:ClaudeConfigDir = "$env:USERPROFILE\.claude"
+$script:ClaudeConfigDir = "$(Get-UserHome)\.claude"
 $script:ClaudeSettingsFile = "$script:ClaudeConfigDir\settings.json"
 
 function Test-CclineInstalled {
@@ -330,6 +331,132 @@ function Verify-Ccline {
     param()
 
     return Test-CclineInstalled
+}
+
+function Update-Ccline {
+    <#
+    .SYNOPSIS
+    更新 CCometixLine 到最新版本并重新 patch
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        Write-UiInfo "更新 CCometixLine..."
+
+        # 获取当前版本
+        $oldVersion = ""
+        if (Test-CommandAvailable -Command "ccline") {
+            $oldVersion = Get-CommandVersion -Command "ccline"
+        }
+        if ([string]::IsNullOrWhiteSpace($oldVersion)) {
+            throw "无法获取当前 CCometixLine 版本，请确认已安装"
+        }
+        Write-UiInfo "当前版本: $oldVersion"
+
+        # 检测是否有新版本（使用 npm outdated -g 批量缓存）
+        $updateCheck = Test-NpmUpdateAvailable -PackageName $script:CclinePackage -CurrentVersion $oldVersion
+        if ($updateCheck.LatestVersion) {
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+        }
+        if ($updateCheck.Available -eq $false) {
+            Write-UiInfo "CCometixLine 已是最新版本 ($oldVersion)"
+            $result.UpdatedItems = @("noop::Ccline::no-change")
+            $result.Data["OldVersion"] = $oldVersion
+            $result.Data["NewVersion"] = $oldVersion
+            $result.Success = $true
+            return $result
+        }
+
+        # 执行 npm install -g @latest
+        $installSuccess = $false
+        $lastError = ""
+        for ($attempt = 0; $attempt -lt 3; $attempt++) {
+            if ($attempt -gt 0) {
+                $waitSec = [math]::Pow(2, $attempt)
+                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Start-Sleep -Seconds $waitSec
+            }
+            $installResult = Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "$($script:CclinePackage)@latest") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
+            if ($installResult.ExitCode -eq 0) {
+                $installSuccess = $true
+                break
+            }
+            $lastError = $installResult.Error
+        }
+
+        if (-not $installSuccess) {
+            # 回退到旧版本
+            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+            Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "$($script:CclinePackage)@$oldVersion") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
+            throw "npm install @latest 失败 (已尝试 3 次): $lastError"
+        }
+
+        # 刷新 PATH
+        Refresh-SessionPath
+
+        # 获取新版本
+        $newVersion = Get-CommandVersion -Command "ccline"
+        $result.Data["OldVersion"] = $oldVersion
+        $result.Data["NewVersion"] = $newVersion
+
+        $updatedItems = [System.Collections.ArrayList]::new()
+
+        if ($oldVersion -eq $newVersion) {
+            [void]$updatedItems.Add("noop::Ccline::no-change")
+            Write-UiInfo "CCometixLine 已是最新版本 ($newVersion)"
+        } else {
+            [void]$updatedItems.Add("npm::ccline::${oldVersion}->${newVersion}")
+            Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion"
+        }
+
+        # 重新执行 ccline patch（升级后必须重新 patch）
+        $patchApplied = $false
+        try {
+            $npmRoot = (& npm root -g 2>$null | Select-Object -First 1)
+            if ($npmRoot) { $npmRoot = $npmRoot.Trim() }
+            if ($npmRoot -and (Test-Path $npmRoot)) {
+                $claudeCliPath = Join-Path $npmRoot "@anthropic-ai\claude-code\cli.js"
+                if (Test-Path $claudeCliPath) {
+                    $claudeCliArg = if ($claudeCliPath -match "\s") { "`"$claudeCliPath`"" } else { $claudeCliPath }
+                    $patchResult = Invoke-ExternalCommand -Command "ccline" `
+                        -Arguments @("--patch", $claudeCliArg) -TimeoutSeconds 30 -SuppressOutput
+                    if ($patchResult.Success) {
+                        $patchApplied = $true
+                        [void]$updatedItems.Add("patch::ccline::re-patched")
+                        Write-UiSuccess "✓ ccline patch 重新应用成功"
+                    } else {
+                        Write-UiWarn "ccline patch 重新应用失败，不影响基本功能"
+                    }
+                } else {
+                    Write-UiWarn "Claude Code cli.js 未找到，跳过 patch"
+                }
+            }
+        } catch {
+            Write-UiWarn "ccline patch 执行异常: $($_.Exception.Message)"
+        }
+
+        $result.Data["PatchApplied"] = $patchApplied
+        $result.UpdatedItems = @($updatedItems)
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 CCometixLine 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

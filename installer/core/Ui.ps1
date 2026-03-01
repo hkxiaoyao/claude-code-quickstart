@@ -739,7 +739,7 @@ function Show-MultiSelectMenu {
                 }
                 'Escape' {
                     Write-Host ""
-                    return @()
+                    return $null
                 }
             }
         }

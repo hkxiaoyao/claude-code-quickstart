@@ -59,6 +59,7 @@ $script:InstallerRoot = $PSScriptRoot
 . "$script:InstallerRoot\core\Net.ps1"
 . "$script:InstallerRoot\core\Registry.ps1"
 . "$script:InstallerRoot\core\Bootstrap.ps1"
+. "$script:InstallerRoot\core\McpManager.ps1"
 
 # ─── Dot-source 所有步骤模块（从 Registry 动态加载）──────────────────────────
 

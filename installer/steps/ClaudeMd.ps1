@@ -227,7 +227,7 @@ function Get-ClaudeMdPath {
     #>
 
     if ($IsWindows -or $env:OS -eq "Windows_NT") {
-        return "$env:USERPROFILE\.claude\CLAUDE.md"
+        return "$(Get-UserHome)\.claude\CLAUDE.md"
     } else {
         return "$env:HOME/.claude/CLAUDE.md"
     }
@@ -240,7 +240,7 @@ function Get-ClaudeRulesDir {
     #>
 
     if ($IsWindows -or $env:OS -eq "Windows_NT") {
-        return "$env:USERPROFILE\.claude\rules"
+        return "$(Get-UserHome)\.claude\rules"
     } else {
         return "$env:HOME/.claude/rules"
     }
@@ -476,5 +476,116 @@ function Verify-ClaudeMd {
     return $result
 }
 
+function Update-ClaudeMd {
+    <#
+    .SYNOPSIS
+    更新 CLAUDE.md + ccq-* rules 文件到最新版本
+    .DESCRIPTION
+    原子覆写 CLAUDE.md 和 ccq- 前缀的 rules 文件。
+    仅操作 ccq- 前缀文件（HC-U8），用户自定义 rules 文件严禁修改。
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        $updatedItems = [System.Collections.ArrayList]::new()
+        $claudeMdPath = Get-ClaudeMdPath
+        $rulesDir = Get-ClaudeRulesDir
+
+        # 确保目录存在
+        $claudeMdDir = Split-Path $claudeMdPath -Parent
+        if (-not (Test-Path $claudeMdDir)) {
+            New-Item -ItemType Directory -Path $claudeMdDir -Force | Out-Null
+        }
+        if (-not (Test-Path $rulesDir)) {
+            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+        }
+
+        # 更新 CLAUDE.md 主文件
+        $mainChanged = $true
+        if (Test-Path $claudeMdPath) {
+            $existingContent = Get-Content $claudeMdPath -Raw -ErrorAction SilentlyContinue
+            $templateNormalized = $script:ClaudeMdTemplate -replace "`r`n", "`n"
+            $existingNormalized = if ($existingContent) { $existingContent -replace "`r`n", "`n" } else { "" }
+            if ($templateNormalized.Trim() -eq $existingNormalized.Trim()) {
+                $mainChanged = $false
+            }
+        }
+
+        if ($mainChanged) {
+            $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
+            if (-not $writeResult) {
+                throw "CLAUDE.md 写入失败"
+            }
+            [void]$updatedItems.Add("file::CLAUDE.md::overwritten")
+        }
+
+        # 清理旧版 rules 文件 (ccg- 前缀 或 无前缀的旧文件名)
+        if (Test-Path $rulesDir) {
+            $oldFiles = Get-ChildItem -Path (Join-Path $rulesDir "*") -Include "ccg-*.md", "multimodel.md", "tools.md", "workflow.md" -File -ErrorAction SilentlyContinue
+            foreach ($oldFile in $oldFiles) {
+                try {
+                    Remove-Item $oldFile.FullName -Force -ErrorAction Stop
+                    [void]$updatedItems.Add("file::rules/$($oldFile.Name)::deleted")
+                } catch {
+                    Write-UiWarn "无法删除旧 rules 文件: $($oldFile.Name) ($($_.Exception.Message))"
+                }
+            }
+        }
+
+        # 更新 ccq-* rules 文件
+        foreach ($fileName in $script:RulesTemplates.Keys) {
+            # HC-U8: 仅处理 ccq- 前缀的文件
+            if (-not $fileName.StartsWith("ccq-")) {
+                continue
+            }
+
+            $rulePath = Join-Path $rulesDir $fileName
+            $ruleContent = $script:RulesTemplates[$fileName]
+
+            $ruleChanged = $true
+            if (Test-Path $rulePath) {
+                $existingRule = Get-Content $rulePath -Raw -ErrorAction SilentlyContinue
+                $ruleNormalized = $ruleContent -replace "`r`n", "`n"
+                $existingRuleNormalized = if ($existingRule) { $existingRule -replace "`r`n", "`n" } else { "" }
+                if ($ruleNormalized.Trim() -eq $existingRuleNormalized.Trim()) {
+                    $ruleChanged = $false
+                }
+            }
+
+            if ($ruleChanged) {
+                $ruleWriteResult = Write-FileAtomically -FilePath $rulePath -Content $ruleContent
+                if (-not $ruleWriteResult) {
+                    throw "rules/$fileName 写入失败"
+                }
+                [void]$updatedItems.Add("file::rules/${fileName}::overwritten")
+            }
+        }
+
+        # 结果
+        if ($updatedItems.Count -eq 0) {
+            $result.UpdatedItems = @("noop::ClaudeMd::no-change")
+            Write-UiInfo "ClaudeMd 已是最新，无需更新"
+        } else {
+            $result.UpdatedItems = @($updatedItems)
+            Write-UiSuccess "✓ ClaudeMd 已更新 ($($updatedItems.Count) 项变更)"
+        }
+
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 ClaudeMd 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
+}
+
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
-# 所有函数在 dot-source 后自动可用

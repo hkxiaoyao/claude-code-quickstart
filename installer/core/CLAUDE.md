@@ -18,6 +18,7 @@
 | `Net.ps1` | ~270 | 端点可达性检测、文件下载 |
 | `Registry.ps1` | 280 | **共享步骤注册表**：元数据、分组、依赖、迁移映射（消除 DRY 违规） |
 | `Bootstrap.ps1` | 617 | 步骤状态模型、生命周期调度、拓扑排序、恢复逻辑 |
+| `McpManager.ps1` | ~890 | MCP Server CRUD 管理：vault 读写、状态查看、禁用/启用/删除、凭据持久化 |
 
 ---
 
@@ -187,6 +188,7 @@ class InstallState {
 "CcgWorkflow"   = @("NodeFnm")
 "CodexCli"      = @("NodeFnm")
 "GeminiCli"     = @("NodeFnm")
+"OpenSpec"      = @("NodeFnm")
 ```
 
 ### 主要函数
@@ -222,3 +224,61 @@ $success = if ($result -is [bool]) { $result }
 - `Invoke-StepLifecycle`：每次都执行 `Test` 函数检测当前环境
 - `Test-StepDependencies`：优先检查本次会话内的失败状态（阻止执行），然后实时调用依赖的 `Test` 函数检测是否真的已安装
 - 已安装的组件自动跳过，无需手动管理状态文件
+
+---
+
+## McpManager.ps1
+
+### 职责
+
+MCP Server 生命周期管理：凭据 vault 读写、状态查看、禁用/启用/删除、批量切换、管理菜单。
+
+### 数据模型
+
+**Vault 文件**: `~/.ccq/mcp-meta.json`（Schema v1）
+
+```json
+{
+  "schemaVersion": 1,
+  "createdAt": "ISO 8601",
+  "updatedAt": "ISO 8601",
+  "servers": {
+    "<serverId>": {
+      "disabled": false,
+      "credentials": { "values": {}, "envFileValues": {} },
+      "definitionHash": "8 hex chars (SHA-256)",
+      "updatedAt": "ISO 8601"
+    }
+  }
+}
+```
+
+### 常量
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `$McpMetaSchemaVersion` | `1` | vault schema 版本 |
+| `$McpMaxCorruptBackups` | `5` | 腐败备份最大数量 |
+| `$McpMutexName` | `Global\CCQ.Mcp.Lock` | 并发保护 Mutex |
+| `$McpMutexTimeoutMs` | `30000` | Mutex 超时（30s） |
+
+### 主要函数
+
+| 函数 | 职责 |
+|------|------|
+| `Ensure-CcqMetaDir` | 确保 `~/.ccq/` 目录存在 |
+| `Get-McpMetaPath` | 返回 vault 文件路径 |
+| `New-EmptyMcpMeta` | 创建空 v1 vault |
+| `Read-McpMeta` | 读取 vault + 腐败恢复 + schema 校验 |
+| `Write-McpMeta` | 原子写入 vault + 时间戳更新 |
+| `Invoke-WithMcpLock` | Mutex 包装（防止并发写入） |
+| `Get-McpDefinitionHash` | SHA-256 前 8 位哈希 |
+| `Get-McpStatus` | 计算所有 MCP 状态（Custom/Disabled/Active/Missing） |
+| `Show-McpStatusTable` | 彩色表格输出 |
+| `Disable-McpServer` | 禁用（保存配置到 vault，从 .claude.json 移除） |
+| `Enable-McpServer` | 启用（从 vault 恢复，重建配置） |
+| `Remove-McpServer` | 删除（清理所有相关文件） |
+| `Invoke-McpToggle` | 批量切换（Active↔Disabled） |
+| `Show-McpManageMenu` | 交互管理菜单（状态/切换/删除） |
+
+> **加载顺序**：McpManager.ps1 必须在 Bootstrap.ps1 之后、steps/ 之前加载。依赖 Ui.ps1、Process.ps1、Profile.ps1 的函数。运行时依赖 Mcp.ps1 的 `$script:McpServers` 和 `New-McpSettingsEntry`。

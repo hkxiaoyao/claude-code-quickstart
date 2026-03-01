@@ -186,7 +186,7 @@ function Install-ApiKey {
                 Write-UiInfo "  Base URL: $baseUrl"
             }
 
-            $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+            $providersDir = Join-Path (Get-UserHome) ".claude\providers"
             if (Test-Path $providersDir) {
                 $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue
                 if ($profiles -and $profiles.Count -gt 0) {
@@ -206,7 +206,7 @@ function Install-ApiKey {
                 Write-UiSuccess "保持当前供应商配置"
 
                 # 检查并补生成 profile（迁移旧用户）
-                $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+                $providersDir = Join-Path (Get-UserHome) ".claude\providers"
                 $hasProfiles = (Test-Path $providersDir) -and
                     @(Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue).Count -gt 0
                 if (-not $hasProfiles) {
@@ -434,7 +434,7 @@ function Install-ApiKey {
 
         # 保存供应商 Profile 文件
         try {
-            $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+            $providersDir = Join-Path (Get-UserHome) ".claude\providers"
             if (-not (Test-Path $providersDir)) {
                 New-Item -ItemType Directory -Path $providersDir -Force | Out-Null
             }
@@ -480,7 +480,7 @@ function Install-ApiKey {
 
         # 创建/更新 ~/.claude.json 配置（添加 hasCompletedOnboarding）
         try {
-            $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+            $claudeJsonPath = "$(Get-UserHome)\.claude.json"
             $claudeJsonConfig = @{}
 
             # 如果文件已存在，读取并合并
@@ -618,7 +618,9 @@ function Invoke-ProviderSwitcherInjection {
             '# Claude Code Provider Switcher (CCQ)'
             'function Switch-ClaudeProvider {'
             '    param([string]$Provider)'
-            '    $providersDir = "$env:USERPROFILE\.claude\providers"'
+            '    $homeDir = $env:USERPROFILE'
+            '    try { if (Test-Path $homeDir) { $homeDir = (Get-Item $homeDir).FullName } } catch {}'
+            '    $providersDir = Join-Path $homeDir ".claude\providers"'
             ''
             '    if (-not $Provider) {'
             '        $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue'
@@ -668,7 +670,7 @@ function Invoke-ProviderSwitcherInjection {
             '        return'
             '    }'
             ''
-            '    $settingsPath = "$env:USERPROFILE\.claude\settings.json"'
+            '    $settingsPath = Join-Path $homeDir ".claude\settings.json"'
             '    $settings = @{}'
             '    if (Test-Path $settingsPath) {'
             '        try {'
@@ -717,7 +719,7 @@ function Invoke-ProviderSwitcherInjection {
 
 # 辅助函数：获取 Claude Code settings.json 路径（HC-12: ~/.claude/settings.json）
 function Get-ClaudeSettingsPath {
-    return "$env:USERPROFILE\.claude\settings.json"
+    return "$(Get-UserHome)\.claude\settings.json"
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

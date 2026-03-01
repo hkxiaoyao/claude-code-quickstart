@@ -658,7 +658,15 @@ function New-McpSettingsEntry {
                 }
 
                 if ($resolvedUrl -match "\{[A-Za-z0-9_]+\}") {
-                    throw "$ServerId 的 URL 仍包含未替换占位符: $resolvedUrl"
+                    # HC-M10: 掩码凭据值，避免异常消息泄露敏感信息
+                    $maskedUrl = $resolvedUrl
+                    foreach ($credName in $Credentials.Keys) {
+                        $escapedVal = [System.Uri]::EscapeDataString([string]$Credentials[$credName])
+                        if ($escapedVal) {
+                            $maskedUrl = $maskedUrl -replace [regex]::Escape($escapedVal), "***"
+                        }
+                    }
+                    throw "$ServerId 的 URL 仍包含未替换占位符: $maskedUrl"
                 }
 
                 return @{
@@ -910,9 +918,10 @@ function Write-McpEnvFile {
             }
         }
 
-        $tempPath = "$envPath.tmp"
-        $lines | Set-Content -Path $tempPath -Encoding UTF8
-        Move-Item -Path $tempPath -Destination $envPath -Force
+        $writeOk = Write-FileAtomically -FilePath $envPath -Content $lines
+        if (-not $writeOk) {
+            throw "env 文件原子写入失败: $envPath"
+        }
 
         return @{ Success = $true; Path = $envPath }
     }
@@ -936,7 +945,7 @@ function Test-McpInstalled {
     #>
 
     try {
-        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
         if (-not (Test-Path $claudeJsonPath)) {
             return $false
         }
@@ -1013,7 +1022,7 @@ function Install-Mcp {
         Write-UiInfo "配置 MCP Server..."
 
         # 检测已安装的 MCP Server
-        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
         $existingServers = @()
         if (Test-Path $claudeJsonPath) {
             try {
@@ -1036,7 +1045,8 @@ function Install-Mcp {
         )
         $modeIndex = Show-SingleSelectMenu -Options $modeOptions -Title "MCP Server 安装模式"
         if ($modeIndex -lt 0) {
-            throw "未选择安装模式"
+            Write-UiInfo "已取消 MCP Server 安装模式选择"
+            return $true
         }
         $selectedMode = if ($modeIndex -eq 0) { "quick" } else { "custom" }
 
@@ -1070,7 +1080,13 @@ function Install-Mcp {
             Write-UiInfo "请选择要安装的 MCP Server:"
             $selectedIndices = Show-MultiSelectMenu -Options $displayOptions -DefaultSelected $defaultSelected -Title "MCP Server 选择"
 
-            if (-not $selectedIndices -or @($selectedIndices).Count -eq 0) {
+            # $null = 用户按 Esc 取消，优雅退出
+            if ($null -eq $selectedIndices) {
+                Write-UiInfo "已取消 MCP Server 选择"
+                return $true
+            }
+
+            if (@($selectedIndices).Count -eq 0) {
                 throw "未选择任何 MCP Server"
             }
 
@@ -1114,7 +1130,8 @@ function Install-Mcp {
             -Options @("是，开始安装", "否，取消")
 
         if ($confirmIndex -ne 0) {
-            throw "用户取消安装"
+            Write-UiInfo "已取消 MCP Server 安装"
+            return $true
         }
 
         $serverStatus = @{}
@@ -1223,10 +1240,59 @@ function Install-Mcp {
             }
         }
 
+        # Task 2.11: vault 读取 — 历史凭据自动填充
+        $vaultMeta = $null
+        try {
+            $vaultMeta = Read-McpMeta
+        }
+        catch {
+            Write-UiWarn "vault 读取失败，跳过历史凭据检测: $($_.Exception.Message)"
+        }
+
         $serversToRemove = @()
         foreach ($serverId in @($activeServers)) {
             $server = $script:McpServers[$serverId]
             if ($server.CredentialType -eq "none") {
+                continue
+            }
+
+            # 检查 vault 中是否有历史凭据
+            $useVaultCredentials = $false
+            if ($null -ne $vaultMeta -and
+                $vaultMeta.ContainsKey("servers") -and
+                $vaultMeta.servers -is [hashtable] -and
+                $vaultMeta.servers.ContainsKey($serverId) -and
+                $vaultMeta.servers[$serverId] -is [hashtable] -and
+                $vaultMeta.servers[$serverId].ContainsKey("credentials") -and
+                $vaultMeta.servers[$serverId].credentials -is [hashtable]) {
+
+                $vaultCred = $vaultMeta.servers[$serverId].credentials
+                $hasValues = $vaultCred.ContainsKey("values") -and $vaultCred.values -is [hashtable] -and $vaultCred.values.Count -gt 0
+                $hasEnvValues = $vaultCred.ContainsKey("envFileValues") -and $vaultCred.envFileValues -is [hashtable] -and $vaultCred.envFileValues.Count -gt 0
+
+                if ($hasValues -or $hasEnvValues) {
+                    $maskedKeys = @()
+                    if ($hasValues) {
+                        $maskedKeys += @($vaultCred.values.Keys | ForEach-Object { "$_=***" })
+                    }
+                    Write-UiInfo "检测到 $($server.Name) 的历史凭据 ($($maskedKeys -join ', '))"
+                    Write-Host -NoNewline "  是否使用历史凭据？[Y/n]: "
+                    $answer = Read-Host
+                    if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^[Yy]') {
+                        if ($hasValues) {
+                            $settingsCredentials[$serverId] = $vaultCred.values
+                        }
+                        if ($hasEnvValues) {
+                            $envFileCredentials[$serverId] = $vaultCred.envFileValues
+                        }
+                        $serverStatus[$serverId].State = "凭据已完成"
+                        $useVaultCredentials = $true
+                        Write-UiSuccess "$($server.Name) 已使用历史凭据"
+                    }
+                }
+            }
+
+            if ($useVaultCredentials) {
                 continue
             }
 
@@ -1285,7 +1351,7 @@ function Install-Mcp {
         }
 
         # 读取 ~/.claude.json 配置
-        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
         $claudeJson = @{}
 
         if (Test-Path $claudeJsonPath) {
@@ -1384,27 +1450,21 @@ function Install-Mcp {
             }
         }
 
-        # 写入 ~/.claude/settings.json（权限和 env）
-        $settingsDir = Split-Path $settingsPath -Parent
-        if (-not (Test-Path $settingsDir)) {
-            New-Item -ItemType Directory -Path $settingsDir -Force | Out-Null
-        }
-
+        # 写入 ~/.claude/settings.json（权限和 env）— 原子写入
         Write-UiInfo "写入 settings.json 配置（权限和环境变量）..."
-        $tempPath = "$settingsPath.tmp"
-        $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $tempPath -Encoding UTF8
-        Move-Item -Path $tempPath -Destination $settingsPath -Force
-
-        # 写入 ~/.claude.json（MCP Server 配置）
-        $claudeJsonDir = Split-Path $claudeJsonPath -Parent
-        if (-not (Test-Path $claudeJsonDir)) {
-            New-Item -ItemType Directory -Path $claudeJsonDir -Force | Out-Null
+        $settingsJson = $settings | ConvertTo-Json -Depth 10
+        $writeOk = Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
+        if (-not $writeOk) {
+            throw "settings.json 原子写入失败"
         }
 
+        # 写入 ~/.claude.json（MCP Server 配置）— 原子写入
         Write-UiInfo "写入 .claude.json 配置（MCP Server）..."
-        $tempClaudeJsonPath = "$claudeJsonPath.tmp"
-        $claudeJson | ConvertTo-Json -Depth 10 | Set-Content -Path $tempClaudeJsonPath -Encoding UTF8
-        Move-Item -Path $tempClaudeJsonPath -Destination $claudeJsonPath -Force
+        $claudeJsonContent = $claudeJson | ConvertTo-Json -Depth 10
+        $writeOk = Write-FileAtomically -FilePath $claudeJsonPath -Content @($claudeJsonContent)
+        if (-not $writeOk) {
+            throw ".claude.json 原子写入失败"
+        }
 
         Write-UiSuccess "✓ MCP Server 配置已写入"
         Write-UiInfo "配置路径:"
@@ -1429,6 +1489,39 @@ function Install-Mcp {
             Write-UiInfo "  - $($server.Name): $status"
         }
 
+        # Task 2.12: vault 写入 — 安装成功后持久化凭据
+        try {
+            $successfulServerIds = @($activeServers | Where-Object { $serverStatus[$_].State -ne "失败" })
+            if ($successfulServerIds.Count -gt 0) {
+                Invoke-WithMcpLock {
+                    $meta = Read-McpMeta
+                    foreach ($sid in $successfulServerIds) {
+                        $cred = @{}
+                        if ($settingsCredentials.ContainsKey($sid) -and $settingsCredentials[$sid] -is [hashtable]) {
+                            $cred["values"] = $settingsCredentials[$sid]
+                        }
+                        if ($envFileCredentials.ContainsKey($sid) -and $envFileCredentials[$sid] -is [hashtable]) {
+                            $cred["envFileValues"] = $envFileCredentials[$sid]
+                        }
+                        $meta.servers[$sid] = @{
+                            disabled       = $false
+                            credentials    = $cred
+                            definitionHash = Get-McpDefinitionHash $script:McpServers[$sid]
+                            updatedAt      = (Get-Date).ToUniversalTime().ToString("o")
+                        }
+                    }
+                    Write-McpMeta $meta
+                }
+                foreach ($sid in $successfulServerIds) {
+                    Write-UiSuccess "已保存 ${sid} 凭据到 vault"
+                }
+            }
+        }
+        catch {
+            Write-UiWarn "vault 写入失败（不影响 MCP 配置）: $($_.Exception.Message)"
+        }
+
+        # 凭据清零（安全）
         foreach ($serverId in @($settingsCredentials.Keys)) {
             foreach ($key in @($settingsCredentials[$serverId].Keys)) {
                 $settingsCredentials[$serverId][$key] = $null
@@ -1454,7 +1547,7 @@ function Verify-Mcp {
 
     try {
         # 验证 ~/.claude.json 中的 MCP Server 配置
-        $claudeJsonPath = "$env:USERPROFILE\.claude.json"
+        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
         if (-not (Test-Path $claudeJsonPath)) {
             throw ".claude.json 不存在"
         }
@@ -1642,8 +1735,297 @@ function Get-ClaudeSettingsPath {
     获取 Claude Code settings.json 路径（HC-12: ~/.claude/settings.json）
     #>
 
-    return "$env:USERPROFILE\.claude\settings.json"
+    return "$(Get-UserHome)\.claude\settings.json"
+}
+
+function Clear-NpxCache {
+    <#
+    .SYNOPSIS
+    清理 npx 缓存目录（_npx）
+    .DESCRIPTION
+    主路径：删除 npm cache 下的 _npx 子目录
+    回退：npm cache clean --force（仅主路径失败时执行）
+    .RETURNS
+    @{ Success; Skipped; Fallback; NoOp; Reason }
+    #>
+
+    # HC-13: 初始化完整属性集，防止 StrictMode 下访问缺失属性
+    $base = @{ Success = $false; Skipped = $false; Fallback = $false; NoOp = $false; Reason = "" }
+
+    # 1. 检测 npm 可用性
+    if (-not (Test-CommandAvailable "npm")) {
+        $base.Skipped = $true; $base.Reason = "npm-missing"
+        return $base
+    }
+
+    # 2. 获取缓存路径
+    $cacheResult = Invoke-ExternalCommand -Command "npm" -Arguments @("config", "get", "cache") -SuppressOutput
+    if ($cacheResult.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($cacheResult.Output)) {
+        $base.Skipped = $true; $base.Reason = "cache-path-unavailable"
+        return $base
+    }
+
+    $cacheDir = $cacheResult.Output.Trim()
+    $npxDir = Join-Path $cacheDir "_npx"
+
+    # 3. 主路径：删除 _npx 目录
+    if (Test-Path $npxDir) {
+        try {
+            Remove-Item $npxDir -Recurse -Force
+            $base.Success = $true
+            return $base
+        }
+        catch {
+            # 4. Fallback：npm cache clean --force
+            $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -SuppressOutput
+            $base.Success = ($cleanResult.ExitCode -eq 0); $base.Fallback = $true
+            return $base
+        }
+    }
+
+    $base.Success = $true; $base.NoOp = $true
+    return $base
+}
+
+function Update-Mcp {
+    <#
+    .SYNOPSIS
+    更新已安装的 MCP Server 配置到最新定义
+    .DESCRIPTION
+    - Phase 0: npx 缓存清理 + PreInstall npm-global 更新
+    - 已存在的 Server：对比 args/url/配置，变更则更新
+    - 不存在的 Server：不自动添加（由 -OnMissing 控制）
+    - 不删除用户手动添加的 Server
+    - 同步更新 permissions.allow
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        $updatedItems = [System.Collections.ArrayList]::new()
+
+        # ── Phase 0: npx 缓存清理 + PreInstall npm-global 更新 ──
+        $cacheResult = Clear-NpxCache
+        if ($cacheResult.Skipped) {
+            [void]$updatedItems.Add("skipped::npm-missing")
+        }
+        elseif ($cacheResult.Success -and -not $cacheResult.NoOp) {
+            Write-UiSuccess "npx 缓存已清理"
+            [void]$updatedItems.Add("cache::npx::cleared")
+        }
+        elseif (-not $cacheResult.Success) {
+            Write-UiWarn "npx 缓存清理失败，继续更新..."
+            [void]$updatedItems.Add("cache::npx::clear-failed")
+        }
+
+        # PreInstall npm-global 更新
+        foreach ($serverId in $script:McpServers.Keys) {
+            $serverDef = $script:McpServers[$serverId]
+            if (-not $serverDef.ContainsKey("PreInstall") -or -not $serverDef["PreInstall"]) { continue }
+            $pre = [hashtable]$serverDef["PreInstall"]
+            if ($pre.Type -ne "npm-global") { continue }
+
+            Write-UiInfo "正在更新 $($pre.Package)..."
+            $installResult = Invoke-NpmGlobalInstall -PackageName $pre.Package -Force
+            if ($installResult.Success) {
+                [void]$updatedItems.Add("npm::$($pre.Package)::updated")
+            }
+            else {
+                Write-UiWarn "更新 $($pre.Package) 失败: $($installResult.Error)"
+            }
+        }
+
+        # ── Phase 1+: 配置对齐（原有逻辑）──
+
+        # 读取 .claude.json
+        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
+        if (-not (Test-Path $claudeJsonPath)) {
+            $result.UpdatedItems = @("noop::Mcp::no-change")
+            $result.Success = $true
+            Write-UiInfo "Mcp 配置文件不存在，跳过更新"
+            return $result
+        }
+
+        # R-09: Mutex 保护配置文件读-改-写（防止与 Disable/Enable/Remove 并发冲突）
+        Invoke-WithMcpLock {
+
+        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if (-not $claudeJson) { $claudeJson = @{} }
+        if (-not $claudeJson.ContainsKey("mcpServers")) {
+            $claudeJson["mcpServers"] = @{}
+        }
+
+        $configChanged = $false
+
+        # 遍历 CCQ 定义的 MCP Servers
+        foreach ($serverId in $script:McpServers.Keys) {
+            $serverDef = $script:McpServers[$serverId]
+
+            # 仅更新已安装的 Server
+            if (-not $claudeJson["mcpServers"].ContainsKey($serverId)) {
+                continue
+            }
+
+            $existingConfig = $claudeJson["mcpServers"][$serverId]
+            $needsUpdate = $false
+
+            # 比较配置
+            switch ($serverDef.McpType) {
+                "stdio" {
+                    $expectedArgs = @($serverDef.Args)
+                    $currentArgs = if ($existingConfig.ContainsKey("args")) { @($existingConfig["args"]) } else { @() }
+                    $expectedCommand = $serverDef.Command
+
+                    # 只比较非凭据部分的 args（凭据部分保留用户原值）
+                    if ($existingConfig.ContainsKey("command") -and [string]$existingConfig["command"] -ne $expectedCommand) {
+                        $needsUpdate = $true
+                    }
+
+                    # 比较基础 args（不含凭据注入的部分）
+                    $baseArgsChanged = $false
+                    if ($expectedArgs.Count -ne $currentArgs.Count) {
+                        if ($serverDef.CredentialType -eq "none") {
+                            $baseArgsChanged = $true
+                        } else {
+                            # IDEM-1: 凭据型 Server args 数量漂移，记录警告以便排查
+                            Write-UiWarn "MCP '$serverId' args 数量漂移 (期望 $($expectedArgs.Count), 实际 $($currentArgs.Count))，凭据型跳过自动更新"
+                        }
+                    } else {
+                        for ($i = 0; $i -lt $expectedArgs.Count; $i++) {
+                            if ($expectedArgs[$i] -ne $currentArgs[$i]) {
+                                $baseArgsChanged = $true
+                                break
+                            }
+                        }
+                    }
+
+                    if ($baseArgsChanged) { $needsUpdate = $true }
+                }
+                "http" {
+                    # url-embedded 类型使用 UrlTemplate（含用户凭据），不比较 URL
+                    if ($serverDef.CredentialType -ne "url-embedded") {
+                        $expectedUrl = $serverDef.Url
+                        $currentUrl = if ($existingConfig.ContainsKey("url")) { [string]$existingConfig["url"] } else { "" }
+                        if ($currentUrl -ne $expectedUrl) {
+                            $needsUpdate = $true
+                        }
+                    }
+                }
+            }
+
+            if ($needsUpdate) {
+                # 重新生成配置条目（保留已有凭据）
+                $existingCredentials = @{}
+
+                # 提取已有凭据
+                if ($existingConfig.ContainsKey("env") -and $existingConfig["env"]) {
+                    $existingCredentials = $existingConfig["env"]
+                }
+
+                # 生成新的基础配置（无凭据）
+                try {
+                    $newEntry = New-McpSettingsEntry -ServerId $serverId -Server $serverDef -Credentials @{}
+
+                    # 恢复已有凭据
+                    if ($existingCredentials.Count -gt 0 -and $newEntry) {
+                        if (-not $newEntry.ContainsKey("env")) {
+                            $newEntry["env"] = @{}
+                        }
+                        foreach ($key in $existingCredentials.Keys) {
+                            $newEntry["env"][$key] = $existingCredentials[$key]
+                        }
+                    }
+
+                    $claudeJson["mcpServers"][$serverId] = $newEntry
+                    [void]$updatedItems.Add("config::mcpServers.${serverId}::updated")
+                    $configChanged = $true
+                } catch {
+                    Write-UiWarn "更新 MCP Server '$serverId' 失败: $($_.Exception.Message)"
+                }
+            }
+        }
+
+        # 写入 .claude.json（如有变更）— 原子写入
+        if ($configChanged) {
+            $claudeJsonContent = $claudeJson | ConvertTo-Json -Depth 10
+            $writeOk = Write-FileAtomically -FilePath $claudeJsonPath -Content @($claudeJsonContent)
+            if (-not $writeOk) {
+                throw ".claude.json 原子写入失败"
+            }
+
+            # CONS-2: 同步 vault 中已安装 Server 的 definitionHash
+            try {
+                $meta = Read-McpMeta
+                $hashUpdated = $false
+                foreach ($sid in $script:McpServers.Keys) {
+                    if ($claudeJson["mcpServers"].ContainsKey($sid) -and $meta["servers"].ContainsKey($sid)) {
+                        $newHash = Get-McpDefinitionHash -ServerDef $script:McpServers[$sid]
+                        if ($meta["servers"][$sid]["definitionHash"] -ne $newHash) {
+                            $meta["servers"][$sid]["definitionHash"] = $newHash
+                            $meta["servers"][$sid]["updatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+                            $hashUpdated = $true
+                        }
+                    }
+                }
+                if ($hashUpdated) {
+                    Write-McpMeta $meta
+                }
+            } catch {
+                Write-UiWarn "vault definitionHash 同步失败: $($_.Exception.Message)"
+            }
+        }
+
+        # 同步 settings.json 权限
+        $settingsPath = Get-ClaudeSettingsPath
+        if (Test-Path $settingsPath) {
+            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+            if ($settings) {
+                if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
+                if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
+
+                $mcpPermissions = @("mcp", "read", "write", "bash", "glob", "grep")
+                $permChanged = $false
+                foreach ($perm in $mcpPermissions) {
+                    if ($settings["permissions"]["allow"] -notcontains $perm) {
+                        $settings["permissions"]["allow"] += $perm
+                        [void]$updatedItems.Add("config::permissions.allow.${perm}::added")
+                        $permChanged = $true
+                    }
+                }
+
+                if ($permChanged) {
+                    $settingsJson = $settings | ConvertTo-Json -Depth 10
+                    Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
+                }
+            }
+        }
+
+        }  # End Invoke-WithMcpLock
+
+        # 结果
+        if ($updatedItems.Count -eq 0) {
+            $result.UpdatedItems = @("noop::Mcp::no-change")
+            Write-UiInfo "Mcp 配置已是最新，无需更新"
+        } else {
+            $result.UpdatedItems = @($updatedItems)
+            Write-UiSuccess "✓ Mcp 已更新 ($($updatedItems.Count) 项变更)"
+        }
+
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 Mcp 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
-# 所有函数在 dot-source 后自动可用

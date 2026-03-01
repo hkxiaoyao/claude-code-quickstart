@@ -392,5 +392,105 @@ function Verify-ClaudeCode {
     return $result
 }
 
+function Update-ClaudeCode {
+    <#
+    .SYNOPSIS
+    更新 Claude Code 到最新版本（npm install -g @latest + 回退）
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        Write-UiInfo "更新 Claude Code..."
+
+        # 获取当前版本
+        $oldVersion = ""
+        if (Test-CommandAvailable -Command "claude") {
+            $oldVersion = Get-CommandVersion -Command "claude"
+        }
+        if ([string]::IsNullOrWhiteSpace($oldVersion)) {
+            throw "无法获取当前 Claude Code 版本，请确认已安装"
+        }
+        Write-UiInfo "当前版本: $oldVersion"
+
+        # 检测是否有新版本（使用 npm outdated -g 批量缓存）
+        $updateCheck = Test-NpmUpdateAvailable -PackageName $script:ClaudeCodePackage -CurrentVersion $oldVersion
+        if ($updateCheck.LatestVersion) {
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+        }
+        if ($updateCheck.Available -eq $false) {
+            Write-UiInfo "Claude Code 已是最新版本 ($oldVersion)"
+            $result.UpdatedItems = @("noop::ClaudeCode::no-change")
+            $result.Data["OldVersion"] = $oldVersion
+            $result.Data["NewVersion"] = $oldVersion
+            $result.Success = $true
+            return $result
+        }
+
+        # 执行 npm install -g @latest
+        $installSuccess = $false
+        $lastError = ""
+        for ($attempt = 0; $attempt -lt 3; $attempt++) {
+            if ($attempt -gt 0) {
+                $waitSec = [math]::Pow(2, $attempt)
+                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Start-Sleep -Seconds $waitSec
+            }
+            $installResult = Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "$($script:ClaudeCodePackage)@latest") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
+            if ($installResult.ExitCode -eq 0) {
+                $installSuccess = $true
+                break
+            }
+            $lastError = $installResult.Error
+        }
+
+        if (-not $installSuccess) {
+            # 回退到旧版本
+            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+            $rollbackResult = Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "$($script:ClaudeCodePackage)@$oldVersion") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
+            if ($rollbackResult.ExitCode -ne 0) {
+                Write-UiWarn "回退也失败，当前状态可能不一致"
+            }
+            throw "npm install @latest 失败 (已尝试 3 次): $lastError"
+        }
+
+        # 刷新 PATH
+        Refresh-SessionPath
+
+        # 获取新版本
+        $newVersion = Get-CommandVersion -Command "claude"
+        $result.Data["OldVersion"] = $oldVersion
+        $result.Data["NewVersion"] = $newVersion
+
+        # 构建 UpdatedItems
+        if ($oldVersion -eq $newVersion) {
+            $result.UpdatedItems = @("noop::ClaudeCode::no-change")
+            Write-UiInfo "Claude Code 已是最新版本 ($newVersion)"
+        } else {
+            $result.UpdatedItems = @("npm::claude-code::${oldVersion}->${newVersion}")
+            Write-UiSuccess "✓ Claude Code 已更新: $oldVersion -> $newVersion"
+        }
+
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 Claude Code 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
+}
+
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
 # 所有函数在 dot-source 后自动可用

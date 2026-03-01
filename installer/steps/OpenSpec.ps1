@@ -1,6 +1,6 @@
-﻿# Gemini CLI 安装步骤 - CCQ
+# OpenSpec CLI 安装步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的专业 CLI 管理！)
-# 功能: Gemini CLI npm 全局安装
+# 功能: OpenSpec CLI npm 全局安装
 
 #Requires -Version 5.1
 
@@ -12,21 +12,21 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
-function Test-GeminiCliInstalled {
+function Test-OpenSpecInstalled {
     <#
     .SYNOPSIS
-    检测 Gemini CLI 是否已安装
+    检测 OpenSpec CLI 是否已安装
     .RETURNS
     包含 IsInstalled 字段的结果对象
     #>
 
-    return Test-CliToolInstalled -Command "gemini" -DisplayName "Gemini CLI"
+    return Test-CliToolInstalled -Command "openspec" -DisplayName "OpenSpec CLI"
 }
 
-function Install-GeminiCli {
+function Install-OpenSpec {
     <#
     .SYNOPSIS
-    安装 Gemini CLI
+    安装 OpenSpec CLI
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -38,7 +38,7 @@ function Install-GeminiCli {
     }
 
     try {
-        Write-UiInfo "安装 Gemini CLI..."
+        Write-UiInfo "安装 OpenSpec CLI..."
 
         # 检查 Node.js 是否可用
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
@@ -53,9 +53,9 @@ function Install-GeminiCli {
             throw $errorMsg
         }
 
-        # 全局安装 Gemini CLI（HC-2: 无 -DisplayName 参数）
-        Write-UiInfo "正在通过 npm 全局安装 Gemini CLI..."
-        $installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
+        # 全局安装 OpenSpec CLI
+        Write-UiInfo "正在通过 npm 全局安装 OpenSpec CLI..."
+        $installOut = Invoke-NpmGlobalInstall -PackageName "@fission-ai/openspec"
 
         if (-not $installOut.Success) {
             throw "安装失败: $($installOut.Error)"
@@ -67,39 +67,39 @@ function Install-GeminiCli {
 
         # 验证安装
         Start-Sleep -Seconds 2
-        $geminiDetails = Test-CommandAvailable -Command "gemini" -ReturnDetails
-        if (-not $geminiDetails.Available) {
-            $errorMsg = "安装后 gemini 命令仍不可用"
-            if ($geminiDetails.ResolvedPath) {
-                $errorMsg += "`n  解析路径: $($geminiDetails.ResolvedPath)"
+        $openspecDetails = Test-CommandAvailable -Command "openspec" -ReturnDetails
+        if (-not $openspecDetails.Available) {
+            $errorMsg = "安装后 openspec 命令仍不可用"
+            if ($openspecDetails.ResolvedPath) {
+                $errorMsg += "`n  解析路径: $($openspecDetails.ResolvedPath)"
             }
-            if ($geminiDetails.ErrorMessage) {
-                $errorMsg += "`n  错误详情: $($geminiDetails.ErrorMessage)"
+            if ($openspecDetails.ErrorMessage) {
+                $errorMsg += "`n  错误详情: $($openspecDetails.ErrorMessage)"
             }
             $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试"
             throw $errorMsg
         }
 
-        $version = Get-CommandVersion -Command "gemini"
-        Write-UiSuccess "✓ Gemini CLI 安装成功"
+        $version = Get-CommandVersion -Command "openspec"
+        Write-UiSuccess "✓ OpenSpec CLI 安装成功"
         Write-UiInfo "版本: $version"
-        Write-UiInfo "命令: gemini --help"
+        Write-UiInfo "命令: openspec --help"
 
         $result.Success          = $true
         $result.Data["Version"] = $version
     }
     catch {
-        $result.ErrorMessage = "安装 Gemini CLI 失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "安装 OpenSpec CLI 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 
     return $result
 }
 
-function Verify-GeminiCli {
+function Verify-OpenSpec {
     <#
     .SYNOPSIS
-    验证 Gemini CLI 安装
+    验证 OpenSpec CLI 安装
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -112,23 +112,23 @@ function Verify-GeminiCli {
 
     try {
         # 验证命令可用性
-        if (-not (Test-CommandAvailable -Command "gemini")) {
-            throw "gemini 命令不可用"
+        if (-not (Test-CommandAvailable -Command "openspec")) {
+            throw "openspec 命令不可用"
         }
 
         # 验证版本信息
-        $version = Get-CommandVersion -Command "gemini"
+        $version = Get-CommandVersion -Command "openspec"
         if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "无法获取 gemini 版本信息"
+            throw "无法获取 openspec 版本信息"
         }
 
         # 验证帮助信息
-        $helpResult = Invoke-ExternalCommand -Command "gemini" -Arguments @("--help") -SuppressOutput
+        $helpResult = Invoke-ExternalCommand -Command "openspec" -Arguments @("--help") -SuppressOutput
         if ($helpResult.ExitCode -ne 0) {
-            throw "gemini --help 执行失败"
+            throw "openspec --help 执行失败"
         }
 
-        Write-UiSuccess "✓ Gemini CLI 验证通过"
+        Write-UiSuccess "✓ OpenSpec CLI 验证通过"
         Write-UiInfo "  - 命令可用性: ✓"
         Write-UiInfo "  - 版本信息: $version"
         Write-UiInfo "  - 帮助信息: ✓"
@@ -136,17 +136,17 @@ function Verify-GeminiCli {
         $result.Success = $true
     }
     catch {
-        $result.ErrorMessage = "验证 Gemini CLI 失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "验证 OpenSpec CLI 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 
     return $result
 }
 
-function Update-GeminiCli {
+function Update-OpenSpec {
     <#
     .SYNOPSIS
-    更新 Gemini CLI 到最新版本
+    更新 OpenSpec CLI 到最新版本
     .RETURNS
     @{ Success; ErrorMessage; Data; UpdatedItems }
     #>
@@ -159,23 +159,23 @@ function Update-GeminiCli {
     }
 
     try {
-        Write-UiInfo "更新 Gemini CLI..."
+        Write-UiInfo "更新 OpenSpec CLI..."
 
         # 获取当前版本
-        $oldVersion = Get-CommandVersion -Command "gemini"
+        $oldVersion = Get-CommandVersion -Command "openspec"
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
-            throw "无法获取当前 Gemini CLI 版本，请确认已安装"
+            throw "无法获取当前 OpenSpec CLI 版本，请确认已安装"
         }
         Write-UiInfo "当前版本: $oldVersion"
 
         # 检测是否有新版本（使用 npm outdated -g 批量缓存）
-        $updateCheck = Test-NpmUpdateAvailable -PackageName "@google/gemini-cli" -CurrentVersion $oldVersion
+        $updateCheck = Test-NpmUpdateAvailable -PackageName "@fission-ai/openspec" -CurrentVersion $oldVersion
         if ($updateCheck.LatestVersion) {
             Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "Gemini CLI 已是最新版本 ($oldVersion)"
-            $result.UpdatedItems = @("noop::GeminiCli::no-change")
+            Write-UiInfo "OpenSpec CLI 已是最新版本 ($oldVersion)"
+            $result.UpdatedItems = @("noop::OpenSpec::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
             $result.Success = $true
@@ -192,7 +192,7 @@ function Update-GeminiCli {
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
-                -Arguments @("install", "-g", "@google/gemini-cli@latest") `
+                -Arguments @("install", "-g", "@fission-ai/openspec@latest") `
                 -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
             if ($installResult.ExitCode -eq 0) {
                 $installSuccess = $true
@@ -204,29 +204,29 @@ function Update-GeminiCli {
         if (-not $installSuccess) {
             Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
             Invoke-ExternalCommand -Command "npm" `
-                -Arguments @("install", "-g", "@google/gemini-cli@$oldVersion") `
+                -Arguments @("install", "-g", "@fission-ai/openspec@$oldVersion") `
                 -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
             throw "npm install @latest 失败 (已尝试 3 次): $lastError"
         }
 
         Refresh-SessionPath
 
-        $newVersion = Get-CommandVersion -Command "gemini"
+        $newVersion = Get-CommandVersion -Command "openspec"
         $result.Data["OldVersion"] = $oldVersion
         $result.Data["NewVersion"] = $newVersion
 
         if ($oldVersion -eq $newVersion) {
-            $result.UpdatedItems = @("noop::GeminiCli::no-change")
-            Write-UiInfo "Gemini CLI 已是最新版本 ($newVersion)"
+            $result.UpdatedItems = @("noop::OpenSpec::no-change")
+            Write-UiInfo "OpenSpec CLI 已是最新版本 ($newVersion)"
         } else {
-            $result.UpdatedItems = @("npm::gemini-cli::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ Gemini CLI 已更新: $oldVersion -> $newVersion"
+            $result.UpdatedItems = @("npm::openspec-cli::${oldVersion}->${newVersion}")
+            Write-UiSuccess "✓ OpenSpec CLI 已更新: $oldVersion -> $newVersion"
         }
 
         $result.Success = $true
     }
     catch {
-        $result.ErrorMessage = "更新 Gemini CLI 失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "更新 OpenSpec CLI 失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 

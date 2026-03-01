@@ -11,6 +11,7 @@ Set-StrictMode -Version Latest
 $scriptRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 . "$scriptRoot\core\Process.ps1"
 . "$scriptRoot\core\Ui.ps1"
+. "$scriptRoot\core\Profile.ps1"
 
 # 全局配置
 $script:MinGitVersion = [Version]"2.30.0"  # 最低 Git 版本要求
@@ -76,7 +77,7 @@ function Test-GitInstalled {
 
         if ($allDelivered) {
             # 检查 .bashrc managed block 是否存在
-            $homeDir = $env:USERPROFILE
+            $homeDir = Get-UserHome
             if (-not $homeDir) { $homeDir = $env:HOME }
             if ($homeDir) {
                 $bashrcPath = Join-Path $homeDir ".bashrc"
@@ -219,7 +220,7 @@ function Install-Git {
 
         try {
             # 查找用户主目录
-            $homeDir = $env:USERPROFILE
+            $homeDir = Get-UserHome
             if (-not $homeDir) { $homeDir = $env:HOME }
 
             if ($homeDir) {

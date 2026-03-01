@@ -143,5 +143,95 @@ function Verify-CodexCli {
     return $result
 }
 
+function Update-CodexCli {
+    <#
+    .SYNOPSIS
+    更新 Codex CLI 到最新版本
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        Write-UiInfo "更新 Codex CLI..."
+
+        # 获取当前版本
+        $oldVersion = Get-CommandVersion -Command "codex"
+        if ([string]::IsNullOrWhiteSpace($oldVersion)) {
+            throw "无法获取当前 Codex CLI 版本，请确认已安装"
+        }
+        Write-UiInfo "当前版本: $oldVersion"
+
+        # 检测是否有新版本（使用 npm outdated -g 批量缓存）
+        $updateCheck = Test-NpmUpdateAvailable -PackageName "@openai/codex" -CurrentVersion $oldVersion
+        if ($updateCheck.LatestVersion) {
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+        }
+        if ($updateCheck.Available -eq $false) {
+            Write-UiInfo "Codex CLI 已是最新版本 ($oldVersion)"
+            $result.UpdatedItems = @("noop::CodexCli::no-change")
+            $result.Data["OldVersion"] = $oldVersion
+            $result.Data["NewVersion"] = $oldVersion
+            $result.Success = $true
+            return $result
+        }
+
+        # 执行 npm install -g @latest
+        $installSuccess = $false
+        $lastError = ""
+        for ($attempt = 0; $attempt -lt 3; $attempt++) {
+            if ($attempt -gt 0) {
+                $waitSec = [math]::Pow(2, $attempt)
+                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Start-Sleep -Seconds $waitSec
+            }
+            $installResult = Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "@openai/codex@latest") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
+            if ($installResult.ExitCode -eq 0) {
+                $installSuccess = $true
+                break
+            }
+            $lastError = $installResult.Error
+        }
+
+        if (-not $installSuccess) {
+            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+            Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("install", "-g", "@openai/codex@$oldVersion") `
+                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
+            throw "npm install @latest 失败 (已尝试 3 次): $lastError"
+        }
+
+        Refresh-SessionPath
+
+        $newVersion = Get-CommandVersion -Command "codex"
+        $result.Data["OldVersion"] = $oldVersion
+        $result.Data["NewVersion"] = $newVersion
+
+        if ($oldVersion -eq $newVersion) {
+            $result.UpdatedItems = @("noop::CodexCli::no-change")
+            Write-UiInfo "Codex CLI 已是最新版本 ($newVersion)"
+        } else {
+            $result.UpdatedItems = @("npm::codex-cli::${oldVersion}->${newVersion}")
+            Write-UiSuccess "✓ Codex CLI 已更新: $oldVersion -> $newVersion"
+        }
+
+        $result.Success = $true
+    }
+    catch {
+        $result.ErrorMessage = "更新 Codex CLI 失败: $($_.Exception.Message)"
+        Write-UiError $result.ErrorMessage
+    }
+
+    return $result
+}
+
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
 # 所有函数在 dot-source 后自动可用

@@ -121,7 +121,11 @@ function Test-NodeFnmInstalled {
                     $wingetNodeInstalled = $true
                 }
             } catch {
-                Write-UiWarn "⚠ winget list Node.js 检测失败: $($_.Exception.Message)"
+                # 0x8A150014 (-1978335212) = APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND
+                # winget 未找到匹配包是正常情况（Node.js 可能通过 fnm/nvm 安装），静默忽略
+                if ($_.Exception.Message -notmatch '-1978335212|8A150014|找不到.*匹配') {
+                    Write-UiWarn "⚠ winget list Node.js 检测失败: $($_.Exception.Message)"
+                }
             }
         }
         if ($wingetNodeInstalled) {

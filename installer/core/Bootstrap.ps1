@@ -86,10 +86,213 @@ function Resolve-TestResultBool {
     else { return $false }
 }
 
+function Invoke-StepActionLifecycle {
+    <#
+    .SYNOPSIS
+    统一步骤生命周期引擎（Install / Update 共用）
+    .PARAMETER StepConfig
+    步骤配置 hashtable（来自 Registry）
+    .PARAMETER Action
+    操作类型："Install" 或 "Update"
+    .PARAMETER State
+    安装状态对象
+    .PARAMETER OnMissing
+    未安装时处理策略（仅 Update 模式有效）："Ask" / "Skip" / "Install" / "Fail"
+    .RETURNS
+    StepResult 对象
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StepConfig,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Install", "Update")]
+        [string]$Action,
+
+        [Parameter(Mandatory = $true)]
+        [InstallState]$State,
+
+        [string]$OnMissing = "Ask"
+    )
+
+    $stepId = $StepConfig.StepId
+    $stepName = $StepConfig.StepName
+    $testFunction = $StepConfig.TestFunction
+    $verifyFunction = $StepConfig.VerifyFunction
+
+    # 确定操作函数
+    $actionFunction = if ($Action -eq "Install") {
+        $StepConfig.InstallFunction
+    } else {
+        $StepConfig.UpdateFunction
+    }
+
+    $actionLabel = if ($Action -eq "Install") { "安装" } else { "更新" }
+
+    Write-UiOutput "🔄 执行步骤: $stepName ($actionLabel)" -Level Essential -Type Info
+
+    # 创建或获取步骤结果
+    if ($State.StepResults.ContainsKey($stepId)) {
+        $stepResult = $State.StepResults[$stepId]
+    } else {
+        $stepResult = [StepResult]::new($stepId, $stepName)
+        $State.StepResults[$stepId] = $stepResult
+    }
+
+    try {
+        $stepResult.Status = [StepStatus]::Running
+        $stepResult.StartTime = Get-Date
+        $State.CurrentStep = $stepId
+
+        # 1. 执行测试阶段（实时检测）
+        Write-UiOutput "  🔍 测试阶段: $testFunction" -Level Debug -Type Info
+        $testResult = & $testFunction
+        $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
+
+        if ($Action -eq "Install") {
+            # Install 模式：已安装且 SkipIfInstalled → 跳过
+            if ($isInstalled -and $StepConfig.SkipIfInstalled) {
+                $stepResult.Status = [StepStatus]::Skipped
+                $stepResult.Message = "组件已安装，跳过安装"
+                $stepResult.EndTime = Get-Date
+                Write-UiOutput "  ✓ 组件已安装，跳过" -Level Essential -Type Warn
+                return $stepResult
+            }
+        } else {
+            # Update 模式
+            if (-not $isInstalled) {
+                # 未安装 → 按 OnMissing 策略处理
+                switch ($OnMissing) {
+                    "Skip" {
+                        $stepResult.Status = [StepStatus]::Skipped
+                        $stepResult.Message = "组件未安装，跳过更新"
+                        $stepResult.EndTime = Get-Date
+                        Write-UiOutput "  ⏭ 组件未安装，跳过 (OnMissing=Skip)" -Level Essential -Type Warn
+                        return $stepResult
+                    }
+                    "Fail" {
+                        $stepResult.Status = [StepStatus]::Failed
+                        $stepResult.Message = "组件未安装，更新失败"
+                        $stepResult.ErrorDetails = "Not installed"
+                        $stepResult.EndTime = Get-Date
+                        Write-UiOutput "  ✗ 组件未安装 (OnMissing=Fail)" -Level Essential -Type Error
+                        return $stepResult
+                    }
+                    "Install" {
+                        Write-UiOutput "  📦 组件未安装，执行安装..." -Level Essential -Type Info
+                        $actionFunction = $StepConfig.InstallFunction
+                        $actionLabel = "安装"
+                    }
+                    "Ask" {
+                        Write-UiOutput "  ❓ [$stepName] 未安装。" -Level Essential -Type Warn
+                        $options = @("跳过此步骤", "直接安装")
+                        $choice = Show-SingleSelectMenu -Title "[$stepName] 未安装，选择操作：" -Options $options
+                        if ($choice -eq 0) {
+                            $stepResult.Status = [StepStatus]::Skipped
+                            $stepResult.Message = "用户选择跳过"
+                            $stepResult.EndTime = Get-Date
+                            return $stepResult
+                        } else {
+                            $actionFunction = $StepConfig.InstallFunction
+                            $actionLabel = "安装"
+                        }
+                    }
+                }
+            }
+        }
+
+        # 2. 执行操作阶段（Install 或 Update）
+        Write-UiOutput "  🔧 ${actionLabel}阶段: $actionFunction" -Level Debug -Type Info
+        $actionResult = & $actionFunction
+
+        $actionSuccess = Resolve-TestResultBool -TestResult $actionResult -PropertyName "Success"
+
+        if (-not $actionSuccess) {
+            $actionError = if ($actionResult -is [bool]) { "${actionLabel}函数返回失败" }
+                            elseif ($actionResult -and $actionResult.ErrorMessage) { $actionResult.ErrorMessage }
+                            else { "未知错误" }
+            throw "${actionLabel}阶段失败: $actionError"
+        }
+
+        # 3. 执行验证阶段（如果提供）
+        if ($verifyFunction) {
+            Write-UiOutput "  ✅ 验证阶段: $verifyFunction" -Level Debug -Type Info
+            $verifyResult = & $verifyFunction
+
+            $verifySuccess = Resolve-TestResultBool -TestResult $verifyResult -PropertyName "Success"
+
+            if (-not $verifySuccess) {
+                $verifyError = if ($verifyResult -is [bool]) { "验证函数返回失败" }
+                               elseif ($verifyResult -and $verifyResult.ErrorMessage) { $verifyResult.ErrorMessage }
+                               else { "未知错误" }
+                throw "验证阶段失败: $verifyError"
+            }
+        }
+
+        # 步骤成功完成
+        $stepResult.Status = [StepStatus]::Success
+        $stepResult.Message = "步骤${actionLabel}成功"
+        $stepResult.EndTime = Get-Date
+
+        # 合并结果数据
+        foreach ($candidate in @($testResult, $actionResult)) {
+            if (-not $candidate -or $candidate -is [bool]) {
+                continue
+            }
+
+            $dataObject = $null
+
+            if ($candidate -is [hashtable] -and $candidate.ContainsKey("Data")) {
+                $dataObject = $candidate["Data"]
+            }
+            elseif ($candidate.PSObject.Properties.Name -contains "Data") {
+                $dataObject = $candidate.Data
+            }
+
+            if (-not $dataObject) {
+                continue
+            }
+
+            if ($dataObject -is [hashtable]) {
+                foreach ($key in $dataObject.Keys) {
+                    $stepResult.Data[$key] = $dataObject[$key]
+                }
+            }
+            elseif ($dataObject -is [System.Collections.IDictionary]) {
+                foreach ($key in $dataObject.Keys) {
+                    $stepResult.Data[[string]$key] = $dataObject[$key]
+                }
+            }
+            elseif ($dataObject -is [System.Management.Automation.PSCustomObject]) {
+                foreach ($prop in $dataObject.PSObject.Properties) {
+                    $stepResult.Data[$prop.Name] = $prop.Value
+                }
+            }
+        }
+
+        # 合并 UpdatedItems（Update 模式特有）
+        if ($Action -eq "Update" -and $actionResult -is [hashtable] -and $actionResult.ContainsKey("UpdatedItems")) {
+            $stepResult.Data["UpdatedItems"] = $actionResult["UpdatedItems"]
+        }
+
+        Write-UiOutput "  ✓ $stepName ${actionLabel}成功" -Level Essential -Type Success
+
+    } catch {
+        $stepResult.Status = [StepStatus]::Failed
+        $stepResult.Message = "步骤${actionLabel}失败"
+        $stepResult.ErrorDetails = $_.Exception.Message
+        $stepResult.EndTime = Get-Date
+
+        Write-UiOutput "  ✗ $stepName ${actionLabel}失败: $($_.Exception.Message)" -Level Essential -Type Error
+    }
+
+    return $stepResult
+}
+
 function Invoke-StepLifecycle {
     <#
     .SYNOPSIS
-    执行步骤生命周期（Test -> Install -> Verify）
+    执行步骤安装生命周期（Test -> Install -> Verify）— 统一引擎的薄包装
     .DESCRIPTION
     完全基于实时检测，不依赖缓存状态。每次都执行 Test 函数检测当前环境。
     .PARAMETER StepId
@@ -130,119 +333,44 @@ function Invoke-StepLifecycle {
         [switch]$SkipIfInstalled
     )
 
-    Write-UiOutput "🔄 执行步骤: $StepName" -Level Essential -Type Info
-
-    # 创建或获取步骤结果
-    if ($State.StepResults.ContainsKey($StepId)) {
-        $stepResult = $State.StepResults[$StepId]
-    } else {
-        $stepResult = [StepResult]::new($StepId, $StepName)
-        $State.StepResults[$StepId] = $stepResult
+    # 构建步骤配置 hashtable
+    $stepConfig = @{
+        StepId          = $StepId
+        StepName        = $StepName
+        TestFunction    = $TestFunction
+        InstallFunction = $InstallFunction
+        VerifyFunction  = $VerifyFunction
+        UpdateFunction  = ""
+        SkipIfInstalled = [bool]$SkipIfInstalled
     }
 
-    try {
-        $stepResult.Status = [StepStatus]::Running
-        $stepResult.StartTime = Get-Date
-        $State.CurrentStep = $StepId
+    return Invoke-StepActionLifecycle -StepConfig $stepConfig -Action Install -State $State
+}
 
-        # 1. 执行测试阶段（实时检测，不依赖缓存）
-        Write-UiOutput "  🔍 测试阶段: $TestFunction" -Level Debug -Type Info
-        $testResult = & $TestFunction
+function Invoke-UpdateLifecycle {
+    <#
+    .SYNOPSIS
+    执行步骤更新生命周期（Test -> Update -> Verify）— 统一引擎的薄包装
+    .PARAMETER StepConfig
+    步骤配置 hashtable（来自 Registry）
+    .PARAMETER State
+    安装状态对象
+    .PARAMETER OnMissing
+    未安装时处理策略："Ask" / "Skip" / "Install" / "Fail"
+    .RETURNS
+    StepResult 对象
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$StepConfig,
 
-        $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
+        [Parameter(Mandatory = $true)]
+        [InstallState]$State,
 
-        if ($isInstalled -and $SkipIfInstalled) {
-            $stepResult.Status = [StepStatus]::Skipped
-            $stepResult.Message = "组件已安装，跳过安装"
-            $stepResult.EndTime = Get-Date
-            Write-UiOutput "  ✓ 组件已安装，跳过" -Level Essential -Type Warn
-            return $stepResult
-        }
+        [string]$OnMissing = "Ask"
+    )
 
-        # 2. 执行安装阶段
-        Write-UiOutput "  🔧 安装阶段: $InstallFunction" -Level Debug -Type Info
-        $installResult = & $InstallFunction
-
-        $installSuccess = Resolve-TestResultBool -TestResult $installResult -PropertyName "Success"
-
-        if (-not $installSuccess) {
-            $installError = if ($installResult -is [bool]) { "安装函数返回失败" }
-                            elseif ($installResult -and $installResult.ErrorMessage) { $installResult.ErrorMessage }
-                            else { "未知错误" }
-            throw "安装阶段失败: $installError"
-        }
-
-        # 3. 执行验证阶段（如果提供）
-        if ($VerifyFunction) {
-            Write-UiOutput "  ✅ 验证阶段: $VerifyFunction" -Level Debug -Type Info
-            $verifyResult = & $VerifyFunction
-
-            $verifySuccess = Resolve-TestResultBool -TestResult $verifyResult -PropertyName "Success"
-
-            if (-not $verifySuccess) {
-                $verifyError = if ($verifyResult -is [bool]) { "验证函数返回失败" }
-                               elseif ($verifyResult -and $verifyResult.ErrorMessage) { $verifyResult.ErrorMessage }
-                               else { "未知错误" }
-                throw "验证阶段失败: $verifyError"
-            }
-        }
-
-        # 步骤成功完成
-        $stepResult.Status = [StepStatus]::Success
-        $stepResult.Message = "步骤执行成功"
-        $stepResult.EndTime = Get-Date
-
-        # 合并结果数据（加固类型安全检查，兼容不规范的返回结构）
-        foreach ($candidate in @($testResult, $installResult)) {
-            if (-not $candidate -or $candidate -is [bool]) {
-                continue
-            }
-
-            $dataObject = $null
-
-            # 检查 hashtable 类型
-            if ($candidate -is [hashtable] -and $candidate.ContainsKey("Data")) {
-                $dataObject = $candidate["Data"]
-            }
-            # 检查 PSCustomObject 类型
-            elseif ($candidate.PSObject.Properties.Name -contains "Data") {
-                $dataObject = $candidate.Data
-            }
-
-            if (-not $dataObject) {
-                continue
-            }
-
-            # 安全复制 Data 内容
-            if ($dataObject -is [hashtable]) {
-                foreach ($key in $dataObject.Keys) {
-                    $stepResult.Data[$key] = $dataObject[$key]
-                }
-            }
-            elseif ($dataObject -is [System.Collections.IDictionary]) {
-                foreach ($key in $dataObject.Keys) {
-                    $stepResult.Data[[string]$key] = $dataObject[$key]
-                }
-            }
-            elseif ($dataObject -is [System.Management.Automation.PSCustomObject]) {
-                foreach ($prop in $dataObject.PSObject.Properties) {
-                    $stepResult.Data[$prop.Name] = $prop.Value
-                }
-            }
-        }
-
-        Write-UiOutput "  ✓ $StepName 执行成功" -Level Essential -Type Success
-
-    } catch {
-        $stepResult.Status = [StepStatus]::Failed
-        $stepResult.Message = "步骤执行失败"
-        $stepResult.ErrorDetails = $_.Exception.Message
-        $stepResult.EndTime = Get-Date
-
-        Write-UiOutput "  ✗ $StepName 执行失败: $($_.Exception.Message)" -Level Essential -Type Error
-    }
-
-    return $stepResult
+    return Invoke-StepActionLifecycle -StepConfig $StepConfig -Action Update -State $State -OnMissing $OnMissing
 }
 
 function Test-StepDependencies {
@@ -382,6 +510,105 @@ function Get-ExecutionOrder {
     # 使用 , 操作符防止 PowerShell 自动解包单元素数组
     # 这确保即使只有一个元素，返回值仍然是数组类型
     return ,$ordered
+}
+
+function Build-UpdatePlan {
+    <#
+    .SYNOPSIS
+    构建更新执行计划（过滤可更新步骤 → 依赖闭包补齐 → 后置联动 → 拓扑排序）
+    .PARAMETER RequestedSteps
+    指定更新的步骤 ID（为空时 = 全部可更新步骤）
+    .PARAMETER All
+    更新全部已安装的可更新步骤
+    .RETURNS
+    排序后的步骤配置数组
+    #>
+    param(
+        [string[]]$RequestedSteps = @(),
+        [switch]$All
+    )
+
+    $registry = Get-StepRegistry
+
+    # 过滤有 UpdateFunction 的步骤
+    $updatableSteps = @($registry | Where-Object { $_.UpdateFunction -ne "" })
+
+    if ($All -or $RequestedSteps.Count -eq 0) {
+        # 全部可更新步骤
+        $planStepIds = @($updatableSteps | ForEach-Object { $_.StepId })
+    } else {
+        # 验证指定的步骤
+        foreach ($stepId in $RequestedSteps) {
+            $found = $updatableSteps | Where-Object { $_.StepId -eq $stepId }
+            if (-not $found) {
+                $exists = $registry | Where-Object { $_.StepId -eq $stepId }
+                if ($exists) {
+                    throw "步骤 '$stepId' 不支持更新（无 UpdateFunction）"
+                } else {
+                    throw "未知的步骤 ID: '$stepId'"
+                }
+            }
+        }
+        $planStepIds = @($RequestedSteps)
+    }
+
+    # 前置依赖闭包补齐
+    $dependencies = Get-StepDependencies
+    $closureIds = [System.Collections.ArrayList]::new()
+    foreach ($id in $planStepIds) {
+        if ($closureIds -notcontains $id) {
+            [void]$closureIds.Add($id)
+        }
+    }
+
+    # 递归补齐依赖（仅补齐可更新的依赖）
+    $changed = $true
+    while ($changed) {
+        $changed = $false
+        foreach ($stepId in @($closureIds)) {
+            if ($dependencies.ContainsKey($stepId)) {
+                foreach ($depId in $dependencies[$stepId]) {
+                    $depUpdatable = $updatableSteps | Where-Object { $_.StepId -eq $depId }
+                    if ($depUpdatable -and $closureIds -notcontains $depId) {
+                        [void]$closureIds.Add($depId)
+                        $changed = $true
+                    }
+                }
+            }
+        }
+    }
+
+    # 后置联动注入：ClaudeCode 在列表中且 Ccline 已安装 → 追加 Ccline
+    if ($closureIds -contains "ClaudeCode" -and $closureIds -notcontains "Ccline") {
+        $cclineStep = $updatableSteps | Where-Object { $_.StepId -eq "Ccline" }
+        if ($cclineStep) {
+            # 检测 Ccline 是否已安装
+            try {
+                $cclineTestResult = & $cclineStep.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
+                $cclineInstalled = Resolve-TestResultBool -TestResult $cclineTestResult -PropertyName "IsInstalled"
+                if ($cclineInstalled) {
+                    [void]$closureIds.Add("Ccline")
+                    Write-UiOutput "  ⚡ 联动追加: Ccline（ClaudeCode 更新后需重新 patch）" -Level Essential -Type Info
+                }
+            } catch {
+                # 检测失败，不追加
+            }
+        }
+    }
+
+    # 拓扑排序
+    $orderedIds = Get-ExecutionOrder -StepIds @($closureIds)
+
+    # 返回排序后的步骤配置数组
+    $plan = @()
+    foreach ($stepId in $orderedIds) {
+        $stepConfig = $registry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+        if ($stepConfig) {
+            $plan += $stepConfig
+        }
+    }
+
+    return ,$plan
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

@@ -4,7 +4,7 @@
 
 param(
     [switch]$ListSteps,
-    [ValidateSet("Basic", "Advanced", "")]
+    [ValidateSet("Basic", "Advanced", "Mcp", "")]
     [string]$Group = "",
     [ValidateSet("OneClick", "Select", "")]
     [string]$Mode = "",
@@ -60,6 +60,7 @@ $script:InstallerRoot = $PSScriptRoot
 . "$script:InstallerRoot\core\Net.ps1"
 . "$script:InstallerRoot\core\Registry.ps1"
 . "$script:InstallerRoot\core\Bootstrap.ps1"
+. "$script:InstallerRoot\core\McpManager.ps1"
 
 # ─── Dot-source 所有步骤模块（从 Registry 动态加载）──────────────────────────
 
@@ -465,13 +466,14 @@ function Select-TopLevelAction {
     .SYNOPSIS
     显示顶层分组选择菜单
     .RETURNS
-    选中的索引（0=基础, 1=进阶, -1=Esc）
+    选中的索引（0=基础, 1=进阶, 2=MCP管理, -1=Esc）
     #>
     param()
 
     $options = @(
         "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置"
         "进阶扩展 - 增强工具, 配置, 工作流, 多模型"
+        "MCP 管理 - 查看状态, 切换, 删除"
     )
 
     return Show-SingleSelectMenu -Title "请选择操作：" -Options $options -DefaultIndex 0
@@ -692,6 +694,10 @@ function Main {
                     }
                 }
             }
+            elseif ($Group -eq "Mcp") {
+                # MCP 管理
+                Show-McpManageMenu
+            }
 
             return
         }
@@ -775,6 +781,10 @@ function Main {
                     Write-Host "按任意键返回主菜单..." -ForegroundColor Gray
                     $null = [Console]::ReadKey($true)
                 }
+            }
+            elseif ($topChoice -eq 2) {
+                # MCP 管理
+                Show-McpManageMenu
             }
         }
 
