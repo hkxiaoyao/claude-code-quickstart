@@ -470,7 +470,7 @@ function Select-TopLevelAction {
     param()
 
     $options = @(
-        "基础环境 - Node.js, Git, Claude Code, API Key"
+        "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置"
         "进阶扩展 - 增强工具, 配置, 工作流, 多模型"
     )
 
@@ -487,7 +487,7 @@ function Select-AdvancedAction {
     param()
 
     $options = @(
-        "一键安装 - 安装全部必选进阶组件（不含可选的 Codex/Gemini CLI）"
+        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Gemini CLI）"
         "可选安装 - 选择要安装的组件"
     )
 

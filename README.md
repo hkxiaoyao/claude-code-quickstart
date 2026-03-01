@@ -10,7 +10,7 @@
 
 **Claude Code Quickstart** — Windows 平台的 Claude Code 开发环境自动化安装器
 
-一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、多 AI 供应商 API Key 配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
+一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、第三方 AI 供应商配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
 
 </div>
 
@@ -145,7 +145,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
 将 12 个步骤分为**基础环境**和**进阶扩展**两组：
-- **基础环境**：Node.js、Git、Claude Code、API Key — 一键安装，无需选择
+- **基础环境**：Node.js、Git、Claude Code、第三方供应商配置 — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
 ### 重新运行
@@ -181,9 +181,9 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 | 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | 基础 | — |
 | 02 | Git | 安装 Git，配置中文支持 | 基础 | — |
 | 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
-| 04 | API Key 配置 | 配置 AI 供应商 API Key | 基础 | — |
+| 04 | 第三方供应商配置 | 配置第三方 AI 供应商连接 | 基础 | — |
 | 05 | ccline | 安装 ccline 状态栏工具 | 进阶 | — |
-| 06 | cc-switch | Claude Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | — |
+| 06 | cc-switch | Claude Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | ✓ |
 | 07 | Claude 基础配置 | 写入语言/模型/权限/环境变量配置 | 进阶 | — |
 | 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | 进阶 | — |
 | 09 | MCP Server | 配置 MCP 插件服务器 | 进阶 | — |
@@ -193,7 +193,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 
 ---
 
-## API Key 配置
+## 第三方供应商配置
 
 安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude Code：
 
@@ -204,7 +204,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 | **Kimi (月之暗面)** | K2.5, K2-turbo, moonshot-v1 | opus/sonnet/haiku → kimi-k2.5 | [platform.moonshot.cn](https://platform.moonshot.cn) |
 | **自定义供应商** | 自定义 | 可自定义模型映射 | 手动输入 Base URL 和 API Key |
 
-API Key 和模型映射写入 `~/.claude/settings.json`：
+供应商配置和模型映射写入 `~/.claude/settings.json`：
 
 **智谱 GLM（服务端自动路由）**：
 ```json
@@ -245,6 +245,22 @@ API Key 和模型映射写入 `~/.claude/settings.json`：
   }
 }
 ```
+
+### 供应商快速切换
+
+配置供应商后，安装器会自动保存 Profile 文件到 `~/.claude/providers/`，并注入 `ccp` 命令到 PowerShell Profile。
+
+```powershell
+# 交互式选择供应商
+ccp
+
+# 直接切换到指定供应商
+ccp zhipu
+ccp minimax
+ccp moonshot
+```
+
+切换时从 Profile 读取配置，合并到 `settings.json`（仅覆盖供应商字段，不影响其他配置）。切换后直接运行 `claude` 即可使用新供应商。
 
 ---
 
@@ -331,16 +347,23 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 
 > **提示**：安装器采用实时检测机制，每次运行都会检测所有组件的当前状态。已安装的组件会自动跳过，只安装缺失的部分，无需担心重复安装。
 
-**Q：想重新配置 API Key？**
+**Q：想重新配置供应商？**
 
-API Key 配置步骤的 `SkipIfInstalled` 为 `true`，若已检测到配置则自动跳过。使用 Manage 脚本的进阶扩展模式手动选择该步骤即可重新配置：
+安装器的供应商配置步骤现在支持重入：每次运行都会检测当前配置，提供"保持/重新配置"选择。直接重新运行安装器即可：
 
 ```powershell
 # 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Group Advanced -Mode Select
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
 # 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Group Advanced -Mode Select
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+```
+
+如果只是想切换到已配置过的供应商，使用 `ccp` 命令更快：
+
+```powershell
+ccp          # 交互式选择
+ccp zhipu    # 直接切换
 ```
 
 **Q：运行脚本报 "无法加载文件" 错误？**

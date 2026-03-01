@@ -63,13 +63,13 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "ApiKey"
-            StepName        = "API Key 配置"
-            Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
+            StepName        = "第三方供应商配置"
+            Description     = "配置第三方 AI 供应商连接到 ~/.claude/settings.json (env.ANTHROPIC_AUTH_TOKEN)"
             StepFile        = "steps/ApiKey.ps1"
             TestFunction    = "Test-ApiKeyInstalled"
             InstallFunction = "Install-ApiKey"
             VerifyFunction  = "Verify-ApiKey"
-            SkipIfInstalled = $true
+            SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 40
             Dependencies    = @("ClaudeCode")
@@ -93,14 +93,14 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "CcSwitch"
-            StepName        = "cc-switch"
+            StepName        = "cc-switch [可选]"
             Description     = "安装 cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具"
             StepFile        = "steps/CcSwitch.ps1"
             TestFunction    = "Test-CcSwitchInstalled"
             InstallFunction = "Install-CcSwitch"
             VerifyFunction  = "Verify-CcSwitch"
             SkipIfInstalled = $true
-            IsOptional      = $false
+            IsOptional      = $true
             Order           = 60
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"

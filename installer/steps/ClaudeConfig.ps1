@@ -128,7 +128,7 @@ function Install-ClaudeConfig {
     .SYNOPSIS
     写入 Claude Code 常用配置（读取 -> 补缺失 -> 原子写入）
     .DESCRIPTION
-    仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（API Key）、Ccline（statusLine）或用户自定义配置
+    仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（供应商配置）、Ccline（statusLine）或用户自定义配置
     .RETURNS
     包含 Success 字段的结果对象
     #>

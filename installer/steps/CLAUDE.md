@@ -47,9 +47,9 @@ function Verify-<StepId> {
 | NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | 无 | 基础 |
 | Git | Git | `Git.ps1` | — | ✓ | 无 | 基础 |
 | ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | NodeFnm | 基础 |
-| ApiKey | API Key 配置 | `ApiKey.ps1` | — | ✓ | ClaudeCode | 基础 |
+| ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | — | ClaudeCode | 基础 |
 | Ccline | ccline | `Ccline.ps1` | — | ✓ | ClaudeCode | 进阶 |
-| CcSwitch | cc-switch | `CcSwitch.ps1` | — | ✓ | ClaudeCode | 进阶 |
+| CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | ClaudeCode | 进阶 |
 | ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ClaudeCode | 进阶 |
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ClaudeConfig | 进阶 |
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | ClaudeCode | 进阶 |
@@ -91,7 +91,7 @@ function Verify-<StepId> {
 
 ---
 
-## ApiKey — API Key 配置（HC-12 关键）
+## ApiKey — 第三方供应商配置（HC-12 关键）
 
 **文件**：`ApiKey.ps1`
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
@@ -135,6 +135,44 @@ $script:ApiProviders = @{
     }
 }
 ```
+
+### 重入支持
+
+`SkipIfInstalled = $false`，每次运行都进入 Install-ApiKey。已配置时提供二选一：
+- **保持当前配置**：跳过，自动补生成 Profile（迁移旧用户）
+- **重新配置**：进入完整供应商选择流程
+
+### 供应商 Profile 文件
+
+配置供应商后，同时保存独立 Profile 文件到 `~/.claude/providers/`：
+
+```json
+{
+  "_meta": {
+    "provider": "智谱 GLM",
+    "key": "zhipu",
+    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+    "configuredAt": "2026-03-01T12:00:00Z"
+  },
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "<API_KEY>",
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic"
+  }
+}
+```
+
+含 `modelMapping` 的供应商（MiniMax/Moonshot）会额外包含 `modelMapping` 字段。
+
+### 供应商切换函数
+
+Install-ApiKey 末尾注入 `Switch-ClaudeProvider` 函数到 `$PROFILE`（独立标记块 `# >>> Claude Code Provider Switcher >>>`）：
+
+```powershell
+ccp              # 交互式选择供应商
+ccp zhipu        # 直接切换到智谱
+```
+
+切换时从 Profile 读取，合并到 `settings.json`（仅覆盖供应商字段，不影响其他配置）。
 
 ### 写入格式（HC-12）
 
@@ -213,7 +251,7 @@ $script:ApiProviders = @{
 
 ---
 
-## CcSwitch — cc-switch
+## CcSwitch — cc-switch [可选]
 
 **文件**：`CcSwitch.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Admin.ps1`, `Net.ps1`
@@ -229,7 +267,7 @@ $script:ApiProviders = @{
 **文件**：`ClaudeConfig.ps1`
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`（与 ApiKey 同一文件）
 
-**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（API Key/Base URL/modelMapping）、Ccline（statusLine）或用户自定义配置。
+**写入策略**：声明式字段管理，读取 -> 补缺失 -> 原子写入。仅管理 ClaudeConfig 自有字段，不覆盖 ApiKey（供应商配置/Base URL/modelMapping）、Ccline（statusLine）或用户自定义配置。
 
 **ClaudeConfig 管辖的 env 字段**：
 
@@ -269,9 +307,11 @@ $script:ApiProviders = @{
 
 **瘦身结构**：
 - `CLAUDE.md`（~80 行）：核心原则 / 工作流原则 / 任务分级 / 交互与环境+输出设置
-- `rules/ccg-multimodel.md`：多模型协作（Codex/Gemini 调用格式、会话复用、并行调用）
-- `rules/ccg-tools.md`：工具速查表 + 知识获取 + 设计图获取
-- `rules/ccg-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
+- `rules/ccq-multimodel.md`：多模型协作（Codex/Gemini 调用格式、会话复用、并行调用）
+- `rules/ccq-tools.md`：工具速查表 + 知识获取 + 设计图获取
+- `rules/ccq-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
+
+**命名约定**：CCQ 管理的 rules 文件统一使用 `ccq-` 前缀，与用户自定义 rules 隔离。旧版文件名（无前缀 / `ccg-` 前缀）由用户自行清理。
 
 **写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用原子覆写（直接替换，无备份）。
 

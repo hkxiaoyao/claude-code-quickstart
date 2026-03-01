@@ -1,4 +1,4 @@
-﻿# API Key 配置步骤 - CCQ
+﻿# 第三方供应商配置步骤 - CCQ
 # 功能: 供应商选择（智谱 GLM / MiniMax / Kimi / 自定义）、API Key 输入、settings.json 写入
 # 更新: 2026-02-22 - 更新供应商配置，添加 ~/.claude.json 配置
 
@@ -96,7 +96,7 @@ function Test-ApiKeyInstalled {
                 $envSection.ANTHROPIC_BASE_URL
             } else { "" }
 
-            Write-UiSuccess "✓ API Key 已配置（env.ANTHROPIC_AUTH_TOKEN）"
+            Write-UiSuccess "✓ 第三方供应商已配置（env.ANTHROPIC_AUTH_TOKEN）"
             if ($providerName) {
                 Write-UiInfo "  当前供应商: $providerName"
             }
@@ -105,7 +105,7 @@ function Test-ApiKeyInstalled {
             }
 
             $result.IsInstalled = $true
-            $result.Message = "API Key 已配置"
+            $result.Message = "第三方供应商已配置"
             $result.Data["Provider"] = $providerName
             $result.Data["BaseUrl"]  = $baseUrl
         } else {
@@ -113,7 +113,7 @@ function Test-ApiKeyInstalled {
         }
     }
     catch {
-        $result.Message = "检测 API Key 时出错: $($_.Exception.Message)"
+        $result.Message = "检测供应商配置时出错: $($_.Exception.Message)"
         Write-UiError $result.Message
     }
 
@@ -161,7 +161,7 @@ function Resolve-CurrentProvider {
 function Install-ApiKey {
     <#
     .SYNOPSIS
-    安装 API Key 配置（供应商选择 + Key 输入 + 写入 settings.json）
+    安装第三方供应商配置（供应商选择 + Key 输入 + 写入 settings.json）
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -173,7 +173,113 @@ function Install-ApiKey {
     }
 
     try {
-        Write-UiInfo "配置 API Provider 和 API Key..."
+        # 检测是否已配置（重入支持）
+        $existingConfig = Test-ApiKeyInstalled
+        if ($existingConfig.IsInstalled) {
+            $providerName = if ($existingConfig.Data["Provider"]) { $existingConfig.Data["Provider"] } else { "未知" }
+            $baseUrl = if ($existingConfig.Data["BaseUrl"]) { $existingConfig.Data["BaseUrl"] } else { "" }
+
+            Write-Host ""
+            Write-UiInfo "当前供应商配置："
+            Write-UiInfo "  供应商: $providerName"
+            if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
+                Write-UiInfo "  Base URL: $baseUrl"
+            }
+
+            $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+            if (Test-Path $providersDir) {
+                $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue
+                if ($profiles -and $profiles.Count -gt 0) {
+                    Write-UiInfo "  已保存的供应商 Profile: $($profiles.Count) 个"
+                }
+            }
+            Write-Host ""
+
+            $actionIndex = Show-SingleSelectMenu `
+                -Title "供应商已配置，请选择操作：" `
+                -Options @(
+                    "保持当前配置（跳过）",
+                    "重新配置（选择供应商 + 输入 API Key）"
+                )
+
+            if ($actionIndex -ne 1) {
+                Write-UiSuccess "保持当前供应商配置"
+
+                # 检查并补生成 profile（迁移旧用户）
+                $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+                $hasProfiles = (Test-Path $providersDir) -and
+                    @(Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue).Count -gt 0
+                if (-not $hasProfiles) {
+                    try {
+                        $settingsPath = Get-ClaudeSettingsPath
+                        if (Test-Path $settingsPath) {
+                            $curSettings = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                            if ($curSettings -and $curSettings.ContainsKey("env") -and $curSettings["env"]["ANTHROPIC_AUTH_TOKEN"]) {
+                                if (-not (Test-Path $providersDir)) {
+                                    New-Item -ItemType Directory -Path $providersDir -Force | Out-Null
+                                }
+                                $curBaseUrl = if ($curSettings["env"]["ANTHROPIC_BASE_URL"]) { $curSettings["env"]["ANTHROPIC_BASE_URL"] } else { "" }
+
+                                # 识别供应商 key
+                                $migrateKey = "custom"
+                                foreach ($k in $script:ApiProviders.Keys) {
+                                    if ($k -eq "custom") { continue }
+                                    $p = $script:ApiProviders[$k]
+                                    if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and $curBaseUrl -like "$($p.BaseUrl)*") {
+                                        $migrateKey = $k
+                                        break
+                                    }
+                                }
+
+                                $migrateProfile = @{
+                                    "_meta" = @{
+                                        "provider"     = $providerName
+                                        "key"          = $migrateKey
+                                        "baseUrl"      = $curBaseUrl
+                                        "configuredAt" = (Get-Date -Format "o")
+                                    }
+                                    "env" = @{
+                                        "ANTHROPIC_AUTH_TOKEN" = $curSettings["env"]["ANTHROPIC_AUTH_TOKEN"]
+                                        "ANTHROPIC_BASE_URL"  = $curBaseUrl
+                                    }
+                                }
+                                if ($curSettings.ContainsKey("modelMapping") -and $curSettings["modelMapping"]) {
+                                    $migrateProfile["modelMapping"] = $curSettings["modelMapping"]
+                                }
+
+                                $migrateProfileKey = if ($migrateKey -eq "custom" -and -not [string]::IsNullOrWhiteSpace($curBaseUrl)) {
+                                    try {
+                                        $uri = [System.Uri]$curBaseUrl
+                                        "custom-$($uri.Host -replace '\.', '-')"
+                                    } catch { "custom" }
+                                } else { $migrateKey }
+
+                                $migratePath = Join-Path $providersDir "$migrateProfileKey.json"
+                                $migrateTmp = "$migratePath.tmp"
+                                $migrateProfile | ConvertTo-Json -Depth 10 | Set-Content $migrateTmp -Encoding UTF8
+                                Move-Item $migrateTmp $migratePath -Force
+                                Write-UiInfo "已从当前配置自动生成供应商 Profile: $migrateProfileKey.json"
+                            }
+                        }
+                    } catch {
+                        # 静默失败，不影响主流程
+                    }
+                }
+
+                # 确保 ccp 注入（迁移旧用户也能获得切换命令）
+                Invoke-ProviderSwitcherInjection
+
+                $result.Success = $true
+                $result.Data["Skipped"] = $true
+                $result.Data["Provider"] = $providerName
+                return $result
+            }
+
+            Write-UiInfo "进入供应商配置..."
+            Write-Host ""
+        }
+
+        Write-UiInfo "配置第三方 AI 供应商..."
 
         # 构建菜单选项（Show-SingleSelectMenu 接受 [string[]]，返回索引）
         $providerLabels = @(
@@ -315,7 +421,7 @@ function Install-ApiKey {
         $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
         Move-Item $tempPath $settingsPath -Force
 
-        Write-UiSuccess "✓ API Key 已安全写入 ~/.claude/settings.json（env.ANTHROPIC_AUTH_TOKEN）"
+        Write-UiSuccess "✓ 供应商配置已安全写入 ~/.claude/settings.json（env.ANTHROPIC_AUTH_TOKEN）"
         Write-UiInfo "配置路径: $settingsPath"
 
         # 显示脱敏信息（前 8 位 + 后 4 位）
@@ -325,6 +431,52 @@ function Install-ApiKey {
             $masked = "***"
         }
         Write-UiInfo "Key 摘要: $masked（已脱敏）"
+
+        # 保存供应商 Profile 文件
+        try {
+            $providersDir = Join-Path $env:USERPROFILE ".claude\providers"
+            if (-not (Test-Path $providersDir)) {
+                New-Item -ItemType Directory -Path $providersDir -Force | Out-Null
+            }
+
+            $profileKey = $selectedKey
+            if ($selectedKey -eq "custom") {
+                try {
+                    $uri = [System.Uri]$provider.BaseUrl
+                    $profileKey = "custom-$($uri.Host -replace '\.', '-')"
+                } catch {
+                    $profileKey = "custom"
+                }
+            }
+
+            $profile = @{
+                "_meta" = @{
+                    "provider"     = $provider.Name
+                    "key"          = $selectedKey
+                    "baseUrl"      = $provider.BaseUrl
+                    "configuredAt" = (Get-Date -Format "o")
+                }
+                "env" = @{
+                    "ANTHROPIC_AUTH_TOKEN" = $apiKeyPlain
+                    "ANTHROPIC_BASE_URL"  = $provider.BaseUrl
+                }
+            }
+
+            if ($provider.ContainsKey("ModelMapping") -and $provider.ModelMapping) {
+                $profile["modelMapping"] = $provider.ModelMapping
+            }
+
+            $profilePath = Join-Path $providersDir "$profileKey.json"
+            $profileTempPath = "$profilePath.tmp"
+            $profile | ConvertTo-Json -Depth 10 | Set-Content $profileTempPath -Encoding UTF8
+            Move-Item $profileTempPath $profilePath -Force
+
+            Write-UiSuccess "✓ 供应商 Profile 已保存: ~/.claude/providers/$profileKey.json"
+            Write-UiInfo "提示: 重新打开终端后，使用 ccp 命令可快速切换供应商"
+        } catch {
+            Write-UiWarn "保存供应商 Profile 失败: $($_.Exception.Message)"
+            Write-UiWarn "此错误不影响当前配置，供应商切换功能可能受限"
+        }
 
         # 创建/更新 ~/.claude.json 配置（添加 hasCompletedOnboarding）
         try {
@@ -365,12 +517,15 @@ function Install-ApiKey {
         $result.Data["BaseUrl"]    = $provider.BaseUrl
         $result.Success            = $true
 
+        # 注入 Switch-ClaudeProvider 函数到 $PROFILE
+        Invoke-ProviderSwitcherInjection
+
         # 立即清除敏感变量
         $apiKeyPlain  = $null
         $apiKeySecure = $null
     }
     catch {
-        $result.ErrorMessage = "配置 API Key 失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "配置供应商失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
     finally {
@@ -384,7 +539,7 @@ function Install-ApiKey {
 function Verify-ApiKey {
     <#
     .SYNOPSIS
-    验证 API Key 配置
+    验证第三方供应商配置
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -444,16 +599,120 @@ function Verify-ApiKey {
             }
         }
 
-        Write-UiSuccess "✓ API Key 配置验证通过（env.ANTHROPIC_AUTH_TOKEN）"
+        Write-UiSuccess "✓ 供应商配置验证通过（env.ANTHROPIC_AUTH_TOKEN）"
         Write-UiSuccess "✓ Base URL 配置验证通过（env.ANTHROPIC_BASE_URL）"
         $result.Success = $true
     }
     catch {
-        $result.ErrorMessage = "验证 API Key 配置失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "验证供应商配置失败: $($_.Exception.Message)"
         Write-UiError $result.ErrorMessage
     }
 
     return $result
+}
+
+# 辅助函数：注入 Switch-ClaudeProvider 到 $PROFILE（keep/reconfigure 共用）
+function Invoke-ProviderSwitcherInjection {
+    try {
+        $ccpFunction = @(
+            '# Claude Code Provider Switcher (CCQ)'
+            'function Switch-ClaudeProvider {'
+            '    param([string]$Provider)'
+            '    $providersDir = "$env:USERPROFILE\.claude\providers"'
+            ''
+            '    if (-not $Provider) {'
+            '        $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue'
+            '        if (-not $profiles -or $profiles.Count -eq 0) {'
+            '            Write-Host "未找到供应商 Profile，请先运行安装器配置供应商" -ForegroundColor Yellow'
+            '            return'
+            '        }'
+            '        Write-Host "可用的供应商 Profile:" -ForegroundColor Cyan'
+            '        for ($i = 0; $i -lt $profiles.Count; $i++) {'
+            '            try {'
+            '                $p = Get-Content $profiles[$i].FullName -Raw | ConvertFrom-Json'
+            '                $name = if ($p._meta.provider) { $p._meta.provider } else { $profiles[$i].BaseName }'
+            '            } catch {'
+            '                $name = $profiles[$i].BaseName'
+            '            }'
+            '            Write-Host "  [$i] $name ($($profiles[$i].BaseName))" -ForegroundColor White'
+            '        }'
+            '        $sel = Read-Host "选择编号"'
+            '        if ($sel -match ''^\d+$'' -and [int]$sel -lt $profiles.Count) {'
+            '            $Provider = $profiles[[int]$sel].BaseName'
+            '        } else { return }'
+            '    }'
+            ''
+            '    # 防御路径遍历'
+            '    if ($Provider -notmatch ''^[a-zA-Z0-9._-]+$'') {'
+            '        Write-Host "无效的供应商名称: $Provider" -ForegroundColor Red'
+            '        return'
+            '    }'
+            ''
+            '    $profilePath = Join-Path $providersDir "$Provider.json"'
+            '    if (-not (Test-Path $profilePath)) {'
+            '        Write-Host "供应商 Profile 不存在: $profilePath" -ForegroundColor Red'
+            '        return'
+            '    }'
+            ''
+            '    try {'
+            '        $profile = Get-Content $profilePath -Raw | ConvertFrom-Json -AsHashtable'
+            '    } catch {'
+            '        Write-Host "供应商 Profile 解析失败: $($_.Exception.Message)" -ForegroundColor Red'
+            '        return'
+            '    }'
+            ''
+            '    # 校验 Profile 必要字段'
+            '    if (-not $profile -or -not $profile.ContainsKey("env") -or'
+            '        -not $profile["env"]["ANTHROPIC_AUTH_TOKEN"] -or -not $profile["env"]["ANTHROPIC_BASE_URL"]) {'
+            '        Write-Host "供应商 Profile 格式无效（缺少 env.ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_BASE_URL）" -ForegroundColor Red'
+            '        return'
+            '    }'
+            ''
+            '    $settingsPath = "$env:USERPROFILE\.claude\settings.json"'
+            '    $settings = @{}'
+            '    if (Test-Path $settingsPath) {'
+            '        try {'
+            '            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -AsHashtable'
+            '            if (-not $settings) { $settings = @{} }'
+            '        } catch { $settings = @{} }'
+            '    }'
+            ''
+            '    if (-not $settings.ContainsKey("env")) { $settings["env"] = @{} }'
+            '    $settings["env"]["ANTHROPIC_AUTH_TOKEN"] = $profile["env"]["ANTHROPIC_AUTH_TOKEN"]'
+            '    $settings["env"]["ANTHROPIC_BASE_URL"]  = $profile["env"]["ANTHROPIC_BASE_URL"]'
+            ''
+            '    if ($profile.ContainsKey("modelMapping") -and $profile["modelMapping"]) {'
+            '        $settings["modelMapping"] = $profile["modelMapping"]'
+            '    } elseif ($settings.ContainsKey("modelMapping")) {'
+            '        $settings.Remove("modelMapping")'
+            '    }'
+            ''
+            '    $tempPath = "$settingsPath.tmp"'
+            '    $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8'
+            '    Move-Item $tempPath $settingsPath -Force'
+            ''
+            '    $providerName = if ($profile["_meta"]["provider"]) { $profile["_meta"]["provider"] } else { $Provider }'
+            '    Write-Host "已切换到: $providerName" -ForegroundColor Green'
+            '}'
+            'Set-Alias ccp Switch-ClaudeProvider'
+        )
+
+        $profileSuccess = Set-ManagedBlockInFile `
+            -FilePath $PROFILE `
+            -Content $ccpFunction `
+            -StartMarker "# >>> Claude Code Provider Switcher >>>" `
+            -EndMarker "# <<< Claude Code Provider Switcher <<<" `
+            -CreateIfNotExists -AppendIfNoBlock
+
+        if ($profileSuccess) {
+            Write-UiSuccess "✓ 供应商切换函数已注入 PowerShell Profile（ccp 命令）"
+        } else {
+            Write-UiWarn "供应商切换函数注入失败，ccp 命令可能不可用"
+        }
+    } catch {
+        Write-UiWarn "注入供应商切换函数失败: $($_.Exception.Message)"
+        Write-UiWarn "此错误不影响当前配置"
+    }
 }
 
 # 辅助函数：获取 Claude Code settings.json 路径（HC-12: ~/.claude/settings.json）

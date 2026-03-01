@@ -76,8 +76,8 @@ foreach ($stepFile in $stepFiles) {
 ```powershell
 @{
     StepId          = "ApiKey"              # 语义化 ID（无数字前缀）
-    StepName        = "API Key 配置"
-    Description     = "配置 AI 提供商 API Key 到 ~/.claude/settings.json"
+    StepName        = "第三方供应商配置"
+    Description     = "配置第三方 AI 供应商连接到 ~/.claude/settings.json"
     StepFile        = "steps/ApiKey.ps1"    # 相对 installer/ 的路径
     TestFunction    = "Test-ApiKeyInstalled"
     InstallFunction = "Install-ApiKey"
@@ -139,6 +139,7 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
+| CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | GeminiCli | Google Gemini CLI，多模型协作使用 |
 

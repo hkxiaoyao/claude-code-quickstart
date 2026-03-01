@@ -44,9 +44,8 @@ graph TD
 ```
 NodeFnm ──────────────────────────────────────── CodexCli [可选]
 ├── ClaudeCode                                   GeminiCli [可选]
-│   ├── ApiKey
+│   ├── ApiKey（供应商 Profile + 切换）           CcSwitch [可选]
 │   ├── Ccline
-│   ├── CcSwitch
 │   └── Mcp
 └── CcgWorkflow
 Git
@@ -70,7 +69,7 @@ ClaudeMd (无依赖)
 
 | 约束 | 内容 |
 |------|------|
-| **HC-12** | ApiKey 管 API 连接：`env.ANTHROPIC_AUTH_TOKEN` + `env.ANTHROPIC_BASE_URL` + `modelMapping`；ClaudeConfig 管常用配置：语言、模型、权限、超时、归因等（仅补缺失，不覆盖）；供应商支持 智谱GLM / MiniMax / Kimi / 自定义 |
+| **HC-12** | ApiKey 管 API 连接：`env.ANTHROPIC_AUTH_TOKEN` + `env.ANTHROPIC_BASE_URL` + `modelMapping` + `providers/` Profile 文件；提供 `ccp` 命令快速切换供应商（Switch-ClaudeProvider）；ClaudeConfig 管常用配置：语言、模型、权限、超时、归因等（仅补缺失，不覆盖）；供应商支持 智谱GLM / MiniMax / Kimi / 自定义 |
 | **HC-4** | `$PROFILE` 编辑使用标记块 `# >>> Claude Code Quickstart >>>` / `# <<< Claude Code Quickstart <<<` |
 | **HC-3** | 实时检测：每次运行都实时检测组件状态，无持久化状态文件 |
 | **SC-3** | 状态指示器：`[PASS]` / `[FAIL]` / `[SKIP]` |
@@ -81,10 +80,11 @@ ClaudeMd (无依赖)
 ## 关键文件路径
 
 ```
-~/.claude/settings.json     # Claude Code 主配置（API Key + env + 权限）
+~/.claude/settings.json     # Claude Code 主配置（供应商 + env + 权限）
 ~/.claude.json              # Claude Code 初始化标记（hasCompletedOnboarding）
 ~/.claude/CLAUDE.md         # 全局 Claude 工作规范（ClaudeMd 写入）
-$PROFILE                    # PowerShell 配置文件（ccline PATH）
+~/.claude/providers/        # 供应商 Profile 目录（ApiKey 写入）
+$PROFILE                    # PowerShell 配置文件（fnm + ccp）
 %TEMP%\ClaudeEnvInstaller\  # 备份目录
 ```
 
