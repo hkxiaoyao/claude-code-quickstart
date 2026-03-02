@@ -97,22 +97,6 @@ function Get-StepRegistry {
             LegacyIds       = @("Step05.Ccline")
         },
         @{
-            StepId          = "CcSwitch"
-            StepName        = "cc-switch [可选]"
-            Description     = "安装 cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具"
-            StepFile        = "steps/CcSwitch.ps1"
-            TestFunction    = "Test-CcSwitchInstalled"
-            InstallFunction = "Install-CcSwitch"
-            VerifyFunction  = "Verify-CcSwitch"
-            UpdateFunction  = ""
-            SkipIfInstalled = $true
-            IsOptional      = $true
-            Order           = 60
-            Dependencies    = @("ClaudeCode")
-            Group           = "Advanced"
-            LegacyIds       = @("Step06.CcSwitch")
-        },
-        @{
             StepId          = "ClaudeConfig"
             StepName        = "Claude 基础配置"
             Description     = "写入 Claude Code 常用配置（语言、模型、权限、超时、归因等）"
@@ -123,7 +107,7 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-ClaudeConfig"
             SkipIfInstalled = $true
             IsOptional      = $false
-            Order           = 70
+            Order           = 60
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
             LegacyIds       = @("Step07.ClaudeConfig")
@@ -139,7 +123,7 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-ClaudeMd"
             SkipIfInstalled = $true
             IsOptional      = $false
-            Order           = 80
+            Order           = 70
             Dependencies    = @()
             Group           = "Advanced"
             LegacyIds       = @("Step08.ClaudeMd")
@@ -155,7 +139,7 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-Mcp"
             SkipIfInstalled = $false
             IsOptional      = $false
-            Order           = 90
+            Order           = 80
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
             LegacyIds       = @("Step09.Mcp")
@@ -171,10 +155,42 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-CcgWorkflow"
             SkipIfInstalled = $true
             IsOptional      = $false
-            Order           = 100
+            Order           = 90
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
             LegacyIds       = @("Step10.CcgWorkflow")
+        },
+        @{
+            StepId          = "OpenSpec"
+            StepName        = "OpenSpec CLI"
+            Description     = "安装 OpenSpec CLI（规范驱动开发工具）"
+            StepFile        = "steps/OpenSpec.ps1"
+            TestFunction    = "Test-OpenSpecInstalled"
+            InstallFunction = "Install-OpenSpec"
+            VerifyFunction  = "Verify-OpenSpec"
+            UpdateFunction  = "Update-OpenSpec"
+            SkipIfInstalled = $true
+            IsOptional      = $false
+            Order           = 100
+            Dependencies    = @("NodeFnm")
+            Group           = "Advanced"
+            LegacyIds       = @()
+        },
+        @{
+            StepId          = "CcSwitch"
+            StepName        = "cc-switch [可选]"
+            Description     = "安装 cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具"
+            StepFile        = "steps/CcSwitch.ps1"
+            TestFunction    = "Test-CcSwitchInstalled"
+            InstallFunction = "Install-CcSwitch"
+            VerifyFunction  = "Verify-CcSwitch"
+            UpdateFunction  = ""
+            SkipIfInstalled = $true
+            IsOptional      = $true
+            Order           = 110
+            Dependencies    = @("ClaudeCode")
+            Group           = "Advanced"
+            LegacyIds       = @("Step06.CcSwitch")
         },
         @{
             StepId          = "CodexCli"
@@ -187,7 +203,7 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-CodexCli"
             SkipIfInstalled = $true
             IsOptional      = $true
-            Order           = 110
+            Order           = 120
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
             LegacyIds       = @("Step11.CodexCli")
@@ -203,26 +219,10 @@ function Get-StepRegistry {
             UpdateFunction  = "Update-GeminiCli"
             SkipIfInstalled = $true
             IsOptional      = $true
-            Order           = 120
-            Dependencies    = @("NodeFnm")
-            Group           = "Advanced"
-            LegacyIds       = @("Step12.GeminiCli")
-        },
-        @{
-            StepId          = "OpenSpec"
-            StepName        = "OpenSpec CLI"
-            Description     = "安装 OpenSpec CLI（规范驱动开发工具）"
-            StepFile        = "steps/OpenSpec.ps1"
-            TestFunction    = "Test-OpenSpecInstalled"
-            InstallFunction = "Install-OpenSpec"
-            VerifyFunction  = "Verify-OpenSpec"
-            UpdateFunction  = "Update-OpenSpec"
-            SkipIfInstalled = $true
-            IsOptional      = $false
             Order           = 130
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
-            LegacyIds       = @()
+            LegacyIds       = @("Step12.GeminiCli")
         }
     )
 }

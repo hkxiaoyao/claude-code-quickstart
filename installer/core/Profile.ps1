@@ -699,9 +699,9 @@ function Clear-OldUpdateSnapshots {
             return 0
         }
 
-        # 匹配 update_* 目录
-        $allSnapshots = Get-ChildItem -Path $script:BackupDirectory -Directory -Filter "update_*" |
-            Sort-Object CreationTime -Descending
+        # HC-13: 强制数组上下文，防止 $null.Count 异常
+        $allSnapshots = @(Get-ChildItem -Path $script:BackupDirectory -Directory -Filter "update_*" |
+            Sort-Object CreationTime -Descending)
 
         if ($allSnapshots.Count -eq 0) {
             return 0

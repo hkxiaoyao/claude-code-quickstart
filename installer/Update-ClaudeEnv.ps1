@@ -6,7 +6,8 @@ param(
     [switch]$ListUpdates,
     [switch]$All,
     [string[]]$Steps,
-    [ValidateSet("Ask", "Skip", "Install", "Fail")]
+    # 注意：不使用 ValidateSet 属性，因为 irm|iex 管道执行时会导致空值赋值冲突
+    # 验证逻辑移到下方手动检查
     [string]$OnMissing,
     [ValidateSet("Normal", "Developer")]
     [string]$OutputMode = "Normal"
@@ -47,7 +48,13 @@ if ($All -and $Steps -and $Steps.Count -gt 0) {
     exit 1
 }
 
-# ─── OnMissing 默认值推导 ──────────────────────────────────────────────────────
+# ─── OnMissing 验证与默认值推导 ────────────────────────────────────────────────
+# 手动验证 ValidateSet（避免 param 块的 ValidateSet 属性在 irm|iex 时空值冲突）
+$validOnMissingValues = @("Ask", "Skip", "Install", "Fail")
+if ($OnMissing -and $OnMissing -notin $validOnMissingValues) {
+    Write-Host "[ERROR] -OnMissing 必须是 $($validOnMissingValues -join '/')，当前值: $OnMissing" -ForegroundColor Red
+    exit 1
+}
 if (-not $OnMissing) {
     $OnMissing = if ($All -or ($Steps -and $Steps.Count -gt 0)) { "Skip" } else { "Ask" }
 }
