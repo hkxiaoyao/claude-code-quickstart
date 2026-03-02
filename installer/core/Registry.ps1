@@ -1,5 +1,5 @@
 # Registry.ps1 - 共享步骤注册表模块
-# 功能: 统一管理步骤元数据、分组定义、依赖关系和迁移映射
+# 功能: 统一管理步骤元数据、分组定义、依赖关系
 #        消除 Install-ClaudeEnv.ps1 与 Manage-ClaudeEnv.ps1 之间的重复定义
 
 #Requires -Version 7.0
@@ -30,7 +30,6 @@ function Get-StepRegistry {
             Order           = 10
             Dependencies    = @()
             Group           = "Basic"
-            LegacyIds       = @("Step01.NodeFnm")
         },
         @{
             StepId          = "Git"
@@ -46,7 +45,6 @@ function Get-StepRegistry {
             Order           = 20
             Dependencies    = @()
             Group           = "Basic"
-            LegacyIds       = @("Step02.Git")
         },
         @{
             StepId          = "ClaudeCode"
@@ -62,7 +60,6 @@ function Get-StepRegistry {
             Order           = 30
             Dependencies    = @("NodeFnm")
             Group           = "Basic"
-            LegacyIds       = @("Step03.ClaudeCode")
         },
         @{
             StepId          = "ApiKey"
@@ -78,7 +75,6 @@ function Get-StepRegistry {
             Order           = 40
             Dependencies    = @("ClaudeCode")
             Group           = "Basic"
-            LegacyIds       = @("Step04.ApiKey")
         },
         @{
             StepId          = "Ccline"
@@ -94,7 +90,6 @@ function Get-StepRegistry {
             Order           = 50
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
-            LegacyIds       = @("Step05.Ccline")
         },
         @{
             StepId          = "ClaudeConfig"
@@ -110,7 +105,6 @@ function Get-StepRegistry {
             Order           = 60
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
-            LegacyIds       = @("Step07.ClaudeConfig")
         },
         @{
             StepId          = "ClaudeMd"
@@ -126,7 +120,6 @@ function Get-StepRegistry {
             Order           = 70
             Dependencies    = @()
             Group           = "Advanced"
-            LegacyIds       = @("Step08.ClaudeMd")
         },
         @{
             StepId          = "Mcp"
@@ -142,7 +135,6 @@ function Get-StepRegistry {
             Order           = 80
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
-            LegacyIds       = @("Step09.Mcp")
         },
         @{
             StepId          = "CcgWorkflow"
@@ -158,7 +150,6 @@ function Get-StepRegistry {
             Order           = 90
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
-            LegacyIds       = @("Step10.CcgWorkflow")
         },
         @{
             StepId          = "OpenSpec"
@@ -174,7 +165,6 @@ function Get-StepRegistry {
             Order           = 100
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
-            LegacyIds       = @()
         },
         @{
             StepId          = "CcSwitch"
@@ -190,7 +180,6 @@ function Get-StepRegistry {
             Order           = 110
             Dependencies    = @("ClaudeCode")
             Group           = "Advanced"
-            LegacyIds       = @("Step06.CcSwitch")
         },
         @{
             StepId          = "CodexCli"
@@ -206,7 +195,6 @@ function Get-StepRegistry {
             Order           = 120
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
-            LegacyIds       = @("Step11.CodexCli")
         },
         @{
             StepId          = "GeminiCli"
@@ -222,7 +210,6 @@ function Get-StepRegistry {
             Order           = 130
             Dependencies    = @("NodeFnm")
             Group           = "Advanced"
-            LegacyIds       = @("Step12.GeminiCli")
         }
     )
 }
@@ -272,25 +259,6 @@ function Get-StepDependencies {
         $dependencies[$step.StepId] = $step.Dependencies
     }
     return $dependencies
-}
-
-function Get-LegacyStepIdMap {
-    <#
-    .SYNOPSIS
-    返回旧→新 StepId 映射（用于 install-state.json 自动迁移）
-    .RETURNS
-    hashtable - 旧 StepId → 新 StepId
-    #>
-    param()
-
-    $registry = Get-StepRegistry
-    $map = @{}
-    foreach ($step in $registry) {
-        foreach ($legacyId in $step.LegacyIds) {
-            $map[$legacyId] = $step.StepId
-        }
-    }
-    return $map
 }
 
 function Get-StepFiles {
