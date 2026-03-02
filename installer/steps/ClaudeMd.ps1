@@ -254,65 +254,25 @@ function Test-ClaudeMdInstalled {
     <#
     .SYNOPSIS
     检测 CLAUDE.md 及 rules 文件是否已配置
+    .RETURNS
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    try {
-        $claudeMdPath = Get-ClaudeMdPath
-        if (-not (Test-Path $claudeMdPath)) {
-            return $false
-        }
-
-        $content = Get-Content $claudeMdPath -Raw -ErrorAction SilentlyContinue
-        if ([string]::IsNullOrWhiteSpace($content)) {
-            return $false
-        }
-
-        # 检查主文件关键标识
-        $hasHeader = $content -match "# Claude Code 增强配置"
-        $hasCoreSection = $content -match "## 一、核心原则"
-        $hasWorkflowSection = $content -match "## 二、工作流原则"
-
-        if (-not ($hasHeader -and $hasCoreSection -and $hasWorkflowSection)) {
-            return $false
-        }
-
-        # 检查 rules 文件存在性和内容完整性
-        $rulesDir = Get-ClaudeRulesDir
-
-        # 每个 rules 文件的关键标识（与 Verify 对齐）
-        $rulesValidation = @{
-            'ccq-multimodel.md' = '# 多模型协作'
-            'ccq-tools.md'      = '# 工具速查与知识获取'
-            'ccq-workflow.md'   = '# 工作流增强'
-        }
-
-        foreach ($fileName in $rulesValidation.Keys) {
-            $rulePath = Join-Path $rulesDir $fileName
-
-            # 检查文件存在
-            if (-not (Test-Path $rulePath)) {
-                return $false
-            }
-
-            # 检查文件内容标识
-            $ruleContent = Get-Content $rulePath -Raw -ErrorAction SilentlyContinue
-            if ([string]::IsNullOrWhiteSpace($ruleContent)) {
-                return $false
-            }
-
-            $keyMarker = $rulesValidation[$fileName]
-            if ($ruleContent -notmatch [regex]::Escape($keyMarker)) {
-                return $false
-            }
-        }
-
-        Write-UiSuccess "CLAUDE.md + rules/ 已配置"
-        return $true
-    }
-    catch {
-        Write-UiError "检测 CLAUDE.md 配置时出错: $($_.Exception.Message)"
-        return $false
-    }
+    $claudeMdPath = Get-ClaudeMdPath
+    $rulesDir = Get-ClaudeRulesDir
+    return Invoke-UnifiedCheck -StepId "ClaudeMd" -DisplayName "CLAUDE.md 配置" `
+        -PathChecks @(
+            @{ Path = $claudeMdPath; Type = "File"; ContentMatch = "# Claude Code 增强配置" },
+            @{ Path = "$rulesDir\ccq-multimodel.md"; Type = "File"; ContentMatch = "# 多模型协作" },
+            @{ Path = "$rulesDir\ccq-tools.md"; Type = "File"; ContentMatch = "# 工具速查与知识获取" },
+            @{ Path = "$rulesDir\ccq-workflow.md"; Type = "File"; ContentMatch = "# 工作流增强" }
+        ) `
+        -CustomVerify {
+            $content = Get-Content $claudeMdPath -Raw -ErrorAction SilentlyContinue
+            $has1 = $content -match "## 一、核心原则"
+            $has2 = $content -match "## 二、工作流原则"
+            return ($has1 -and $has2)
+        } -UseCache
 }
 
 function Install-ClaudeMd {

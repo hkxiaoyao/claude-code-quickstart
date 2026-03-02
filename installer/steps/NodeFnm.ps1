@@ -68,9 +68,13 @@ function Test-NodeFnmInstalled {
     .SYNOPSIS
     测试步骤 01 是否已完成（Node.js 和 fnm 安装）
     .RETURNS
-    测试结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
     param()
+
+    # 缓存检查
+    $cached = Get-CachedTestResult -CacheKey "NodeFnm"
+    if ($cached) { return $cached }
 
     $result = @{
         IsInstalled = $false
@@ -319,6 +323,8 @@ function Test-NodeFnmInstalled {
         Write-UiWarn "⚠ $($result.Message)"
     }
 
+    # 写入缓存
+    Set-CachedTestResult -CacheKey "NodeFnm" -Result $result
     return $result
 }
 

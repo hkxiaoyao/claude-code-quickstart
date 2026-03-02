@@ -17,10 +17,10 @@ function Test-OpenSpecInstalled {
     .SYNOPSIS
     检测 OpenSpec CLI 是否已安装
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    return Test-CliToolInstalled -Command "openspec" -DisplayName "OpenSpec CLI"
+    return Invoke-UnifiedCheck -StepId "OpenSpec" -DisplayName "OpenSpec CLI" -Command "openspec" -UseCache
 }
 
 function Install-OpenSpec {

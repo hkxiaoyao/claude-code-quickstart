@@ -17,10 +17,10 @@ function Test-GeminiCliInstalled {
     .SYNOPSIS
     检测 Gemini CLI 是否已安装
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    return Test-CliToolInstalled -Command "gemini" -DisplayName "Gemini CLI"
+    return Invoke-UnifiedCheck -StepId "GeminiCli" -DisplayName "Gemini CLI" -Command "gemini" -UseCache
 }
 
 function Install-GeminiCli {

@@ -19,97 +19,19 @@ $script:MinNodeVersion = "18"
 function Test-ClaudeCodeInstalled {
     <#
     .SYNOPSIS
-    测试步骤 03 是否已完成（Claude Code 安装）
+    检测 Claude Code 安装状态
     .RETURNS
-    测试结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
     param()
 
-    $result = @{
-        IsInstalled = $false
-        Version = ""
-        Data = @{}
-        Message = ""
-    }
-
-    try {
-        Write-UiInfo "🔍 检查 Claude Code 安装状态..."
-
-        # 检查 Node.js 前置条件
-        if (-not (Test-CommandAvailable -Command "node")) {
-            $result.Message = "Node.js 未安装，无法安装 Claude Code"
-            Write-UiWarn "⚠ $($result.Message)"
-            return $result
-        }
-
-        if (-not (Test-CommandAvailable -Command "npm")) {
-            $result.Message = "npm 未安装，无法安装 Claude Code"
-            Write-UiWarn "⚠ $($result.Message)"
-            return $result
-        }
-
-        # 检查 Node.js 版本
-        $nodeVersion = Get-CommandVersion -Command "node"
-        $result.Data["NodeVersion"] = $nodeVersion
-        $versionNumber = $nodeVersion -replace '^v?(\d+)\..*$', '$1'
-
-        if ([int]$versionNumber -lt [int]$script:MinNodeVersion) {
-            $result.Message = "Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:MinNodeVersion+)"
-            Write-UiWarn "⚠ $($result.Message)"
-            return $result
-        }
-
-        # 检查 Claude Code 是否可用
-        $claudeAvailable = Test-CommandAvailable -Command "claude"
-        $result.Data["ClaudeAvailable"] = $claudeAvailable
-
-        if ($claudeAvailable) {
-            $claudeVersion = Get-CommandVersion -Command "claude"
-            $result.Data["ClaudeVersion"] = $claudeVersion
-            $result.Version = $claudeVersion
-            Write-UiSuccess "✓ Claude Code 已安装 (版本: $claudeVersion)"
-
+    return Invoke-UnifiedCheck -StepId "ClaudeCode" -DisplayName "Claude Code" `
+        -Command "claude" `
+        -CustomVerify {
             # 验证 Claude Code 基本功能
-            try {
-                $helpResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--help") -SuppressOutput -TimeoutSeconds 10
-                if ($helpResult.Success) {
-                    Write-UiSuccess "✓ Claude Code 功能验证通过"
-                    $result.IsInstalled = $true
-                    $result.Message = "Claude Code 已完全安装并可用"
-                } else {
-                    Write-UiWarn "⚠ Claude Code 安装但功能异常"
-                    $result.Message = "Claude Code 安装但功能验证失败"
-                }
-            } catch {
-                Write-UiWarn "⚠ Claude Code 功能验证异常: $($_.Exception.Message)"
-                $result.Message = "Claude Code 功能验证异常"
-            }
-        } else {
-            Write-UiWarn "⚠ Claude Code 未安装"
-            $result.Message = "Claude Code 未安装"
-        }
-
-        # 检查 npm 全局包列表中是否存在
-        try {
-            $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0", $script:ClaudeCodePackage) -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
-            if ($npmListResult.Success -and $npmListResult.Output -match $script:ClaudeCodePackage) {
-                $result.Data["NpmPackageInstalled"] = $true
-                Write-UiSuccess "✓ Claude Code npm 包已安装"
-            } else {
-                $result.Data["NpmPackageInstalled"] = $false
-                Write-UiWarn "⚠ Claude Code npm 包未在全局列表中找到"
-            }
-        } catch {
-            $result.Data["NpmPackageInstalled"] = $false
-            Write-UiWarn "⚠ 无法检查 npm 全局包状态: $($_.Exception.Message)"
-        }
-
-    } catch {
-        $result.Message = "Claude Code 安装状态检查失败: $($_.Exception.Message)"
-        Write-UiWarn "⚠ $($result.Message)"
-    }
-
-    return $result
+            $helpResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--help") -SuppressOutput -TimeoutSeconds 10
+            return $helpResult.Success
+        } -UseCache
 }
 
 function Install-ClaudeCode {

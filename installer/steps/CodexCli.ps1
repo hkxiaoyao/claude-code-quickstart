@@ -17,10 +17,10 @@ function Test-CodexCliInstalled {
     .SYNOPSIS
     检测 Codex CLI 是否已安装
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    return Test-CliToolInstalled -Command "codex" -DisplayName "Codex CLI"
+    return Invoke-UnifiedCheck -StepId "CodexCli" -DisplayName "Codex CLI" -Command "codex" -UseCache
 }
 
 function Install-CodexCli {

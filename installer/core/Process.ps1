@@ -753,14 +753,12 @@ function Test-CliToolInstalled {
             return $result
         }
 
-        Write-UiSuccess "✓ $DisplayName 已安装 (版本: $version)"
         $result.IsInstalled = $true
         $result.Version     = $version
         $result.Message     = "$DisplayName 已安装"
     }
     catch {
         $result.Message = "检测 $DisplayName 时出错: $($_.Exception.Message)"
-        Write-UiError $result.Message
     }
 
     return $result
@@ -899,6 +897,461 @@ function Test-InternetConnection {
     }
 
     return $results
+}
+
+# ============================================================
+# 统一检测框架（Unified Test Framework）
+# ============================================================
+
+# 会话级缓存（脚本作用域 hashtable）
+$script:TestResultCache = @{}
+
+function Get-CachedTestResult {
+    <#
+    .SYNOPSIS
+    从会话缓存获取检测结果（TTL 过期自动清除）
+    .PARAMETER CacheKey
+    缓存键（通常为 StepId）
+    .PARAMETER TtlSeconds
+    缓存有效期（秒），默认 30 秒
+    .RETURNS
+    缓存的检测结果 hashtable，或 $null（未命中/过期）
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CacheKey,
+
+        [int]$TtlSeconds = 30
+    )
+
+    if ($script:TestResultCache.ContainsKey($CacheKey)) {
+        $entry = $script:TestResultCache[$CacheKey]
+        $elapsed = (Get-Date) - $entry.CreatedAt
+        if ($elapsed.TotalSeconds -le $TtlSeconds) {
+            return $entry.Result
+        }
+        $script:TestResultCache.Remove($CacheKey)
+    }
+    return $null
+}
+
+function Set-CachedTestResult {
+    <#
+    .SYNOPSIS
+    将检测结果写入会话缓存
+    .PARAMETER CacheKey
+    缓存键（通常为 StepId）
+    .PARAMETER Result
+    检测结果对象
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CacheKey,
+
+        [Parameter(Mandatory = $true)]
+        $Result
+    )
+
+    $script:TestResultCache[$CacheKey] = @{
+        Result    = $Result
+        CreatedAt = Get-Date
+    }
+}
+
+function Clear-TestResultCache {
+    <#
+    .SYNOPSIS
+    清除检测结果缓存
+    .PARAMETER StepId
+    指定步骤 ID 精准清除；空则全量清除
+    #>
+    param(
+        [string]$StepId = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($StepId)) {
+        $script:TestResultCache = @{}
+    } else {
+        if ($script:TestResultCache.ContainsKey($StepId)) {
+            $script:TestResultCache.Remove($StepId)
+        }
+    }
+}
+
+function Resolve-JsonPath {
+    <#
+    .SYNOPSIS
+    按 . 分隔的路径遍历 PSObject/hashtable（如 "env.ANTHROPIC_AUTH_TOKEN"）
+    .PARAMETER JsonObject
+    PSObject 或 hashtable 根节点
+    .PARAMETER Path
+    点分隔路径
+    .RETURNS
+    目标节点的值，或 $null（路径不存在）
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        $JsonObject,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $segments = $Path -split '\.'
+    $current = $JsonObject
+
+    foreach ($seg in $segments) {
+        if ($null -eq $current) { return $null }
+
+        if ($current -is [hashtable]) {
+            if ($current.ContainsKey($seg)) {
+                $current = $current[$seg]
+            } else {
+                return $null
+            }
+        } elseif ($current -is [System.Management.Automation.PSCustomObject]) {
+            if ($current.PSObject.Properties.Name -contains $seg) {
+                $current = $current.$seg
+            } else {
+                return $null
+            }
+        } else {
+            return $null
+        }
+    }
+
+    return $current
+}
+
+function Test-PathStructure {
+    <#
+    .SYNOPSIS
+    目录结构原子检测器：批量检测路径是否满足条件
+    .PARAMETER Checks
+    检测项数组，每项为 hashtable：@{ Path; Type(File|Dir); Filter; MinCount; ContentMatch }
+    .RETURNS
+    @{ AllPassed = [bool]; Details = @(...) }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable[]]$Checks
+    )
+
+    $allPassed = $true
+    $details = [System.Collections.ArrayList]::new()
+
+    foreach ($check in $Checks) {
+        $passed = $false
+        $info = ""
+
+        if ($check.Type -eq "Dir") {
+            $passed = Test-Path $check.Path -PathType Container
+            if ($passed -and $check.ContainsKey("Filter") -and $check.ContainsKey("MinCount")) {
+                $files = @(Get-ChildItem $check.Path -Filter $check.Filter -ErrorAction SilentlyContinue)
+                $passed = $files.Count -ge $check.MinCount
+                $info = "found $($files.Count)/$($check.MinCount)"
+            }
+        } elseif ($check.Type -eq "File") {
+            $passed = Test-Path $check.Path -PathType Leaf
+            if ($passed -and $check.ContainsKey("ContentMatch")) {
+                $content = Get-Content $check.Path -Raw -ErrorAction SilentlyContinue
+                if ([string]::IsNullOrWhiteSpace($content)) {
+                    $passed = $false
+                    $info = "empty file"
+                } else {
+                    $passed = [bool]($content -match $check.ContentMatch)
+                    if (-not $passed) { $info = "content mismatch" }
+                }
+            }
+        }
+
+        if (-not $passed) { $allPassed = $false }
+        [void]$details.Add(@{ Path = $check.Path; Passed = $passed; Info = $info })
+    }
+
+    return @{ AllPassed = $allPassed; Details = @($details) }
+}
+
+function Test-JsonConfig {
+    <#
+    .SYNOPSIS
+    配置文件字段原子检测器：检测 JSON 文件中的必需字段和数组项
+    .PARAMETER FilePath
+    JSON 文件路径
+    .PARAMETER RequiredFields
+    必需字段数组：@{ Path = "env.KEY"; ExpectedValue = "xxx"; MatchMode = "Exact|Contains|Exists" }
+    .PARAMETER RequiredArrayItems
+    必需数组项：@{ Path = "permissions.allow"; Items = @("Bash","Read",...) }
+    .PARAMETER AsHashtable
+    使用 -AsHashtable 解析 JSON（适用于 mcpServers 等动态键结构）
+    .RETURNS
+    @{ AllPassed = [bool]; MissingFields = @(...); ParsedJson = $json }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [hashtable[]]$RequiredFields = @(),
+
+        [hashtable[]]$RequiredArrayItems = @(),
+
+        [switch]$AsHashtable
+    )
+
+    $configResult = @{
+        AllPassed     = $false
+        MissingFields = [System.Collections.ArrayList]::new()
+        ParsedJson    = $null
+        ParseError    = ""
+    }
+
+    if (-not (Test-Path $FilePath)) {
+        $configResult.ParseError = "file not found: $FilePath"
+        return $configResult
+    }
+
+    try {
+        $rawContent = Get-Content $FilePath -Raw -ErrorAction Stop
+        if ($AsHashtable) {
+            $json = $rawContent | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        } else {
+            $json = $rawContent | ConvertFrom-Json -ErrorAction Stop
+        }
+        $configResult.ParsedJson = $json
+    }
+    catch {
+        $configResult.ParseError = "JSON parse failed: $($_.Exception.Message)"
+        return $configResult
+    }
+
+    $allPassed = $true
+
+    foreach ($field in $RequiredFields) {
+        $value = Resolve-JsonPath -JsonObject $json -Path $field.Path
+        $mode = if ($field.ContainsKey("MatchMode")) { $field.MatchMode } else { "Exists" }
+        $passed = $false
+
+        switch ($mode) {
+            "Exists" {
+                $passed = ($null -ne $value) -and (-not [string]::IsNullOrWhiteSpace([string]$value))
+            }
+            "Exact" {
+                $expected = if ($field.ContainsKey("ExpectedValue")) { $field.ExpectedValue } else { "" }
+                $passed = ([string]$value -eq [string]$expected)
+            }
+            "Contains" {
+                $expected = if ($field.ContainsKey("ExpectedValue")) { $field.ExpectedValue } else { "" }
+                $passed = ([string]$value -match [regex]::Escape($expected))
+            }
+        }
+
+        if (-not $passed) {
+            $allPassed = $false
+            [void]$configResult.MissingFields.Add($field.Path)
+        }
+    }
+
+    foreach ($arrayCheck in $RequiredArrayItems) {
+        $array = Resolve-JsonPath -JsonObject $json -Path $arrayCheck.Path
+        if ($null -eq $array -or -not ($array -is [System.Array])) {
+            $allPassed = $false
+            [void]$configResult.MissingFields.Add($arrayCheck.Path)
+            continue
+        }
+        foreach ($item in $arrayCheck.Items) {
+            if ($array -notcontains $item) {
+                $allPassed = $false
+                [void]$configResult.MissingFields.Add("$($arrayCheck.Path)::$item")
+            }
+        }
+    }
+
+    $configResult.AllPassed = $allPassed
+    return $configResult
+}
+
+function Invoke-UnifiedCheck {
+    <#
+    .SYNOPSIS
+    统一检测框架入口：编排 CLI/目录/配置/自定义检测 + 缓存 + UI 输出
+    .PARAMETER StepId
+    步骤 ID（缓存键）
+    .PARAMETER DisplayName
+    步骤显示名称
+    .PARAMETER Command
+    CLI 命令名（触发 CLI 检测）
+    .PARAMETER MinVersion
+    最低版本要求（需配合 Command 使用）
+    .PARAMETER PathChecks
+    目录结构检测项数组
+    .PARAMETER ConfigFile
+    配置文件路径（触发 JSON 配置检测）
+    .PARAMETER RequiredFields
+    JSON 必需字段数组
+    .PARAMETER RequiredArrayItems
+    JSON 必需数组项数组
+    .PARAMETER ConfigAsHashtable
+    使用 -AsHashtable 解析配置 JSON
+    .PARAMETER CustomVerify
+    自定义验证脚本块（返回 $true/$false 或版本字符串）
+    .PARAMETER UseCache
+    启用会话级缓存
+    .PARAMETER Quiet
+    静默模式（不输出 UI 信息）
+    .RETURNS
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$StepId,
+
+        [string]$DisplayName = $StepId,
+
+        [string]$Command,
+        [string]$MinVersion,
+
+        [hashtable[]]$PathChecks,
+
+        [string]$ConfigFile,
+        [hashtable[]]$RequiredFields,
+        [hashtable[]]$RequiredArrayItems,
+        [switch]$ConfigAsHashtable,
+
+        [scriptblock]$CustomVerify,
+
+        [switch]$UseCache,
+        [switch]$Quiet
+    )
+
+    # 1. 缓存检查
+    if ($UseCache) {
+        $cached = Get-CachedTestResult -CacheKey $StepId
+        if ($null -ne $cached) { return $cached }
+    }
+
+    $result = New-TestResult
+
+    try {
+        # 2. CLI 命令检测
+        if (-not [string]::IsNullOrWhiteSpace($Command)) {
+            $cliResult = Test-CliToolInstalled -Command $Command -DisplayName $DisplayName
+            $result.IsInstalled = $cliResult.IsInstalled
+            $result.Version = $cliResult.Version
+            $result.Data = $cliResult.Data
+            $result.Message = $cliResult.Message
+
+            if (-not $cliResult.IsInstalled) {
+                return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+            }
+
+            # 版本比较
+            if (-not [string]::IsNullOrWhiteSpace($MinVersion) -and -not [string]::IsNullOrWhiteSpace($result.Version)) {
+                try {
+                    $cleanVersion = $result.Version -replace '^[a-zA-Z\s]+', '' -replace '\.windows.*$', ''
+                    $currentVer = [Version]$cleanVersion
+                    $requiredVer = [Version]$MinVersion
+                    if ($currentVer -lt $requiredVer) {
+                        $result.IsInstalled = $false
+                        $result.Message = "$DisplayName 版本过低 (当前: $($result.Version), 需要: $MinVersion+)"
+                        return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+                    }
+                }
+                catch {
+                    # 版本解析失败，跳过版本检查
+                }
+            }
+        }
+
+        # 3. 目录结构检测
+        if ($PathChecks -and $PathChecks.Count -gt 0) {
+            $pathResult = Test-PathStructure -Checks $PathChecks
+            if (-not $pathResult.AllPassed) {
+                $result.IsInstalled = $false
+                $result.Message = "$DisplayName 目录结构不完整"
+                $result.Data["PathDetails"] = $pathResult.Details
+                return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+            }
+        }
+
+        # 4. 配置文件检测
+        if (-not [string]::IsNullOrWhiteSpace($ConfigFile)) {
+            $configResult = Test-JsonConfig -FilePath $ConfigFile `
+                -RequiredFields $RequiredFields `
+                -RequiredArrayItems $RequiredArrayItems `
+                -AsHashtable:$ConfigAsHashtable
+
+            if (-not [string]::IsNullOrWhiteSpace($configResult.ParseError)) {
+                $result.IsInstalled = $false
+                $result.Message = "$DisplayName 配置解析失败: $($configResult.ParseError)"
+                $result.Data["ParseError"] = $configResult.ParseError
+                return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+            }
+
+            if (-not $configResult.AllPassed) {
+                $result.IsInstalled = $false
+                $missingStr = @($configResult.MissingFields) -join ', '
+                $result.Message = "$DisplayName 配置不完整: $missingStr"
+                return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+            }
+            $result.Data["Config"] = $configResult.ParsedJson
+        }
+
+        # 5. 自定义验证
+        if ($null -ne $CustomVerify) {
+            $customResult = & $CustomVerify
+            if ($customResult -is [bool]) {
+                if (-not $customResult) {
+                    $result.IsInstalled = $false
+                    $result.Message = "$DisplayName 自定义验证未通过"
+                    return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+                }
+            } elseif ($customResult -is [string] -and -not [string]::IsNullOrWhiteSpace($customResult)) {
+                # 自定义验证返回版本字符串
+                $result.Version = $customResult
+            }
+        }
+
+        # 全部通过
+        if (-not $result.IsInstalled) { $result.IsInstalled = $true }
+        if ([string]::IsNullOrWhiteSpace($result.Message)) { $result.Message = "$DisplayName 已安装" }
+    }
+    catch {
+        $result.IsInstalled = $false
+        $result.Message = "$DisplayName 检测出错: $($_.Exception.Message)"
+    }
+
+    return (Complete-UnifiedCheck -Result $result -StepId $StepId -DisplayName $DisplayName -UseCache:$UseCache -Quiet:$Quiet)
+}
+
+function Complete-UnifiedCheck {
+    <#
+    .SYNOPSIS
+    统一检测的收尾逻辑：UI 输出 + 写入缓存
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Result,
+
+        [string]$StepId,
+        [string]$DisplayName,
+        [switch]$UseCache,
+        [switch]$Quiet
+    )
+
+    if (-not $Quiet) {
+        if ($Result.IsInstalled) {
+            $versionSuffix = if (-not [string]::IsNullOrWhiteSpace($Result.Version)) { " (版本: $($Result.Version))" } else { "" }
+            Write-UiSuccess "✓ $DisplayName 已安装$versionSuffix"
+        } else {
+            Write-UiWarn "⚠ $DisplayName [FAIL]: $($Result.Message)"
+        }
+    }
+
+    if ($UseCache) {
+        Set-CachedTestResult -CacheKey $StepId -Result $Result
+    }
+
+    return $Result
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

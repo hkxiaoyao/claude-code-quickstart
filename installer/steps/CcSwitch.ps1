@@ -47,70 +47,65 @@ function Test-CcSwitchInstalled {
     .SYNOPSIS
     检测 CC-Switch 是否已安装
     .RETURNS
-    布尔值，表示是否已安装
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
-    param()
 
-    try {
-        # 检查注册表中的 CC-Switch 安装信息
-        $uninstallKeys = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
-        )
+    return Invoke-UnifiedCheck -StepId "CcSwitch" -DisplayName "CC-Switch" `
+        -CustomVerify {
+            # 检查注册表中的 CC-Switch 安装信息
+            $uninstallKeys = @(
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            )
 
-        foreach ($keyPath in $uninstallKeys) {
-            try {
-                $items = Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
-                    $_.DisplayName -like "*CC-Switch*" -or
-                    $_.DisplayName -like "*CC Switch*" -or
-                    $_.DisplayName -like "*Claude Code Switch*" -or
-                    $_.Publisher -like "*ccswitch*" -or
-                    $_.Publisher -like "*Anthropic*"
-                }
+            foreach ($keyPath in $uninstallKeys) {
+                try {
+                    $items = @(Get-ItemProperty $keyPath -ErrorAction SilentlyContinue | Where-Object {
+                        $_.DisplayName -like "*CC-Switch*" -or
+                        $_.DisplayName -like "*CC Switch*" -or
+                        $_.DisplayName -like "*Claude Code Switch*" -or
+                        $_.Publisher -like "*ccswitch*" -or
+                        $_.Publisher -like "*Anthropic*"
+                    })
 
-                if ($items) {
-                    foreach ($item in $items) {
-                        Write-Host "检测到已安装的 CC-Switch:" -ForegroundColor Green
-                        Write-Host "  名称: $($item.DisplayName)" -ForegroundColor Gray
-                        Write-Host "  版本: $($item.DisplayVersion)" -ForegroundColor Gray
-                        Write-Host "  发布商: $($item.Publisher)" -ForegroundColor Gray
+                    if ($items.Count -gt 0) {
+                        $item = $items[0]
+                        Write-UiInfo "  名称: $($item.DisplayName)"
+                        if ($item.DisplayVersion) {
+                            Write-UiInfo "  版本: $($item.DisplayVersion)"
+                            return $item.DisplayVersion
+                        }
+                        return $true
+                    }
+                } catch { }
+            }
+
+            # 检查常见安装路径
+            $commonPaths = @(
+                "$env:LOCALAPPDATA\Programs\CC Switch",
+                "$env:LOCALAPPDATA\Programs\CC-Switch",
+                "$env:ProgramFiles\CC-Switch",
+                "$env:ProgramFiles\CC Switch",
+                "$env:ProgramFiles\Anthropic\CC-Switch",
+                "${env:ProgramFiles(x86)}\CC-Switch",
+                "${env:ProgramFiles(x86)}\CC Switch",
+                "${env:ProgramFiles(x86)}\Anthropic\CC-Switch",
+                "$env:LOCALAPPDATA\Programs\cc-switch"
+            )
+
+            foreach ($path in $commonPaths) {
+                if (Test-Path $path) {
+                    $exeFiles = @(Get-ChildItem -Path $path -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue)
+                    if ($exeFiles.Count -gt 0) {
+                        Write-UiInfo "  安装目录: $path"
                         return $true
                     }
                 }
-            } catch {
-                # 忽略注册表访问错误
             }
-        }
 
-        # 检查常见安装路径
-        $commonPaths = @(
-            "$env:LOCALAPPDATA\Programs\CC Switch",
-            "$env:LOCALAPPDATA\Programs\CC-Switch",
-            "$env:ProgramFiles\CC-Switch",
-            "$env:ProgramFiles\CC Switch",
-            "$env:ProgramFiles\Anthropic\CC-Switch",
-            "${env:ProgramFiles(x86)}\CC-Switch",
-            "${env:ProgramFiles(x86)}\CC Switch",
-            "${env:ProgramFiles(x86)}\Anthropic\CC-Switch",
-            "$env:LOCALAPPDATA\Programs\cc-switch"
-        )
-
-        foreach ($path in $commonPaths) {
-            if (Test-Path $path) {
-                $exeFiles = Get-ChildItem -Path $path -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
-                if ($exeFiles) {
-                    Write-Host "检测到 CC-Switch 安装目录: $path" -ForegroundColor Green
-                    return $true
-                }
-            }
-        }
-
-        return $false
-
-    } catch {
-        return $false
-    }
+            return $false
+        } -UseCache
 }
 
 function Install-CcSwitch {
@@ -145,13 +140,22 @@ function Install-CcSwitch {
         Write-Host ""
         Write-Host "2. 检查 CC-Switch 安装状态..." -ForegroundColor Gray
 
-        if (Test-CcSwitchInstalled) {
-            Write-Host "✓ CC-Switch 已安装" -ForegroundColor Green
-
-            # 询问是否重新安装
-            $response = Read-Host "CC-Switch 已安装，是否重新安装最新版本？[y/N]"
-            if ($response -notmatch "^[Yy]") {
-                Write-Host "跳过 CC-Switch 重新安装" -ForegroundColor Gray
+        $ccSwitchTest = Test-CcSwitchInstalled
+        if ($ccSwitchTest.IsInstalled) {
+            Write-Host "✓ CC-Switch 已安装，跳过" -ForegroundColor Green
+            $result.Success = $true
+            $result.Data["Skipped"] = $true
+            return $result
+        } else {
+            # 未检测到安装，提醒用户检测机制的限制
+            Write-Host "  未检测到 CC-Switch 安装" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  注意: 当前仅支持检测 MSI 安装方式" -ForegroundColor DarkGray
+            Write-Host "  如果您已通过便携版/自定义方式安装，可选择跳过" -ForegroundColor DarkGray
+            Write-Host ""
+            $response = Read-Host "是否继续安装 CC-Switch？[Y/n]"
+            if ($response -match "^[Nn]") {
+                Write-Host "跳过 CC-Switch 安装" -ForegroundColor Gray
                 $result.Success = $true
                 $result.Data["Skipped"] = $true
                 return $result
@@ -227,7 +231,8 @@ function Install-CcSwitch {
         # 等待安装完成
         Start-Sleep -Seconds 3
 
-        if (-not (Test-CcSwitchInstalled)) {
+        $verifyTest = Test-CcSwitchInstalled
+        if (-not $verifyTest.IsInstalled) {
             Write-Host "⚠ CC-Switch 安装验证失败，但安装过程成功" -ForegroundColor Yellow
             Write-Host "  可能需要重启系统或重新登录才能完全生效" -ForegroundColor Gray
         } else {
@@ -543,7 +548,8 @@ function Verify-CcSwitch {
     #>
     param()
 
-    return Test-CcSwitchInstalled
+    $testResult = Test-CcSwitchInstalled
+    return @{ Success = [bool]$testResult.IsInstalled; ErrorMessage = if (-not $testResult.IsInstalled) { $testResult.Message } else { "" } }
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

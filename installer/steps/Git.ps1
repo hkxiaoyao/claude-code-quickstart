@@ -19,94 +19,30 @@ $script:MinGitVersion = [Version]"2.30.0"  # 最低 Git 版本要求
 function Test-GitInstalled {
     <#
     .SYNOPSIS
-    测试步骤 02 是否已完成（Git 安装和配置）
+    检测 Git 安装和配置状态
     .RETURNS
-    测试结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
     param()
 
-    $result = @{
-        IsInstalled = $false
-        Version = ""
-        Data = @{}
-        Message = ""
-    }
-
-    try {
-        Write-UiInfo "🔍 检查 Git 安装和配置状态..."
-
-        # 检查 Git 是否可用
-        $gitAvailable = Test-CommandAvailable -Command "git"
-        $result.Data["GitAvailable"] = $gitAvailable
-
-        if ($gitAvailable) {
-            $gitVersion = Get-CommandVersion -Command "git"
-            $result.Data["GitVersion"] = $gitVersion
-            Write-UiSuccess "✓ Git 已安装 (版本: $gitVersion)"
-
-            # 解析版本号进行比较
-            try {
-                $versionString = $gitVersion -replace '^git version ', '' -replace '\.windows.*$', ''
-                $currentVersion = [Version]$versionString
-
-                if ($currentVersion -ge $script:MinGitVersion) {
-                    $result.Version = $gitVersion
-                    Write-UiSuccess "✓ Git 版本满足要求 (需要: $script:MinGitVersion+)"
-                } else {
-                    Write-UiWarn "⚠ Git 版本过低 (当前: $gitVersion, 需要: $script:MinGitVersion+)"
-                }
-            } catch {
-                Write-UiWarn "⚠ 无法解析 Git 版本号: $gitVersion"
-                $result.Version = $gitVersion  # 仍然记录版本，但可能需要手动验证
-            }
-        } else {
-            Write-UiWarn "⚠ Git 未安装"
-        }
-
-        # 判断是否已完全安装和配置
-        # 检查项：Git 可用 + 版本 + 推荐配置哨兵 + .bashrc managed block
-        $allDelivered = $gitAvailable -and $result.Version
-
-        if ($allDelivered) {
+    return Invoke-UnifiedCheck -StepId "Git" -DisplayName "Git" `
+        -Command "git" -MinVersion "2.30.0" `
+        -CustomVerify {
             # 哨兵检查：init.defaultBranch 是否已配置为 main
             $sentinel = & git config --global --get init.defaultBranch 2>$null
-            if ($sentinel -ne "main") {
-                $allDelivered = $false
-            }
-        }
+            if ($sentinel -ne "main") { return $false }
 
-        if ($allDelivered) {
             # 检查 .bashrc managed block 是否存在
             $homeDir = Get-UserHome
             if (-not $homeDir) { $homeDir = $env:HOME }
-            if ($homeDir) {
-                $bashrcPath = Join-Path $homeDir ".bashrc"
-                if (Test-Path $bashrcPath) {
-                    $bashrcContent = Get-Content -Path $bashrcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-                    if (-not $bashrcContent -or -not $bashrcContent.Contains("# >>> Claude Code Quickstart >>>")) {
-                        $allDelivered = $false
-                    }
-                } else {
-                    $allDelivered = $false
-                }
-            } else {
-                $allDelivered = $false
-            }
-        }
+            if (-not $homeDir) { return $false }
 
-        if ($allDelivered) {
-            $result.IsInstalled = $true
-            $result.Message = "Git 已完全安装并配置"
-        } else {
-            $result.Message = "Git 安装或配置不完整，需要重新配置"
-        }
+            $bashrcPath = Join-Path $homeDir ".bashrc"
+            if (-not (Test-Path $bashrcPath)) { return $false }
 
-    } catch {
-        $result.Message = "Git 安装状态检查失败: $($_.Exception.Message)"
-        Write-UiWarn "⚠ $($result.Message)"
-    }
-
-    return $result
+            $bashrcContent = Get-Content -Path $bashrcPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+            return ($bashrcContent -and $bashrcContent.Contains("# >>> Claude Code Quickstart >>>"))
+        } -UseCache
 }
 
 function Install-Git {

@@ -60,64 +60,33 @@ function Test-ApiKeyInstalled {
     .SYNOPSIS
     检测 API Key 是否已配置，并识别当前供应商
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    $result = @{
-        IsInstalled = $false
-        Version     = ""
-        Data        = @{}
-        Message     = ""
-    }
-
-    try {
-        $settingsPath = Get-ClaudeSettingsPath
-        if (-not (Test-Path $settingsPath)) {
-            $result.Message = "settings.json 不存在"
-            return $result
-        }
-
-        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-        if (-not $settings) {
-            $result.Message = "settings.json 无法解析"
-            return $result
-        }
-
-        # HC-12: API Key 存于 env.ANTHROPIC_AUTH_TOKEN
-        $envSection = if ($settings.PSObject.Properties.Name -contains "env") { $settings.env } else { $null }
-        $hasAuthToken = $envSection -and
-            $envSection.PSObject.Properties.Name -contains "ANTHROPIC_AUTH_TOKEN" -and
-            -not [string]::IsNullOrWhiteSpace($envSection.ANTHROPIC_AUTH_TOKEN)
-
-        if ($hasAuthToken) {
+    $settingsPath = Get-ClaudeSettingsPath
+    return Invoke-UnifiedCheck -StepId "ApiKey" -DisplayName "第三方供应商配置" `
+        -ConfigFile $settingsPath `
+        -RequiredFields @(
+            @{ Path = "env.ANTHROPIC_AUTH_TOKEN"; MatchMode = "Exists" }
+        ) `
+        -CustomVerify {
             # 识别当前供应商
-            $providerName = Resolve-CurrentProvider -Settings $settings
-            $baseUrl = if ($envSection.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL") {
-                $envSection.ANTHROPIC_BASE_URL
-            } else { "" }
-
-            Write-UiSuccess "✓ 第三方供应商已配置（env.ANTHROPIC_AUTH_TOKEN）"
-            if ($providerName) {
-                Write-UiInfo "  当前供应商: $providerName"
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($settings) {
+                $providerName = Resolve-CurrentProvider -Settings $settings
+                if ($providerName) {
+                    Write-UiInfo "  当前供应商: $providerName"
+                }
+                $envSection = if ($settings.PSObject.Properties.Name -contains "env") { $settings.env } else { $null }
+                if ($envSection -and ($envSection.PSObject.Properties.Name -contains "ANTHROPIC_BASE_URL")) {
+                    $baseUrl = $envSection.ANTHROPIC_BASE_URL
+                    if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
+                        Write-UiInfo "  Base URL: $baseUrl"
+                    }
+                }
             }
-            if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
-                Write-UiInfo "  Base URL: $baseUrl"
-            }
-
-            $result.IsInstalled = $true
-            $result.Message = "第三方供应商已配置"
-            $result.Data["Provider"] = $providerName
-            $result.Data["BaseUrl"]  = $baseUrl
-        } else {
-            $result.Message = "env.ANTHROPIC_AUTH_TOKEN 未配置"
-        }
-    }
-    catch {
-        $result.Message = "检测供应商配置时出错: $($_.Exception.Message)"
-        Write-UiError $result.Message
-    }
-
-    return $result
+            return $true
+        } -UseCache
 }
 
 # 辅助函数：从 settings.json 识别当前配置的供应商

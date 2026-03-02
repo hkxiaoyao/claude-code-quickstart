@@ -214,6 +214,9 @@ function Invoke-StepActionLifecycle {
             throw "${actionLabel}阶段失败: $actionError"
         }
 
+        # 操作成功后立即清除缓存，确保验证阶段不命中旧结果
+        Clear-TestResultCache -StepId $stepId
+
         # 3. 执行验证阶段（如果提供）
         if ($verifyFunction) {
             Write-UiOutput "  ✅ 验证阶段: $verifyFunction" -Level Debug -Type Info
@@ -369,6 +372,9 @@ function Invoke-UpdateLifecycle {
 
         [string]$OnMissing = "Ask"
     )
+
+    # 更新前清除检测缓存，确保 Test 阶段重新检测
+    Clear-TestResultCache
 
     return Invoke-StepActionLifecycle -StepConfig $StepConfig -Action Update -State $State -OnMissing $OnMissing
 }

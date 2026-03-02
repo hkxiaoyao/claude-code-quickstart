@@ -942,74 +942,58 @@ function Test-McpInstalled {
     <#
     .SYNOPSIS
     检测 MCP Server 是否已安装配置（支持 stdio/http/software）
+    .RETURNS
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    try {
-        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
-        if (-not (Test-Path $claudeJsonPath)) {
-            return $false
-        }
+    $claudeJsonPath = "$(Get-UserHome)\.claude.json"
+    return Invoke-UnifiedCheck -StepId "Mcp" -DisplayName "MCP Server 配置" `
+        -CustomVerify {
+            if (-not (Test-Path $claudeJsonPath)) { return $false }
 
-        $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
-        if (-not $claudeJson) {
-            return $false
-        }
+            $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+            if (-not $claudeJson) { return $false }
 
-        $hasMcpServers = $claudeJson.ContainsKey("mcpServers") -and $claudeJson["mcpServers"]
+            $hasMcpServers = $claudeJson.ContainsKey("mcpServers") -and $claudeJson["mcpServers"]
 
-        $stdioCount = 0
-        $httpCount = 0
-        if ($hasMcpServers) {
-            foreach ($serverId in @($claudeJson["mcpServers"].Keys)) {
-                $serverConfig = $claudeJson["mcpServers"][$serverId]
-                $hasType = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("type")
-                $hasUrl = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("url")
-                $hasCommand = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("command")
-                $hasArgs = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("args")
+            $stdioCount = 0
+            $httpCount = 0
+            if ($hasMcpServers) {
+                foreach ($serverId in @($claudeJson["mcpServers"].Keys)) {
+                    $serverConfig = $claudeJson["mcpServers"][$serverId]
+                    $hasType = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("type")
+                    $hasUrl = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("url")
+                    $hasCommand = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("command")
+                    $hasArgs = $serverConfig -is [hashtable] -and $serverConfig.ContainsKey("args")
 
-                if ($hasType -and [string]$serverConfig["type"] -eq "http" -and $hasUrl -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["url"])) {
-                    $httpCount++
-                    continue
-                }
-
-                if ($hasCommand -and $hasArgs -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["command"]) -and $serverConfig["args"]) {
-                    $stdioCount++
+                    if ($hasType -and [string]$serverConfig["type"] -eq "http" -and $hasUrl -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["url"])) {
+                        $httpCount++
+                        continue
+                    }
+                    if ($hasCommand -and $hasArgs -and -not [string]::IsNullOrWhiteSpace([string]$serverConfig["command"]) -and $serverConfig["args"]) {
+                        $stdioCount++
+                    }
                 }
             }
-        }
 
-        # 检测 Pencil 软件安装（仅用于显示，不影响检测结果）
-        $softwareCount = 0
-        $pencilInstalled = (Test-CommandAvailable -Command "pencil") -or (Test-Path "$env:LOCALAPPDATA\Programs\Pencil")
-        if ($pencilInstalled) {
-            $softwareCount = 1
-        }
-
-        # 检查 settings.json 中的权限配置
-        $settingsPath = Get-ClaudeSettingsPath
-        $hasPermissions = $false
-        if (Test-Path $settingsPath) {
-            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
-            if ($settings) {
-                $hasPermissions = $settings -is [hashtable] -and $settings.ContainsKey("permissions") -and
-                    $settings["permissions"] -is [hashtable] -and $settings["permissions"].ContainsKey("allow") -and
-                    $settings["permissions"]["allow"]
+            # 检查 settings.json 中的权限配置
+            $settingsPath = Get-ClaudeSettingsPath
+            $hasPermissions = $false
+            if (Test-Path $settingsPath) {
+                $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($settings) {
+                    $hasPermissions = $settings -is [hashtable] -and $settings.ContainsKey("permissions") -and
+                        $settings["permissions"] -is [hashtable] -and $settings["permissions"].ContainsKey("allow") -and
+                        $settings["permissions"]["allow"]
+                }
             }
-        }
 
-        # 只有当 .claude.json 中有实际的 MCP Server 配置时才返回 true
-        # Pencil 的存在不应该导致跳过 MCP 配置步骤
-        if (($stdioCount + $httpCount) -gt 0 -and $hasPermissions) {
-            Write-UiSuccess "✓ MCP Server 已配置 (stdio: $stdioCount, http: $httpCount, software: $softwareCount)"
-            return $true
-        }
-
-        return $false
-    }
-    catch {
-        Write-UiWarn "检测 MCP Server 配置时出错: $($_.Exception.Message)"
-        return $false
-    }
+            if (($stdioCount + $httpCount) -gt 0 -and $hasPermissions) {
+                Write-UiInfo "  stdio: $stdioCount, http: $httpCount"
+                return $true
+            }
+            return $false
+        } -UseCache
 }
 
 function Install-Mcp {

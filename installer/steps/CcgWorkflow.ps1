@@ -21,72 +21,28 @@ function Test-CcgWorkflowInstalled {
     .SYNOPSIS
     检测 CCG Workflow 是否已安装（基于官方目录结构判定）
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    $result = @{
-        IsInstalled = $false
-        Version     = ""
-        Data        = @{}
-        Message     = ""
-    }
-
-    try {
-        # 检查 commands\ccg 目录存在且有 .md 文件
-        $commandsDir = "$script:ClaudeDir\commands\ccg"
-        if (-not (Test-Path $commandsDir)) {
-            $result.Message = "命令模板目录不存在: $commandsDir"
-            return $result
-        }
-        $commandFiles = Get-ChildItem $commandsDir -Filter "*.md" -ErrorAction SilentlyContinue
-        if ($null -eq $commandFiles -or $commandFiles.Count -eq 0) {
-            $result.Message = "命令模板目录为空: $commandsDir"
-            return $result
-        }
-
-        # 检查 agents\ccg 目录存在
-        $agentsDir = "$script:ClaudeDir\agents\ccg"
-        if (-not (Test-Path $agentsDir)) {
-            $result.Message = "Agent 模板目录不存在: $agentsDir"
-            return $result
-        }
-
-        # 检查 .ccg 配置目录存在
-        $ccgConfigDir = "$script:ClaudeDir\.ccg"
-        if (-not (Test-Path $ccgConfigDir)) {
-            $result.Message = "CCG 配置目录不存在: $ccgConfigDir"
-            return $result
-        }
-
-        # 检查 codeagent-wrapper.exe 二进制文件存在
-        $wrapperExe = "$script:ClaudeDir\bin\codeagent-wrapper.exe"
-        if (-not (Test-Path $wrapperExe)) {
-            $result.Message = "二进制文件不存在: $wrapperExe"
-            return $result
-        }
-
-        # 所有检查通过，从 config.toml 获取 ccg-workflow 包版本
-        $version = ""
-        $configToml = "$script:ClaudeDir\.ccg\config.toml"
-        if (Test-Path $configToml) {
-            $configContent = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
-            if ($configContent -match 'version\s*=\s*"([^"]+)"') {
-                $version = $matches[1]
+    $claudeDir = $script:ClaudeDir
+    return Invoke-UnifiedCheck -StepId "CcgWorkflow" -DisplayName "CCG Workflow" `
+        -PathChecks @(
+            @{ Path = "$claudeDir\commands\ccg"; Type = "Dir"; Filter = "*.md"; MinCount = 20 },
+            @{ Path = "$claudeDir\agents\ccg"; Type = "Dir" },
+            @{ Path = "$claudeDir\.ccg"; Type = "Dir" },
+            @{ Path = "$claudeDir\bin\codeagent-wrapper.exe"; Type = "File" }
+        ) `
+        -CustomVerify {
+            # 从 config.toml 提取版本
+            $configToml = "$claudeDir\.ccg\config.toml"
+            if (Test-Path $configToml) {
+                $content = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+                if ($content -match 'version\s*=\s*"([^"]+)"') {
+                    return $matches[1]
+                }
             }
-        }
-
-        Write-UiSuccess "CCG Workflow 已安装 ($($commandFiles.Count) 个命令模板)"
-        $result.IsInstalled = $true
-        $result.Version     = $version
-        $result.Data        = @{ CommandCount = $commandFiles.Count }
-        $result.Message     = "CCG Workflow 已安装"
-    }
-    catch {
-        $result.Message = "检测 CCG Workflow 时出错: $($_.Exception.Message)"
-        Write-UiError $result.Message
-    }
-
-    return $result
+            return $true
+        } -UseCache
 }
 
 function Install-CcgWorkflow {

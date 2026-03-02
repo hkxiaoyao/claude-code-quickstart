@@ -52,78 +52,22 @@ function Test-ClaudeConfigInstalled {
     .SYNOPSIS
     检测 ClaudeConfig 自有字段是否已配置（不检测 ApiKey 的 ANTHROPIC_AUTH_TOKEN）
     .RETURNS
-    包含 IsInstalled 字段的结果对象
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    $result = @{
-        IsInstalled = $false
-        Version     = ""
-        Data        = @{}
-        Message     = ""
-    }
+    $settingsPath = Get-ClaudeSettingsPath
+    $envFields = @($script:ClaudeConfigEnvDefaults.Keys | ForEach-Object {
+        @{ Path = "env.$_"; MatchMode = "Exists" }
+    })
 
-    try {
-        $settingsPath = Get-ClaudeSettingsPath
-        if (-not (Test-Path $settingsPath)) {
-            $result.Message = "settings.json 不存在"
-            return $result
-        }
-
-        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-        if (-not $settings) {
-            $result.Message = "settings.json 无法解析"
-            return $result
-        }
-
-        $hasEnv = $settings.PSObject.Properties.Name -contains "env"
-
-        $hasLanguage = ($settings.PSObject.Properties.Name -contains "language") -and
-            -not [string]::IsNullOrWhiteSpace([string]$settings.language)
-
-        $hasPermissionsAllow = ($settings.PSObject.Properties.Name -contains "permissions") -and
-            $settings.permissions -and
-            ($settings.permissions.PSObject.Properties.Name -contains "allow") -and
-            ($settings.permissions.allow -is [System.Array])
-
-        $hasClaudeConfigEnvMarker = $true
-        if (-not $hasEnv) {
-            $hasClaudeConfigEnvMarker = $false
-        } else {
-            foreach ($key in $script:ClaudeConfigEnvDefaults.Keys) {
-                if (-not ($settings.env.PSObject.Properties.Name -contains $key) -or
-                    [string]::IsNullOrWhiteSpace([string]$settings.env.$key)) {
-                    $hasClaudeConfigEnvMarker = $false
-                    break
-                }
-            }
-        }
-
-        $hasBasePermissions = $true
-        if ($hasPermissionsAllow) {
-            foreach ($perm in $script:ClaudeConfigBasePermissions) {
-                if ($settings.permissions.allow -notcontains $perm) {
-                    $hasBasePermissions = $false
-                    break
-                }
-            }
-        } else {
-            $hasBasePermissions = $false
-        }
-
-        if ($hasLanguage -and $hasPermissionsAllow -and $hasBasePermissions -and $hasClaudeConfigEnvMarker) {
-            Write-UiSuccess "✓ Claude Code 常用配置已完成"
-            $result.IsInstalled = $true
-            $result.Message     = "Claude Code 常用配置已完成"
-        } else {
-            $result.Message = "Claude Code 常用配置不完整（缺少 language/permissions/基础权限/环境变量）"
-        }
-    }
-    catch {
-        $result.Message = "检测 Claude Code 常用配置时出错: $($_.Exception.Message)"
-        Write-UiError $result.Message
-    }
-
-    return $result
+    return Invoke-UnifiedCheck -StepId "ClaudeConfig" -DisplayName "Claude Code 常用配置" `
+        -ConfigFile $settingsPath `
+        -RequiredFields (@(
+            @{ Path = "language"; MatchMode = "Exists" }
+        ) + $envFields) `
+        -RequiredArrayItems @(
+            @{ Path = "permissions.allow"; Items = $script:ClaudeConfigBasePermissions }
+        ) -UseCache
 }
 
 function Install-ClaudeConfig {

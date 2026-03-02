@@ -21,52 +21,17 @@ function Test-CclineInstalled {
     .SYNOPSIS
     检测 CCometixLine 是否已安装并配置
     .RETURNS
-    布尔值，表示是否已安装和配置
+    标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
-    param()
 
-    try {
-        # 使用 -ReturnDetails 一次性获取命令可用性和版本输出，避免重复执行
-        $details = Test-CommandAvailable -Command "ccline" -ReturnDetails
-
-        if (-not $details.Available) {
-            return $false
-        }
-
-        # 检查 Claude Code 配置文件中的 statusLine 配置
-        if (Test-Path $script:ClaudeSettingsFile) {
-            try {
-                $settings = Get-Content $script:ClaudeSettingsFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($settings.statusLine -and
-                    $settings.statusLine.type -eq "command" -and
-                    $settings.statusLine.command -eq "ccline") {
-
-                    # 从 details.Output 中提取版本号，避免再次执行 ccline --version
-                    $version = ""
-                    if ($details.Output -match '(\d+\.[\d\.]+[\w\-]*)') {
-                        $version = $matches[1]
-                    } elseif ($details.Output) {
-                        $version = ($details.Output -split "`n")[0].Trim()
-                    }
-
-                    Write-Host "检测到已安装和配置的 CCometixLine:" -ForegroundColor Green
-                    Write-Host "  版本: $version" -ForegroundColor Gray
-                    Write-Host "  状态栏: 已启用" -ForegroundColor Gray
-                    return $true
-                }
-            } catch {
-                # 配置文件解析失败，认为未正确配置
-            }
-        }
-
-        # ccline 已安装但未配置
-        Write-Host "CCometixLine 已安装但未配置状态栏" -ForegroundColor Yellow
-
-        return $false
-
-    } catch {
-        return $false
-    }
+    $settingsFile = $script:ClaudeSettingsFile
+    return Invoke-UnifiedCheck -StepId "Ccline" -DisplayName "CCometixLine" `
+        -Command "ccline" `
+        -ConfigFile $settingsFile `
+        -RequiredFields @(
+            @{ Path = "statusLine.type"; MatchMode = "Exact"; ExpectedValue = "command" },
+            @{ Path = "statusLine.command"; MatchMode = "Exact"; ExpectedValue = "ccline" }
+        ) -UseCache
 }
 
 function Install-Ccline {
@@ -330,7 +295,8 @@ function Verify-Ccline {
     #>
     param()
 
-    return Test-CclineInstalled
+    $testResult = Test-CclineInstalled
+    return @{ Success = [bool]$testResult.IsInstalled; ErrorMessage = if (-not $testResult.IsInstalled) { $testResult.Message } else { "" } }
 }
 
 function Update-Ccline {
