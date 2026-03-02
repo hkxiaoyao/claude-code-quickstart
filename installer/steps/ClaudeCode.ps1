@@ -213,7 +213,7 @@ function Install-ClaudeCode {
             try {
                 # 尝试清理 npm 缓存后重新安装
                 Write-UiInfo "清理 npm 缓存..."
-                $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60
+                $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60 -SuppressOutput
 
                 if ($cleanResult.Success) {
                     Write-UiInfo "重新尝试安装..."
