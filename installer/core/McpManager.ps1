@@ -550,7 +550,7 @@ function Disable-McpServer {
             }
         }
 
-        # 保存到 vault（$removedPermissions 已就绪）
+        # 保存到 vault（$removedPermissions 已就绪）— 先写 vault 再删 .claude.json，确保数据不丢失
         $meta["servers"][$ServerId] = @{
             disabled       = $true
             credentials    = $credentials
@@ -559,16 +559,12 @@ function Disable-McpServer {
             definitionHash = $defHash
             updatedAt      = (Get-Date).ToUniversalTime().ToString("o")
         }
+        $null = Write-McpMeta $meta
 
-        # 从 .claude.json 移除
+        # 从 .claude.json 移除（vault 已安全写入）
         $claudeJson["mcpServers"].Remove($ServerId)
-
-        # 原子写入 .claude.json
         $claudeJsonContent = $claudeJson | ConvertTo-Json -Depth 10
         $null = Write-FileAtomically -FilePath $claudeJsonPath -Content $claudeJsonContent
-
-        # 写入 vault
-        $null = Write-McpMeta $meta
 
         Write-UiSuccess "MCP Server '$ServerId' 已禁用"
         return @{ Success = $true; ServerId = $ServerId; Status = "Disabled" }
@@ -627,11 +623,11 @@ function Enable-McpServer {
             # 使用最新定义 + vault 凭据重建
             try {
                 $serverConfig = New-McpSettingsEntry -ServerId $ServerId -Server $script:McpServers[$ServerId] -Credentials $credentials
-                # 恢复凭据到 env
-                if ($credentials.Count -gt 0 -and $serverConfig -and -not $serverConfig.ContainsKey("env")) {
-                    $serverConfig["env"] = @{}
-                }
-                if ($credentials.Count -gt 0 -and $serverConfig) {
+                # 恢复凭据到 env（仅在重建成功时）
+                if ($serverConfig -and $credentials.Count -gt 0) {
+                    if (-not $serverConfig.ContainsKey("env")) {
+                        $serverConfig["env"] = @{}
+                    }
                     foreach ($key in $credentials.Keys) {
                         $serverConfig["env"][$key] = $credentials[$key]
                     }
@@ -639,10 +635,11 @@ function Enable-McpServer {
             }
             catch {
                 Write-UiWarn "重建 MCP 配置失败: $($_.Exception.Message)"
-                # 尝试使用 vault 中保存的原始配置
-                if ($vaultEntry.ContainsKey("config") -and $vaultEntry["config"]) {
-                    $serverConfig = $vaultEntry["config"]
-                }
+            }
+            # 重建失败或返回 $null 时（如 software 类型），回退到 vault 保存的原始配置
+            if (-not $serverConfig -and $vaultEntry.ContainsKey("config") -and $vaultEntry["config"]) {
+                Write-UiInfo "使用 vault 保存的原始配置恢复"
+                $serverConfig = $vaultEntry["config"]
             }
         }
         elseif ($vaultEntry.ContainsKey("config") -and $vaultEntry["config"]) {
@@ -856,19 +853,51 @@ function Invoke-McpToggle {
     foreach ($s in $statuses) { $statusMap[$s.Id] = $s.Status }
 
     foreach ($id in $ServerIds) {
-        $currentStatus = if ($statusMap.ContainsKey($id)) { $statusMap[$id] } else { "Unknown" }
+        try {
+            $currentStatus = if ($statusMap.ContainsKey($id)) { $statusMap[$id] } else { "Unknown" }
 
-        $toggleResult = switch ($currentStatus) {
-            "Active"   { Disable-McpServer -ServerId $id }
-            "Disabled" { Enable-McpServer -ServerId $id }
-            default {
-                Write-UiWarn "MCP Server '$id' 状态为 $currentStatus，跳过 toggle"
-                @{ Success = $false; ServerId = $id; Status = $currentStatus }
+            $toggleResult = switch ($currentStatus) {
+                "Active"   { Disable-McpServer -ServerId $id }
+                "Disabled" { Enable-McpServer -ServerId $id }
+                "Missing"  {
+                    # Missing = 注册表有定义但不在 .claude.json 也未禁用，尝试从定义重建
+                    if ($script:McpServers -and $script:McpServers.Contains($id)) {
+                        $newConfig = New-McpSettingsEntry -ServerId $id -Server $script:McpServers[$id] -Credentials @{}
+                        if ($newConfig) {
+                            $cjPath = "$(Get-UserHome)\.claude.json"
+                            $cj = @{}
+                            if (Test-Path $cjPath) {
+                                $cj = Get-Content -Path $cjPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                            }
+                            if (-not $cj) { $cj = @{} }
+                            if (-not $cj.ContainsKey("mcpServers")) { $cj["mcpServers"] = @{} }
+                            $cj["mcpServers"][$id] = $newConfig
+                            $null = Write-FileAtomically -FilePath $cjPath -Content ($cj | ConvertTo-Json -Depth 10)
+                            Write-UiSuccess "MCP Server '$id' 已恢复"
+                            @{ Success = $true; ServerId = $id; Status = "Active" }
+                        } else {
+                            Write-UiWarn "MCP Server '$id' 配置类型不支持自动恢复（如需凭据请使用安装功能）"
+                            @{ Success = $false; ServerId = $id; Status = "Missing" }
+                        }
+                    } else {
+                        Write-UiWarn "MCP Server '$id' 未在注册表中定义"
+                        @{ Success = $false; ServerId = $id; Status = "Unknown" }
+                    }
+                }
+                default {
+                    Write-UiWarn "MCP Server '$id' 状态为 $currentStatus，跳过 toggle"
+                    @{ Success = $false; ServerId = $id; Status = $currentStatus }
+                }
             }
-        }
 
-        $results += $toggleResult
-        if ($toggleResult.Success) { $successCount++ } else { $failureCount++ }
+            $results += $toggleResult
+            if ($toggleResult.Success) { $successCount++ } else { $failureCount++ }
+        }
+        catch {
+            Write-UiError "Toggle '$id' 失败: $($_.Exception.Message)"
+            $results += @{ Success = $false; ServerId = $id; Status = "Error" }
+            $failureCount++
+        }
     }
 
     return @{
@@ -908,7 +937,7 @@ function Show-McpManageMenu {
             1 {
                 # 切换状态
                 $statuses = Get-McpStatus
-                $toggleable = @($statuses | Where-Object { $_.Status -in @("Active", "Disabled") })
+                $toggleable = @($statuses | Where-Object { $_.Status -in @("Active", "Disabled", "Missing") })
                 if ($toggleable.Count -eq 0) {
                     Write-UiWarn "没有可切换状态的 MCP Server"
                     Write-Host "按任意键返回..." -ForegroundColor Gray
