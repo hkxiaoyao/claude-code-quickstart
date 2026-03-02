@@ -8,9 +8,9 @@
   ╚═════╝  ╚═════╝  ╚══▀▀═╝
 </pre>
 
-**Claude Code Quickstart** — Windows 平台的 Claude Code 开发环境自动化安装器
+**Claude  Code Quickstart** — Windows 平台的 Claude  Code 开发环境自动化安装器
 
-一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、第三方 AI 供应商配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
+一键完成从零到 Claude  Code 的全套环境配置：Node.js、Git、Claude  Code CLI、第三方 AI 供应商配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
 
 </div>
 
@@ -24,6 +24,8 @@
 - **依赖自动排序**：步骤按拓扑依赖顺序执行，无需手动关心安装顺序
 - **实时检测**：每次运行都实时检测组件状态，已安装组件自动跳过，无状态漂移问题
 - **两种安装模式**：一键安装全部组件 / 分阶段手动选择需要的组件
+- **统一更新系统**：声明式更新已安装组件，支持一键全量更新或指定步骤更新，自动备份快照
+- **MCP 管理器**：交互式管理 MCP Server — 查看状态、启用/禁用、删除，凭据持久化
 - **国内 AI 供应商适配**：支持智谱 GLM、MiniMax、Kimi（月之暗面），开箱即用
 - **智能命令验证**：验证命令实际可执行性，避免 PATH 记录存在但文件缺失的误报
 
@@ -42,57 +44,78 @@
 
 ## 快速开始
 
-### 方式一：云端直接执行（最快捷）⚡
+### 方式一：云端直接执行 ⚡
 
 **适用场景**：零配置、一条命令搞定、适合快速体验
 
-以**管理员身份**打开 PowerShell，复制粘贴以下命令：
+#### 引导脚本（PS 5.1+，以管理员身份运行）
 
 ```powershell
-# 第一步：执行引导脚本（PS 5.1+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
 [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex
 ```
 
+> 使用 `WebClient.DownloadData` + `UTF8.GetString` 显式 UTF-8 解码，避免 PS 5.1 默认代码页导致中文乱码
+
+#### 分组安装（PS 7+）
+
 引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
-# 第二步：执行分组安装脚本（PS 7+）
 Set-ExecutionPolicy Bypass -Scope Process -Force
 irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
 ```
 
-> **说明**：
-> - 第一步使用 `WebClient.DownloadData` + `UTF8.GetString` 显式 UTF-8 解码，避免 PS 5.1 `irm` 默认用系统代码页解码导致中文乱码
-> - 第二步在 PS 7 中运行，`irm` 原生支持 UTF-8，无需特殊处理
-> - `iex` (Invoke-Expression) 直接执行脚本
-> - 执行前可以先访问 URL 查看脚本源码，确保安全
-> - 分组安装将 12 个步骤分为基础环境和进阶扩展两组，更灵活
+#### 更新已安装组件（PS 7+）
+
+```powershell
+# 交互式多选更新（默认）
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Update-ClaudeEnv.built.ps1' | iex
+
+# 一键更新全部
+$s = irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Update-ClaudeEnv.built.ps1'
+& ([scriptblock]::Create($s)) -All
+
+# 仅查看可更新内容（不执行）
+& ([scriptblock]::Create($s)) -ListUpdates
+```
 
 ---
 
-### 方式二：下载单文件脚本（推荐）
+### 方式二：下载单文件执行（推荐）
 
-**适用场景**：需要离线安装、网络不稳定、想先查看脚本内容
+**适用场景**：网络不稳定、需要离线安装、想先查看脚本内容
 
-#### 第一步：下载并运行引导脚本
+从 [Releases](../../releases) 下载所需脚本文件。
 
-从 [Releases](../../releases) 下载 `Bootstrap-ClaudeEnv.built.ps1`，以**管理员身份**打开 PowerShell，运行：
+#### 引导脚本（PS 5.1+，以管理员身份运行）
 
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\Bootstrap-ClaudeEnv.built.ps1
 ```
 
-#### 第二步：运行主安装脚本
-
-引导完成后，下载 `Manage-ClaudeEnv.built.ps1`，在 **PowerShell 7**（`pwsh`）中运行：
+#### 分组安装（PS 7+）
 
 ```powershell
 pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 ```
 
-按提示选择安装模式后，全程自动完成。
+#### 更新已安装组件（PS 7+）
+
+```powershell
+# 交互式多选更新（默认）
+pwsh -File ".\Update-ClaudeEnv.built.ps1"
+
+# 一键更新全部
+pwsh -File ".\Update-ClaudeEnv.built.ps1" -All
+
+# 查看哪些组件有更新（不执行）
+pwsh -File ".\Update-ClaudeEnv.built.ps1" -ListUpdates
+
+# 指定步骤更新
+pwsh -File ".\Update-ClaudeEnv.built.ps1" -Steps ClaudeCode, Ccline
+```
 
 ---
 
@@ -100,7 +123,7 @@ pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
 **适用场景**：需要自定义修改、参与开发、调试安装器
 
-#### 第一步：克隆仓库并运行引导脚本
+#### 引导脚本（PS 5.1+，以管理员身份运行）
 
 ```powershell
 git clone https://github.com/MrNine-666/claude-code-quickstart.git
@@ -109,68 +132,88 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\installer\Bootstrap-ClaudeEnv.ps1
 ```
 
-引导脚本会自动完成：
-- ✓ 检测 Windows 版本兼容性
-- ✓ 检测并安装 winget（如需要）
-- ✓ 推荐安装 Windows Terminal（可选）
-- ✓ **安装 PowerShell 7**（必需）
-- ✓ 配置 Git Bash UTF-8 支持
+引导脚本会自动完成：检测 Windows 版本 → 安装 winget → 推荐 Windows Terminal → **安装 PowerShell 7** → 配置 Git Bash UTF-8
 
-#### 第二步：运行主安装脚本
-
-引导完成后，按照提示在 **PowerShell 7**（`pwsh`）中运行：
+#### 分组安装（PS 7+）
 
 ```powershell
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
 
-按提示选择安装模式后，全程自动完成。
+#### 更新已安装组件（PS 7+）
+
+```powershell
+# 交互式多选更新（默认）
+pwsh -File ".\installer\Update-ClaudeEnv.ps1"
+
+# 一键更新全部
+pwsh -File ".\installer\Update-ClaudeEnv.ps1" -All
+
+# 查看哪些组件有更新（不执行）
+pwsh -File ".\installer\Update-ClaudeEnv.ps1" -ListUpdates
+
+# 指定步骤更新
+pwsh -File ".\installer\Update-ClaudeEnv.ps1" -Steps ClaudeCode, Ccline
+```
 
 ---
 
-## 安装模式
+## 安装说明
 
-> **提示**：以下命令中的脚本路径根据你的使用方式选择：
-> - 构建后的单文件：`.\Manage-ClaudeEnv.built.ps1`
-> - 源码模式：`.\installer\Manage-ClaudeEnv.ps1`
-
-### 分组安装
-
-```powershell
-# 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
-
-# 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
-```
-
-将 12 个步骤分为**基础环境**和**进阶扩展**两组：
-- **基础环境**：Node.js、Git、Claude Code、第三方供应商配置 — 一键安装，无需选择
+分组安装将步骤分为**基础环境**和**进阶扩展**两组：
+- **基础环境**：Node.js、Git、Claude  Code、第三方供应商配置 — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
-### 重新运行
-
-如果安装过程中遇到失败，直接重新运行安装器即可：
+安装器采用**实时检测机制**，每次运行都检测所有组件当前状态，已安装的自动跳过，失败后直接重新运行即可。
 
 ```powershell
-# 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
+# 查看全部步骤列表及状态
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -ListSteps       # 单文件版
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps   # 源码版
+```
 
-# 或源码版本
+---
+
+## 更新说明
+
+可更新步骤（8 个）：
+
+| 步骤 | 更新策略 |
+|------|---------|
+| ClaudeCode | npm install @latest + 版本回退保护 |
+| ClaudeConfig | 声明式对齐 env 字段 + 废弃键清理 |
+| ClaudeMd | 原子覆写 CLAUDE.md 及 rules/ 文件 |
+| Ccline | npm @latest + 重新 patch Claude  Code |
+| CcgWorkflow | npx ccg-workflow@latest init |
+| CodexCli | npm install @latest |
+| GeminiCli | npm install @latest |
+| OpenSpec | npm install @latest |
+
+> **更新前自动备份**：更新前在 `%TEMP%\ClaudeEnvInstaller\Backups\` 创建快照目录，保留最近 5 个快照，方便回滚。
+
+---
+
+## MCP 管理
+
+安装 MCP Server 后，可通过内置的 MCP 管理器对已配置的 MCP Server 进行状态管理。
+
+### 进入 MCP 管理
+
+```powershell
+# 在分组安装器主菜单中选择"MCP 管理"
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+# → 选择 [MCP 管理]
 ```
 
-安装器会实时检测所有组件状态，已安装的组件自动跳过，只安装缺失的部分。
+### 功能说明
 
-### 查看步骤列表
+| 功能 | 说明 |
+|------|------|
+| **查看状态** | 显示所有 MCP Server 的运行状态（Active / Disabled / Missing） |
+| **启用/禁用** | 切换 MCP Server 启用状态，禁用后配置保留在凭据 vault 中 |
+| **删除** | 彻底删除 MCP Server 配置及凭据 |
 
-```powershell
-# 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -ListSteps
-
-# 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
-```
+凭据持久化到 `~/.ccq/mcp-meta.json`，重新安装时自动读取历史凭据并提示填充，无需重复输入。
 
 ---
 
@@ -180,14 +223,14 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 |---|------|------|------|:----:|
 | 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | 基础 | — |
 | 02 | Git | 安装 Git，配置中文支持 | 基础 | — |
-| 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
+| 03 | Claude  Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
 | 04 | 第三方供应商配置 | 配置第三方 AI 供应商连接 | 基础 | — |
 | 05 | ccline | 安装 ccline 状态栏工具 | 进阶 | — |
-| 06 | cc-switch | Claude Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | ✓ |
+| 06 | cc-switch | Claude  Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | ✓ |
 | 07 | Claude 基础配置 | 写入语言/模型/权限/环境变量配置 | 进阶 | — |
-| 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | 进阶 | — |
+| 08 | CLAUDE.md | 生成全局 Claude  Code 工作规范文件 | 进阶 | — |
 | 09 | MCP Server | 配置 MCP 插件服务器 | 进阶 | — |
-| 10 | CCG 工作流 | 安装 Claude Code Generator 工作流 | 进阶 | — |
+| 10 | CCG 工作流 | 安装 Claude  Code Generator 工作流 | 进阶 | — |
 | 11 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | 进阶 | ✓ |
 | 12 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | 进阶 | ✓ |
 
@@ -195,7 +238,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps
 
 ## 第三方供应商配置
 
-安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude Code：
+安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude  Code：
 
 | 供应商 | 最新模型系列 | 模型映射（2026-02 更新） | 获取 Key |
 |--------|------------|------------------------|---------|
@@ -272,6 +315,7 @@ claude-code-quickstart/
 │   ├── Bootstrap-ClaudeEnv.ps1   # PS 5.1 引导入口
 │   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口（全量安装）
 │   ├── Manage-ClaudeEnv.ps1      # PS 7+ 分组安装入口（推荐）
+│   ├── Update-ClaudeEnv.ps1      # PS 7+ 统一更新入口（声明式更新已安装组件）
 │   ├── build/                    # 构建工具目录
 │   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本
 │   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
@@ -282,7 +326,8 @@ claude-code-quickstart/
 │   │   ├── Admin.ps1             # 管理员权限管理
 │   │   ├── Net.ps1               # 网络检测与代理配置
 │   │   ├── Registry.ps1          # 共享步骤注册表（元数据、分组、依赖）
-│   │   └── Bootstrap.ps1         # 步骤状态模型与调度引擎
+│   │   ├── Bootstrap.ps1         # 步骤状态模型与调度引擎
+│   │   └── McpManager.ps1        # MCP Server 管理（状态/启用/禁用/删除/凭据 vault）
 │   └── steps/                    # 安装步骤模块（语义化命名）
 │       ├── NodeFnm.ps1
 │       ├── Git.ps1
@@ -296,7 +341,7 @@ claude-code-quickstart/
 ## 安装后使用
 
 ```powershell
-# 启动 Claude Code
+# 启动 Claude  Code
 claude
 
 # 查看帮助
@@ -309,7 +354,7 @@ codex --help
 gemini --help
 ```
 
-> **cc-switch**：安装后可在开始菜单或桌面快捷方式启动，提供 Claude Code / Codex / Gemini CLI 的图形化辅助管理。
+> **cc-switch**：安装后可在开始菜单或桌面快捷方式启动，提供 Claude  Code / Codex / Gemini CLI 的图形化辅助管理。
 
 ---
 
@@ -331,35 +376,19 @@ gemini --help
 
 **Q：安装中途失败了怎么办？**
 
-直接重新运行安装器即可：
+直接重新运行安装器即可，实时检测机制会自动跳过已安装组件：
 
 ```powershell
-# 如果使用云端执行，需要先下载脚本到本地
-Invoke-RestMethod -Uri "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1" -OutFile "Manage-ClaudeEnv.built.ps1"
+# 单文件版
 pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
-# 或使用本地单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
-
-# 或源码版本
+# 源码版
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 ```
-
-> **提示**：安装器采用实时检测机制，每次运行都会检测所有组件的当前状态。已安装的组件会自动跳过，只安装缺失的部分，无需担心重复安装。
 
 **Q：想重新配置供应商？**
 
-安装器的供应商配置步骤现在支持重入：每次运行都会检测当前配置，提供"保持/重新配置"选择。直接重新运行安装器即可：
-
-```powershell
-# 构建后的单文件版本
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
-
-# 或源码版本
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
-```
-
-如果只是想切换到已配置过的供应商，使用 `ccp` 命令更快：
+安装器的供应商配置步骤支持重入，每次运行都会检测当前配置，提供"保持/重新配置"选择。如果只是切换供应商，使用 `ccp` 更快：
 
 ```powershell
 ccp          # 交互式选择
@@ -407,10 +436,11 @@ pwsh -File ".\installer\build\Build-SingleFile.ps1"
 构建脚本会自动：
 - ✓ 按依赖顺序合并所有源文件
 - ✓ 移除 dot-source 引用和重复的 #Requires 声明
-- ✓ 生成三个单文件脚本到 `installer/build/dist/` 目录：
+- ✓ 生成四个单文件脚本到 `installer/build/dist/` 目录：
   - `Bootstrap-ClaudeEnv.built.ps1` - 引导脚本（PS 5.1+）
   - `Install-ClaudeEnv.built.ps1` - 全量安装脚本（PS 7+）
   - `Manage-ClaudeEnv.built.ps1` - 分组安装脚本（PS 7+，推荐）
+  - `Update-ClaudeEnv.built.ps1` - 统一更新脚本（PS 7+）
 - ✓ 自动进行语法检查验证
 
 构建产物可直接分发给用户使用，无需携带整个源码目录。

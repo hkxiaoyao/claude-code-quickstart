@@ -85,7 +85,7 @@ $script:StepRegistry = Get-StepRegistry
 
 # ─── 内容指纹管理（跳过模板未变更的步骤）─────────────────────────────────
 
-$script:FingerprintManagedSteps = @("ClaudeMd", "ClaudeConfig", "Mcp", "CcgWorkflow")
+$script:FingerprintManagedSteps = @("ClaudeMd", "ClaudeConfig", "CcgWorkflow")
 
 function Get-StepDesiredFingerprint {
     <#
@@ -119,27 +119,6 @@ function Get-StepDesiredFingerprint {
                 }
                 $parts += "deprecated:" + (($script:ClaudeConfigDeprecatedEnvKeys | Sort-Object) -join ",")
                 $parts += "permissions:" + (($script:ClaudeConfigBasePermissions | Sort-Object) -join ",")
-                return Get-StringFingerprint -Text ($parts -join "`n")
-            }
-            "Mcp" {
-                # MCP Server 定义的结构化哈希（排除元数据字段）
-                $parts = @()
-                $configKeys = @("McpType", "Command", "Args", "Url", "UrlTemplate", "CredentialType", "Credentials", "EnvFile", "PreInstall")
-                foreach ($serverId in ($script:McpServers.Keys | Sort-Object)) {
-                    $server = $script:McpServers[$serverId]
-                    $serverParts = @("server:$serverId")
-                    foreach ($ck in $configKeys) {
-                        if ($server.ContainsKey($ck) -and $null -ne $server[$ck]) {
-                            $val = $server[$ck]
-                            if ($val -is [array] -or $val -is [hashtable] -or $val -is [System.Collections.Specialized.OrderedDictionary]) {
-                                $serverParts += "${ck}=" + ($val | ConvertTo-Json -Depth 5 -Compress)
-                            } else {
-                                $serverParts += "${ck}=$val"
-                            }
-                        }
-                    }
-                    $parts += ($serverParts -join "|")
-                }
                 return Get-StringFingerprint -Text ($parts -join "`n")
             }
             "CcgWorkflow" {
@@ -307,6 +286,9 @@ function Get-UpdateStatus {
         }
     } catch { }
 
+    # 指纹管理步骤：预读清单，用于判断模板是否变更
+    $fpManifest = Read-UpdateManifest
+
     $statusList = @()
 
     foreach ($step in $updatableSteps) {
@@ -350,7 +332,19 @@ function Get-UpdateStatus {
                 $entry.LatestVersion = $ccgLatest
                 $entry.HasUpdate = ($entry.CurrentVersion -and $entry.CurrentVersion -ne $ccgLatest)
             }
-            # 其余非 npm 步骤（ClaudeConfig/ClaudeMd/Mcp），HasUpdate 保持 $null
+            elseif ($step.StepId -in $script:FingerprintManagedSteps) {
+                # 指纹管理步骤：比较模板指纹判断是否需要更新
+                $desiredFp = Get-StepDesiredFingerprint -StepId $step.StepId
+                if ($desiredFp) {
+                    $storedEntry = $fpManifest["steps"][$step.StepId]
+                    if ($storedEntry -and $storedEntry["fingerprint"] -eq $desiredFp) {
+                        $entry.HasUpdate = $false
+                    } else {
+                        $entry.HasUpdate = $true
+                    }
+                }
+            }
+            # 其余非 npm 步骤（ClaudeConfig/ClaudeMd），HasUpdate 保持 $null
         }
 
         $statusList += $entry
@@ -448,20 +442,21 @@ function Select-UpdateSteps {
     for ($i = 0; $i -lt $StatusList.Count; $i++) {
         $entry = $StatusList[$i]
         $label = "$($entry.StepName)"
-        if ($entry.IsOptional) { $label += " [可选]" }
 
         if ($entry.IsInstalled) {
             if ($entry.HasUpdate -eq $true) {
-                # 有更新：显示版本变化，默认勾选
-                $label += if ($entry.CurrentVersion) {
+                # 有更新：显示版本变化或模板变更，默认勾选
+                $label += if ($entry.LatestVersion -and $entry.CurrentVersion) {
                     " ($($entry.CurrentVersion) -> $($entry.LatestVersion))"
-                } else {
+                } elseif ($entry.LatestVersion) {
                     " (有更新 -> $($entry.LatestVersion))"
+                } else {
+                    " (模板已变更)"
                 }
                 $defaultSelected += $i
             }
             elseif ($entry.HasUpdate -eq $false) {
-                # npm 包已最新：不勾选
+                # 已最新（npm 版本一致或指纹一致）：不勾选
                 $label += if ($entry.CurrentVersion) { " (已是最新 $($entry.CurrentVersion))" } else { " (已是最新)" }
             }
             else {

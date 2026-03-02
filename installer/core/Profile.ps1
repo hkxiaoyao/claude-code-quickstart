@@ -119,6 +119,9 @@ function Initialize-BackupDirectory {
     param()
 
     try {
+        # 归一化备份路径（解决 $env:TEMP 返回 8.3 短路径问题）
+        $script:BackupDirectory = Resolve-LongPath $script:BackupDirectory
+
         if (-not (Test-Path $script:BackupDirectory)) {
             New-Item -Path $script:BackupDirectory -ItemType Directory -Force | Out-Null
             Write-Host "✓ 备份目录已创建: $script:BackupDirectory" -ForegroundColor Green

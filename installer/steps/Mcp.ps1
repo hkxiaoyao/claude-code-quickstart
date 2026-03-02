@@ -426,7 +426,7 @@ function Invoke-McpPreInstall {
                     Write-UiWarn "标准安装失败，尝试清理 npm 缓存后重试..."
 
                     # 清理 npm 缓存
-                    $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60
+                    $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60 -SuppressOutput
                     if ($cleanResult.Success) {
                         Write-UiInfo "npm 缓存已清理，重新尝试安装..."
 

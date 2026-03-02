@@ -1,5 +1,0 @@
-- python安装，ContextWeaver MCP安装，其他MCP测试
-- 检测机制重构
-- codex gemini测试
-- 更新脚本，同时去掉CLAUDE.md的清理旧文件名
-- 一键卸载

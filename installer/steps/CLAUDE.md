@@ -56,8 +56,8 @@ function Update-<StepId> {
 }
 ```
 
-> 9 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Mcp、Ccline、CcgWorkflow、CodexCli、GeminiCli、OpenSpec。
-> 4 个步骤不可更新（UpdateFunction 为空）：NodeFnm、Git、ApiKey、CcSwitch。
+> 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、GeminiCli、OpenSpec。
+> 5 个步骤不可更新（UpdateFunction 为空）：NodeFnm、Git、ApiKey、CcSwitch、Mcp。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
@@ -75,7 +75,7 @@ function Update-<StepId> {
 | CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
-| Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
+| Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
 | CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeFnm | 进阶 |
 | CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
 | GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
@@ -369,7 +369,7 @@ ccp zhipu        # 直接切换到智谱
 **Vault 集成（mcp-lifecycle）**：
 - Install-Mcp Phase 3：凭据收集前读取 `~/.ccq/mcp-meta.json` 检查历史凭据，提示 `[Y/n]` 自动填充
 - Install-Mcp Phase 5：`.claude.json` 写入成功后，通过 `Invoke-WithMcpLock` 将凭据持久化到 vault
-- Update-Mcp：新增 `Clear-NpxCache` 清理 npx 缓存 + PreInstall npm-global 包更新
+- Update-Mcp（当前未注册到 Registry，不参与统一更新，仅保留备用）：`Clear-NpxCache` 清理 npx 缓存 + PreInstall npm-global 包更新
 - 凭据在 vault 写入后立即清零（安全）
 - Vault 读写失败不阻塞主流程（仅 warning）
 

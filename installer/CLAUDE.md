@@ -220,23 +220,22 @@ Main()
 | `-Steps` | string[] | 指定要更新的步骤 ID |
 | `-OnMissing` | string | 未安装时处理策略：`Ask`/`Skip`/`Install`/`Fail`（默认：有 `-All`/`-Steps` 时 `Skip`，否则 `Ask`） |
 
-### 可更新步骤（9 个）
+### 可更新步骤（8 个）
 
 | StepId | UpdateFunction | 更新策略 |
 |--------|---------------|---------|
 | ClaudeCode | Update-ClaudeCode | npm install @latest + 版本回退 |
 | ClaudeConfig | Update-ClaudeConfig | 声明式对齐 env 键 + 废弃键清理 |
 | ClaudeMd | Update-ClaudeMd | 原子覆写 CLAUDE.md + ccq- rules |
-| Mcp | Update-Mcp | 更新已安装的 MCP Server 配置 |
 | Ccline | Update-Ccline | npm @latest + 重新 patch |
 | CcgWorkflow | Update-CcgWorkflow | npx ccg-workflow@latest init |
 | CodexCli | Update-CodexCli | npm install @latest |
 | GeminiCli | Update-GeminiCli | npm install @latest |
 | OpenSpec | Update-OpenSpec | npm install @latest |
 
-### 不可更新步骤（4 个）
+### 不可更新步骤（5 个）
 
-NodeFnm、Git、ApiKey、CcSwitch — 需通过 Manage 重新安装。
+NodeFnm、Git、ApiKey、CcSwitch、Mcp — 需通过 Manage 重新安装。
 
 ### 核心机制
 
