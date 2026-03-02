@@ -98,7 +98,7 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "CcSwitch"
-            StepName        = "cc-switch [可选]"
+            StepName        = "cc-switch"
             Description     = "安装 cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具"
             StepFile        = "steps/CcSwitch.ps1"
             TestFunction    = "Test-CcSwitchInstalled"
@@ -152,7 +152,7 @@ function Get-StepRegistry {
             TestFunction    = "Test-McpInstalled"
             InstallFunction = "Install-Mcp"
             VerifyFunction  = "Verify-Mcp"
-            UpdateFunction  = "Update-Mcp"
+            UpdateFunction  = ""
             SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 90
@@ -178,7 +178,7 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "CodexCli"
-            StepName        = "Codex CLI [可选]"
+            StepName        = "Codex CLI"
             Description     = "安装 OpenAI Codex CLI（多模型协作可选工具）"
             StepFile        = "steps/CodexCli.ps1"
             TestFunction    = "Test-CodexCliInstalled"
@@ -194,7 +194,7 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "GeminiCli"
-            StepName        = "Gemini CLI [可选]"
+            StepName        = "Gemini CLI"
             Description     = "安装 Google Gemini CLI（多模型协作可选工具）"
             StepFile        = "steps/GeminiCli.ps1"
             TestFunction    = "Test-GeminiCliInstalled"
