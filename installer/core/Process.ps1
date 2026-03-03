@@ -396,6 +396,8 @@ function Get-NpmOutdatedGlobal {
     .DESCRIPTION
     调用 npm outdated -g --json，返回过期包的 hashtable。
     结果缓存在 $script:NpmOutdatedCache，同一会话内只查询一次。
+    对 fnm 环境特殊处理：fnm multishell 临时目录会导致 npm outdated -g
+    返回空结果，需解析 junction 真实目标并通过 --prefix 指定。
     .PARAMETER Force
     忽略缓存强制重新查询
     .RETURNS
@@ -411,17 +413,37 @@ function Get-NpmOutdatedGlobal {
     $outdated = @{}
 
     try {
-        # npm outdated -g 有过期包时 exit 1（正常行为），无过期时 exit 0
-        $npmResult = Invoke-ExternalCommand `
-            -Command "npm" `
-            -Arguments @("outdated", "-g", "--json") `
-            -TimeoutSeconds 60 `
-            -RetryCount 0 `
-            -SuppressOutput
+        # fnm multishell 修正：fnm 的 multishell 临时目录是多层 junction 链
+        # (multishell → aliases/default → aliases/lts-* → node-versions/vX/installation)
+        # npm outdated -g 在 multishell 目录下返回空结果，需解析到最终真实路径
+        $arguments = @("outdated", "-g", "--json")
+        try {
+            $prefixResult = Invoke-ExternalCommand -Command "npm" `
+                -Arguments @("prefix", "-g") `
+                -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+            if ($prefixResult.Success -and $prefixResult.Output) {
+                $prefix = $prefixResult.Output.Trim()
+                if ($prefix -match 'fnm_multishells') {
+                    # ResolveLinkTarget($path, $true) 递归解析整条 junction 链（.NET 6+ / PS 7+）
+                    $resolved = [System.IO.Directory]::ResolveLinkTarget($prefix, $true)
+                    if ($null -ne $resolved -and (Test-Path $resolved.FullName)) {
+                        $arguments += @("--prefix", $resolved.FullName)
+                    }
+                }
+            }
+        } catch {
+            # 解析失败不阻塞，继续使用默认行为
+        }
 
-        $jsonOutput = $npmResult.Output
-        if (-not [string]::IsNullOrWhiteSpace($jsonOutput)) {
-            $parsed = $jsonOutput | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+        # npm outdated -g 有过期包时 exit 1（正常行为），无过期时 exit 0
+        # Invoke-ExternalCommand 对非零退出码会 throw，而 npm outdated 的 exit 1 是正常语义
+        # 因此这里直接调用 npm，不走 Invoke-ExternalCommand
+        $jsonOutput = & npm @arguments 2>$null
+        # 忽略 $LASTEXITCODE，npm outdated exit 0=全部最新, exit 1=有过期包（均为合法结果）
+
+        $jsonText = if ($jsonOutput) { ($jsonOutput -join "`n").Trim() } else { "" }
+        if (-not [string]::IsNullOrWhiteSpace($jsonText)) {
+            $parsed = $jsonText | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
             if ($null -ne $parsed) {
                 foreach ($pkg in $parsed.Keys) {
                     $info = $parsed[$pkg]
