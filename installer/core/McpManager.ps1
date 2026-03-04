@@ -18,6 +18,365 @@ $script:McpMaxCorruptBackups = 5
 $script:McpMutexName = "Global\CCQ.Mcp.Lock"
 $script:McpMutexTimeoutMs = 30000
 
+# ─── MCP Rules 分类配置 ─────────────────────────────────────────────────────
+
+$script:McpRulesCategories = @{
+    "Search" = @{
+        FileName = "ccq-mcp-search.md"
+        Title    = "搜索工具"
+        Desc     = "联网搜索和内容提取。"
+        Chains   = @(
+            @{
+                Scenario = "联网搜索"
+                Steps    = @(
+                    @{ McpId = "exa";    Tool = "mcp__exa__web_search_exa" }
+                    @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_search" }
+                )
+                Fallback = "WebSearch"
+            }
+            @{
+                Scenario = "深度研究"
+                Steps    = @( @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_research" } )
+            }
+            @{
+                Scenario = "URL 内容提取"
+                Steps    = @( @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_extract" } )
+            }
+            @{
+                Scenario = "公司研究"
+                Steps    = @( @{ McpId = "exa"; Tool = "mcp__exa__company_research_exa" } )
+            }
+            @{
+                Scenario = "代码示例搜索"
+                Steps    = @( @{ McpId = "exa"; Tool = "mcp__exa__get_code_context_exa" } )
+            }
+        )
+        Tips = @( "exa 不可用时自动回退到 tavily" )
+    }
+    "Documentation" = @{
+        FileName = "ccq-mcp-docs.md"
+        Title    = "文档检索工具"
+        Desc     = "库文档和开源项目文档检索。"
+        Chains   = @(
+            @{
+                Scenario = "库官方文档"
+                Steps    = @( @{ McpId = "context7"; Tool = "mcp__context7__resolve-library-id → mcp__context7__query-docs" } )
+            }
+            @{
+                Scenario = "GitHub 开源项目"
+                Steps    = @( @{ McpId = "deepwiki"; Tool = "mcp__deepwiki__ask_question / read_wiki_structure / read_wiki_contents" } )
+            }
+        )
+        Tips = @(
+            "context7 先 resolve-library-id 再 query-docs"
+            "deepwiki 用于理解 GitHub 项目架构"
+        )
+    }
+    "Development" = @{
+        FileName = "ccq-mcp-code.md"
+        Title    = "代码检索工具"
+        Desc     = "代码语义搜索和上下文检索。"
+        Chains   = @(
+            @{
+                Scenario = "代码语义检索"
+                Steps    = @(
+                    @{ McpId = "ace-tool";      Tool = "mcp__ace-tool__search_context" }
+                    @{ McpId = "contextweaver"; Tool = "mcp__contextweaver__codebase-retrieval" }
+                )
+                Fallback = "Grep + Glob"
+            }
+            @{
+                Scenario = "Prompt 增强"
+                Steps    = @( @{ McpId = "ace-tool"; Tool = "mcp__ace-tool__enhance_prompt" } )
+            }
+        )
+        StaticRows = @(
+            @{ Scenario = "精确字符串/正则";  Tool = "Grep" }
+            @{ Scenario = "文件名匹配";      Tool = "Glob" }
+            @{ Scenario = "深度代码库探索";   Tool = "Agent + subagent_type=Explore" }
+        )
+        Tips = @( "语义理解用 ace-tool，精确匹配用 Grep" )
+    }
+    "Design" = @{
+        FileName = "ccq-mcp-design.md"
+        Title    = "设计工具"
+        Desc     = "设计稿解析和代码生成。"
+        Chains   = @(
+            @{
+                Scenario = "设计稿解析"
+                Steps    = @(
+                    @{ McpId = "mastergo"; Tool = "mcp__mastergo__*（getDsl / getComponentLink / getMeta）" }
+                    @{ McpId = "figma";    Tool = "mcp__figma__*" }
+                )
+            }
+            @{
+                Scenario = "矢量设计"
+                Steps    = @( @{ McpId = "pencil"; Tool = "Pencil 桌面端（自动注册 MCP）" } )
+            }
+        )
+    }
+    "Automation" = @{
+        FileName = "ccq-mcp-automation.md"
+        Title    = "自动化工具"
+        Desc     = "浏览器自动化和调试。"
+        Chains   = @(
+            @{
+                Scenario = "浏览器自动化"
+                Steps    = @( @{ McpId = "playwright"; Tool = "mcp__playwright__browser_*（navigate / click / snapshot）" } )
+            }
+            @{
+                Scenario = "Chrome 调试"
+                Steps    = @( @{ McpId = "chrome-devtools"; Tool = "mcp__chrome-devtools__*" } )
+            }
+        )
+    }
+}
+
+# ─── MCP Rules 渲染函数 ─────────────────────────────────────────────────────
+
+function Get-McpRulesDir {
+    <#
+    .SYNOPSIS
+    获取 MCP Rules 目录路径（~/.claude/rules）
+    #>
+    $rulesDir = Join-Path (Get-UserHome) ".claude/rules"
+    if (-not (Test-Path $rulesDir)) {
+        New-Item -Path $rulesDir -ItemType Directory -Force | Out-Null
+    }
+    return $rulesDir
+}
+
+function Get-EnabledMcpIdsByCategory {
+    <#
+    .SYNOPSIS
+    获取各分类下已启用的 MCP Server ID 列表
+    .PARAMETER McpStatus
+    从 Get-McpStatus 获取的 MCP 状态数组（hashtable[]）
+    .RETURNS
+    Hashtable：{ CategoryName = @(McpId1, McpId2, ...) }
+    #>
+    param([Parameter(Mandatory)][array]$McpStatus)
+
+    # 将数组转换为 Id -> Status 的映射表
+    $statusById = @{}
+    foreach ($item in $McpStatus) {
+        if ($item -is [hashtable] -and $item.ContainsKey("Id")) {
+            $id = [string]$item["Id"]
+            if (-not [string]::IsNullOrWhiteSpace($id)) {
+                $statusById[$id] = [string]$item["Status"]
+            }
+        }
+    }
+
+    $result = @{}
+    foreach ($catName in $script:McpRulesCategories.Keys) {
+        $cat = $script:McpRulesCategories[$catName]
+        $enabledIds = [System.Collections.ArrayList]::new()
+
+        foreach ($chain in $cat.Chains) {
+            foreach ($step in $chain.Steps) {
+                $mcpId = $step.McpId
+                # 检查是否启用（Active 状态）
+                if ($statusById.ContainsKey($mcpId) -and $statusById[$mcpId] -eq "Active") {
+                    if (-not $enabledIds.Contains($mcpId)) {
+                        [void]$enabledIds.Add($mcpId)
+                    }
+                }
+            }
+        }
+        $result[$catName] = @($enabledIds)
+    }
+    return $result
+}
+
+function Render-McpToolChain {
+    <#
+    .SYNOPSIS
+    渲染单个分类的 Markdown 文件内容
+    .PARAMETER CategoryName
+    分类名称（如 Search、Documentation 等）
+    .PARAMETER EnabledMcpIds
+    该分类下已启用的 MCP ID 数组
+    .RETURNS
+    Markdown 字符串
+    #>
+    param(
+        [Parameter(Mandatory)][string]$CategoryName,
+        [Parameter(Mandatory)][array]$EnabledMcpIds
+    )
+
+    $cat = $script:McpRulesCategories[$CategoryName]
+    if (-not $cat) { return $null }
+
+    $sb = [System.Text.StringBuilder]::new()
+
+    # 头部
+    [void]$sb.AppendLine("# $($cat.Title)")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("> 自动生成，请勿手动编辑。由 MCP Manager 根据已启用的 MCP Server 动态渲染。")
+    [void]$sb.AppendLine("")
+    if ($cat.Desc) {
+        [void]$sb.AppendLine($cat.Desc)
+        [void]$sb.AppendLine("")
+    }
+
+    # 工具链表格
+    [void]$sb.AppendLine("| 场景 | 工具链 |")
+    [void]$sb.AppendLine("|------|--------|")
+
+    foreach ($chain in $cat.Chains) {
+        $scenario = $chain.Scenario
+        $tools = [System.Collections.ArrayList]::new()
+
+        foreach ($step in $chain.Steps) {
+            $mcpId = $step.McpId
+            if ($EnabledMcpIds -contains $mcpId) {
+                [void]$tools.Add($step.Tool)
+            }
+        }
+
+        # 添加 Fallback（如果有且前面的工具都不可用）
+        if ($tools.Count -eq 0 -and $chain.Fallback) {
+            [void]$tools.Add("$($chain.Fallback)（兜底）")
+        } elseif ($chain.Fallback -and $tools.Count -gt 0) {
+            [void]$tools.Add("$($chain.Fallback)（兜底）")
+        }
+
+        if ($tools.Count -gt 0) {
+            $toolChain = $tools -join " → "
+            [void]$sb.AppendLine("| $scenario | ``$toolChain`` |")
+        }
+    }
+
+    # 静态行（如 Development 的 Grep/Glob）
+    if ($cat.StaticRows) {
+        foreach ($row in $cat.StaticRows) {
+            [void]$sb.AppendLine("| $($row.Scenario) | ``$($row.Tool)`` |")
+        }
+    }
+
+    [void]$sb.AppendLine("")
+
+    # Tips
+    if ($cat.Tips -and $cat.Tips.Count -gt 0) {
+        [void]$sb.AppendLine("**Tips**:")
+        foreach ($tip in $cat.Tips) {
+            [void]$sb.AppendLine("- $tip")
+        }
+    }
+
+    return $sb.ToString()
+}
+
+function Sync-McpCategoryRules {
+    <#
+    .SYNOPSIS
+    同步单个分类的 MCP Rules 文件
+    .PARAMETER CategoryName
+    分类名称
+    .PARAMETER McpStatus
+    MCP 状态数组（hashtable[]）
+    .RETURNS
+    @{ Changed = $bool; FileName = $string }
+    #>
+    param(
+        [Parameter(Mandatory)][string]$CategoryName,
+        [Parameter(Mandatory)][array]$McpStatus
+    )
+
+    $cat = $script:McpRulesCategories[$CategoryName]
+    if (-not $cat) {
+        return @{ Changed = $false; FileName = "" }
+    }
+
+    $rulesDir = Get-McpRulesDir
+    $filePath = Join-Path $rulesDir $cat.FileName
+
+    # 获取该分类下的已启用 MCP
+    $enabledByCategory = Get-EnabledMcpIdsByCategory -McpStatus $McpStatus
+    $enabledIds = @($enabledByCategory[$CategoryName])
+
+    # 如果该分类没有任何已启用的 MCP，删除对应文件
+    if ($enabledIds.Count -eq 0) {
+        if (Test-Path $filePath) {
+            Remove-Item $filePath -Force
+            return @{ Changed = $true; FileName = $cat.FileName; Action = "Deleted" }
+        }
+        return @{ Changed = $false; FileName = $cat.FileName }
+    }
+
+    # 渲染内容
+    $content = Render-McpToolChain -CategoryName $CategoryName -EnabledMcpIds $enabledIds
+
+    # 比较是否需要更新
+    $existingContent = ""
+    if (Test-Path $filePath) {
+        $existingContent = Get-Content $filePath -Raw -ErrorAction SilentlyContinue
+    }
+
+    $contentNormalized = ($content -replace "`r`n", "`n").Trim()
+    $existingNormalized = ($existingContent -replace "`r`n", "`n").Trim()
+
+    if ($contentNormalized -ne $existingNormalized) {
+        $writeOk = Write-FileAtomically -FilePath $filePath -Content $content
+        if (-not $writeOk) {
+            throw "写入 MCP Rules 文件失败: $($cat.FileName)"
+        }
+        return @{ Changed = $true; FileName = $cat.FileName; Action = "Updated" }
+    }
+
+    return @{ Changed = $false; FileName = $cat.FileName }
+}
+
+function Sync-AllMcpRules {
+    <#
+    .SYNOPSIS
+    同步所有 MCP Rules 文件（根据当前 MCP 状态动态渲染）
+    .DESCRIPTION
+    遍历所有分类，根据已启用的 MCP Server 动态生成/更新/删除对应的 rules 文件。
+    .RETURNS
+    @{ Success = $bool; ChangedFiles = @(...); ErrorMessage = $string }
+    #>
+
+    $result = @{
+        Success      = $false
+        ChangedFiles = @()
+        ErrorMessage = ""
+    }
+
+    try {
+        # 获取当前 MCP 状态
+        $mcpStatus = Get-McpStatus
+        if (-not $mcpStatus) {
+            $result.ErrorMessage = "无法获取 MCP 状态"
+            return $result
+        }
+
+        $changedFiles = [System.Collections.ArrayList]::new()
+
+        # 遍历所有分类
+        foreach ($catName in $script:McpRulesCategories.Keys) {
+            $syncResult = Sync-McpCategoryRules -CategoryName $catName -McpStatus $mcpStatus
+            if ($syncResult.Changed) {
+                [void]$changedFiles.Add($syncResult)
+            }
+        }
+
+        $result.ChangedFiles = @($changedFiles)
+        $result.Success = $true
+
+        if ($changedFiles.Count -gt 0) {
+            Write-UiInfo "MCP Rules 已同步 ($($changedFiles.Count) 个文件变更)"
+        }
+    }
+    catch {
+        $result.ErrorMessage = $_.Exception.Message
+        Write-UiWarn "MCP Rules 同步失败: $($result.ErrorMessage)"
+    }
+
+    return $result
+}
+
 # ─── Task 2.1: 目录管理 + 文件骨架 ───────────────────────────────────────────
 
 function Ensure-CcqMetaDir {
@@ -567,6 +926,10 @@ function Disable-McpServer {
         $null = Write-FileAtomically -FilePath $claudeJsonPath -Content $claudeJsonContent
 
         Write-UiSuccess "MCP Server '$ServerId' 已禁用"
+
+        # 同步 MCP Rules 文件
+        $null = Sync-AllMcpRules
+
         return @{ Success = $true; ServerId = $ServerId; Status = "Disabled" }
     }
 }
@@ -713,6 +1076,10 @@ function Enable-McpServer {
         $null = Write-McpMeta $meta
 
         Write-UiSuccess "MCP Server '$ServerId' 已启用"
+
+        # 同步 MCP Rules 文件
+        $null = Sync-AllMcpRules
+
         return @{ Success = $true; ServerId = $ServerId; Status = "Active" }
     }
 }
@@ -823,6 +1190,10 @@ function Remove-McpServer {
         $null = Write-McpMeta $meta
 
         Write-UiSuccess "MCP Server '$ServerId' 已删除"
+
+        # 同步 MCP Rules 文件
+        $null = Sync-AllMcpRules
+
         return @{ Success = $true; ServerId = $ServerId; Status = "Removed" }
     }
 }
@@ -872,8 +1243,18 @@ function Invoke-McpToggle {
                             if (-not $cj) { $cj = @{} }
                             if (-not $cj.ContainsKey("mcpServers")) { $cj["mcpServers"] = @{} }
                             $cj["mcpServers"][$id] = $newConfig
-                            $null = Write-FileAtomically -FilePath $cjPath -Content ($cj | ConvertTo-Json -Depth 10)
+                            $writeOk = Write-FileAtomically -FilePath $cjPath -Content ($cj | ConvertTo-Json -Depth 10)
+                            if (-not $writeOk) {
+                                throw "更新 .claude.json 失败"
+                            }
                             Write-UiSuccess "MCP Server '$id' 已恢复"
+
+                            # 同步 MCP Rules 文件
+                            $syncResult = Sync-AllMcpRules
+                            if (-not $syncResult.Success) {
+                                Write-UiWarn "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
+                            }
+
                             @{ Success = $true; ServerId = $id; Status = "Active" }
                         } else {
                             Write-UiWarn "MCP Server '$id' 配置类型不支持自动恢复（如需凭据请使用安装功能）"

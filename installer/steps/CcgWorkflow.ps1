@@ -16,6 +16,69 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$(Get-UserHome)\.claude"
 
+# CCG 规则文件模板（整合原 ccq-multimodel.md + ccq-workflow.md）
+$script:CcgWorkflowRuleTemplate = @'
+# 多模型协作 + 工作流增强（CCG）
+
+> 自动生成，请勿手动编辑。由 CCG Workflow 步骤管理。
+
+## 后端任务 → Codex
+
+```powershell
+"[任务描述]" | codeagent-wrapper --backend codex - [工作目录]
+```
+
+适用：后端 logic、算法实现、数据库操作、API 开发、性能优化、调试分析
+
+## 前端任务 → Gemini
+
+```powershell
+"[任务描述]" | codeagent-wrapper --backend gemini - [工作目录]
+```
+
+适用：UI/UX 组件、CSS 样式、响应式布局、前端交互逻辑
+
+## 会话复用
+
+每次调用返回 `SESSION_ID: xxx`，后续用 `resume xxx` 复用上下文：
+
+```powershell
+"[后续任务]" | codeagent-wrapper --backend <codex|gemini> resume <SESSION_ID> - [工作目录]
+```
+
+## 并行调用
+
+使用 `run_in_background: true` 启动后台任务，用 `TaskOutput` 等待结果。
+必须等所有模型返回后才能进入下一阶段。
+
+```python
+# 示例：并行启动 Codex 和 Gemini
+Bash(command='"任务描述" | codeagent-wrapper --backend codex ...', run_in_background=True)
+Bash(command='"任务描述" | codeagent-wrapper --backend gemini ...', run_in_background=True)
+
+# 等待结果
+TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
+```
+
+## 上下文检索（生成代码前执行）
+
+**工具优先级**：
+
+1. `mcp__ace-tool__search_context`（首选）- 纯语义搜索，适合开放性探索
+2. `mcp__contextweaver__codebase-retrieval`（次选）- 混合引擎（语义+精确匹配）
+3. `Glob` + `Grep`（回退）- MCP 不可用时的兜底方案
+
+**检索策略**：
+
+- 使用自然语言构建语义查询（Where/What/How）
+- 完整性检查：获取相关类、函数、变量的完整定义与签名
+- 若上下文不足，递归检索直至信息完整
+
+## 需求对齐
+
+若检索后需求仍有模糊空间，输出引导性问题列表，直至需求边界清晰。
+'@
+
 function Test-CcgWorkflowInstalled {
     <#
     .SYNOPSIS
@@ -30,7 +93,8 @@ function Test-CcgWorkflowInstalled {
             @{ Path = "$claudeDir\commands\ccg"; Type = "Dir"; Filter = "*.md"; MinCount = 20 },
             @{ Path = "$claudeDir\agents\ccg"; Type = "Dir" },
             @{ Path = "$claudeDir\.ccg"; Type = "Dir" },
-            @{ Path = "$claudeDir\bin\codeagent-wrapper.exe"; Type = "File" }
+            @{ Path = "$claudeDir\bin\codeagent-wrapper.exe"; Type = "File" },
+            @{ Path = "$claudeDir\rules\ccq-ccgworkflow.md"; Type = "File"; ContentMatch = "# 多模型协作 + 工作流增强" }
         ) `
         -CustomVerify {
             # 从 config.toml 提取版本
@@ -146,6 +210,19 @@ function Install-CcgWorkflow {
         }
 
         Write-UiSuccess "成功部署 CCG 目录结构与配置文件"
+
+        # ── 写入 CCG 规则文件 ──
+        $rulesDir = "$script:ClaudeDir\rules"
+        if (-not (Test-Path $rulesDir)) {
+            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+        }
+        $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
+        $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
+        if (-not $ruleWriteResult) {
+            Write-UiWarn "CCG 规则文件写入失败，但不影响主安装"
+        } else {
+            Write-UiInfo "已写入: rules/ccq-ccgworkflow.md"
+        }
 
         # ── MCP 快照（安装后比对）──
         if ($null -ne $mcpSnapshotBefore -and (Test-Path $claudeJsonPath)) {
@@ -430,6 +507,45 @@ function Update-CcgWorkflow {
         else {
             $result.UpdatedItems = @("npx::ccg-workflow::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ CCG Workflow 已更新: $oldVersion -> $newVersion"
+        }
+
+        # ── 更新 CCG 规则文件 + 迁移旧文件 ──
+        $rulesDir = "$script:ClaudeDir\rules"
+        if (-not (Test-Path $rulesDir)) {
+            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+        }
+
+        # 迁移：删除旧的 rules 文件（已整合到 ccq-ccgworkflow.md）
+        $oldRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
+        foreach ($oldFile in $oldRuleFiles) {
+            $oldPath = Join-Path $rulesDir $oldFile
+            if (Test-Path $oldPath) {
+                try {
+                    Remove-Item $oldPath -Force -ErrorAction Stop
+                    $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
+                    Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）"
+                } catch {
+                    Write-UiWarn "无法删除旧文件: $oldFile"
+                }
+            }
+        }
+
+        # 写入/更新 CCG 规则文件
+        $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
+        $ruleChanged = $true
+        if (Test-Path $ccgRulePath) {
+            $existingRule = Get-Content $ccgRulePath -Raw -ErrorAction SilentlyContinue
+            $ruleNormalized = $script:CcgWorkflowRuleTemplate -replace "`r`n", "`n"
+            $existingNormalized = if ($existingRule) { $existingRule -replace "`r`n", "`n" } else { "" }
+            if ($ruleNormalized.Trim() -eq $existingNormalized.Trim()) {
+                $ruleChanged = $false
+            }
+        }
+        if ($ruleChanged) {
+            $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
+            if ($ruleWriteResult) {
+                $result.UpdatedItems += "file::rules/ccq-ccgworkflow.md::overwritten"
+            }
         }
 
         $result.Success = $true
