@@ -1,14 +1,9 @@
 #Requires -Version 7.0
 # Update-ClaudeEnv.ps1 - CCQ（统一更新入口）
-# 功能: 声明式更新已安装组件，支持交互多选 / CLI 指定 / 全量更新
+# 功能: 交互式多选更新已安装组件
 
 param(
     [switch]$ListUpdates,
-    [switch]$All,
-    [string[]]$Steps,
-    # 注意：不使用 ValidateSet 属性，因为 irm|iex 管道执行时会导致空值赋值冲突
-    # 验证逻辑移到下方手动检查
-    [string]$OnMissing,
     [ValidateSet("Normal", "Developer")]
     [string]$OutputMode = "Normal"
 )
@@ -40,23 +35,6 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     Write-Host "  当前版本: PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Red
     Write-Host ""
     exit 1
-}
-
-# ─── 参数互斥验证 ──────────────────────────────────────────────────────────────
-if ($All -and $Steps -and $Steps.Count -gt 0) {
-    Write-Host "[ERROR] -All 和 -Steps 不能同时使用" -ForegroundColor Red
-    exit 1
-}
-
-# ─── OnMissing 验证与默认值推导 ────────────────────────────────────────────────
-# 手动验证 ValidateSet（避免 param 块的 ValidateSet 属性在 irm|iex 时空值冲突）
-$validOnMissingValues = @("Ask", "Skip", "Install", "Fail")
-if ($OnMissing -and $OnMissing -notin $validOnMissingValues) {
-    Write-Host "[ERROR] -OnMissing 必须是 $($validOnMissingValues -join '/')，当前值: $OnMissing" -ForegroundColor Red
-    exit 1
-}
-if (-not $OnMissing) {
-    $OnMissing = if ($All -or ($Steps -and $Steps.Count -gt 0)) { "Skip" } else { "Ask" }
 }
 
 $script:InstallerRoot = $PSScriptRoot
@@ -231,7 +209,7 @@ function Show-UpdateSummary {
             $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
             $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
             Write-Host "    $stepName" -ForegroundColor Yellow -NoNewline
-            Write-Host "  (未安装, OnMissing=$OnMissing)" -ForegroundColor DarkYellow
+            Write-Host "  (未安装)" -ForegroundColor DarkYellow
         }
     }
 
@@ -370,15 +348,13 @@ function Show-UpdateStatus {
     Write-Host ""
 
     foreach ($entry in $StatusList) {
-        $stepIdDisplay = $entry.StepId.PadRight(15)
-        $stepNameDisplay = $entry.StepName.PadRight(20)
-
+        # Update 脚本只显示已安装的组件
         if (-not $entry.IsInstalled) {
-            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
-            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
-            Write-Host "[未安装]" -ForegroundColor DarkGray
             continue
         }
+
+        $stepIdDisplay = $entry.StepId.PadRight(15)
+        $stepNameDisplay = $entry.StepName.PadRight(20)
 
         $versionDisplay = if ($entry.CurrentVersion) { " ($($entry.CurrentVersion))" } else { "" }
 
@@ -430,8 +406,11 @@ function Select-UpdateSteps {
         [array]$StatusList
     )
 
-    if ($StatusList.Count -eq 0) {
-        Write-UiWarn "没有可更新的步骤"
+    # 只处理已安装的组件（Update 脚本不显示未安装的）
+    $installedList = @($StatusList | Where-Object { $_.IsInstalled })
+
+    if ($installedList.Count -eq 0) {
+        Write-UiWarn "没有已安装的可更新步骤"
         return @()
     }
 
@@ -439,34 +418,29 @@ function Select-UpdateSteps {
     $options = @()
     $defaultSelected = @()
 
-    for ($i = 0; $i -lt $StatusList.Count; $i++) {
-        $entry = $StatusList[$i]
+    for ($i = 0; $i -lt $installedList.Count; $i++) {
+        $entry = $installedList[$i]
         $label = "$($entry.StepName)"
 
-        if ($entry.IsInstalled) {
-            if ($entry.HasUpdate -eq $true) {
-                # 有更新：显示版本变化或模板变更，默认勾选
-                $label += if ($entry.LatestVersion -and $entry.CurrentVersion) {
-                    " ($($entry.CurrentVersion) -> $($entry.LatestVersion))"
-                } elseif ($entry.LatestVersion) {
-                    " (有更新 -> $($entry.LatestVersion))"
-                } else {
-                    " (模板已变更)"
-                }
-                $defaultSelected += $i
+        if ($entry.HasUpdate -eq $true) {
+            # 有更新：显示版本变化或模板变更，默认勾选
+            $label += if ($entry.LatestVersion -and $entry.CurrentVersion) {
+                " ($($entry.CurrentVersion) -> $($entry.LatestVersion))"
+            } elseif ($entry.LatestVersion) {
+                " (有更新 -> $($entry.LatestVersion))"
+            } else {
+                " (模板已变更)"
             }
-            elseif ($entry.HasUpdate -eq $false) {
-                # 已最新（npm 版本一致或指纹一致）：不勾选
-                $label += if ($entry.CurrentVersion) { " (已是最新 $($entry.CurrentVersion))" } else { " (已是最新)" }
-            }
-            else {
-                # 非 npm 步骤：默认勾选
-                $label += " (已安装)"
-                $defaultSelected += $i
-            }
+            $defaultSelected += $i
+        }
+        elseif ($entry.HasUpdate -eq $false) {
+            # 已最新（npm 版本一致或指纹一致）：不勾选
+            $label += if ($entry.CurrentVersion) { " (已是最新 $($entry.CurrentVersion))" } else { " (已是最新)" }
         }
         else {
-            $label += " (未安装)"
+            # 非 npm 步骤：默认勾选
+            $label += " (已安装)"
+            $defaultSelected += $i
         }
         $options += $label
     }
@@ -477,17 +451,17 @@ function Select-UpdateSteps {
 
     $selectedIndices = Show-MultiSelectMenu -Title "可更新组件" -Options $options -DefaultSelected $defaultSelected
 
-    if ($null -eq $selectedIndices -or $selectedIndices.Count -eq 0) {
+    if ($null -eq $selectedIndices -or @($selectedIndices).Count -eq 0) {
         Write-UiInfo "未选择任何步骤，退出更新"
         return @()
     }
 
     $selectedStepIds = @()
-    foreach ($idx in $selectedIndices) {
-        $selectedStepIds += $StatusList[$idx].StepId
+    foreach ($idx in @($selectedIndices)) {
+        $selectedStepIds += $installedList[$idx].StepId
     }
 
-    return $selectedStepIds
+    return ,$selectedStepIds
 }
 
 # ─── 主流程 ───────────────────────────────────────────────────────────────────
@@ -524,29 +498,13 @@ function Main {
             exit 1
         }
 
-        # ─── 构建执行计划 ──────────────────────────────────────────────────
-        $planStepIds = @()
-
-        if ($All) {
-            # 全量更新
-            $planStepIds = @()  # Build-UpdatePlan -All 会自动处理
-        } elseif ($Steps -and $Steps.Count -gt 0) {
-            # CLI 指定步骤
-            $planStepIds = $Steps
-        } else {
-            # 交互模式（使用预计算的状态数据）
-            $selectedIds = @(Select-UpdateSteps -StatusList $updateStatus)
-            if ($selectedIds.Count -eq 0) {
-                return
-            }
-            $planStepIds = $selectedIds
+        # ─── 构建执行计划（交互模式）─────────────────────────────────────
+        $selectedIds = @(Select-UpdateSteps -StatusList $updateStatus)
+        if ($selectedIds.Count -eq 0) {
+            return
         }
 
-        $plan = if ($All) {
-            Build-UpdatePlan -All
-        } else {
-            Build-UpdatePlan -RequestedSteps $planStepIds
-        }
+        $plan = @(Build-UpdatePlan -RequestedSteps $selectedIds)
 
         if ($plan.Count -eq 0) {
             Write-UiInfo "没有需要更新的步骤"
@@ -671,7 +629,7 @@ function Main {
             Write-Host ""
             Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor Cyan
 
-            $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing $OnMissing
+            $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing "Ask"
 
             $executedStepIds += $stepId
 

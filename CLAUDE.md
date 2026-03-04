@@ -14,7 +14,7 @@ claude-code-quickstart/
 │   ├── Bootstrap-ClaudeEnv.ps1   # PS 5.1 引导入口 → 检测/安装 PS7
 │   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口（维护中）
 │   ├── Manage-ClaudeEnv.ps1      # PS 7+ 分组安装入口（基础环境/进阶扩展）
-│   ├── Update-ClaudeEnv.ps1      # PS 7+ 统一更新入口（声明式更新已安装组件）
+│   ├── Update-ClaudeEnv.ps1      # PS 7+ 交互式更新入口（多选更新已安装组件）
 │   ├── build/                    # 构建工具目录
 │   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本（4 个产物）
 │   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
@@ -27,7 +27,7 @@ claude-code-quickstart/
 graph TD
     A[Bootstrap-ClaudeEnv.ps1<br/>PS 5.1] -->|安装 PS7 后引导| B[Install-ClaudeEnv.ps1<br/>PS 7+]
     A -->|安装 PS7 后引导| M[Manage-ClaudeEnv.ps1<br/>PS 7+ 分组安装]
-    A -->|安装 PS7 后引导| U[Update-ClaudeEnv.ps1<br/>PS 7+ 统一更新]
+    A -->|安装 PS7 后引导| U[Update-ClaudeEnv.ps1<br/>PS 7+ 交互式更新]
     B --> C[core/]
     B --> D[steps/]
     M --> C
@@ -109,8 +109,8 @@ pwsh -File installer/Manage-ClaudeEnv.ps1
 # 查看步骤列表
 pwsh -File installer/Manage-ClaudeEnv.ps1 -ListSteps
 
-# 更新已安装组件
-pwsh -File installer/Update-ClaudeEnv.ps1 -All
+# 更新已安装组件（交互式多选）
+pwsh -File installer/Update-ClaudeEnv.ps1
 
 # 查看可更新步骤
 pwsh -File installer/Update-ClaudeEnv.ps1 -ListUpdates

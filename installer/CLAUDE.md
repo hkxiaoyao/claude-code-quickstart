@@ -209,16 +209,13 @@ Main()
 
 ## Update-ClaudeEnv.ps1
 
-**用途**：PS 7 统一更新入口，声明式更新已安装组件。
+**用途**：PS 7 统一更新入口，交互式多选更新已安装组件。
 
 ### 参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `-ListUpdates` | switch | 列出所有可更新步骤及状态后退出 |
-| `-All` | switch | 更新全部已安装的可更新组件 |
-| `-Steps` | string[] | 指定要更新的步骤 ID |
-| `-OnMissing` | string | 未安装时处理策略：`Ask`/`Skip`/`Install`/`Fail`（默认：有 `-All`/`-Steps` 时 `Skip`，否则 `Ask`） |
 
 ### 可更新步骤（8 个）
 
@@ -248,13 +245,14 @@ NodeFnm、Git、ApiKey、CcSwitch、Mcp — 需通过 Manage 重新安装。
 
 ```
 Main()
-  ├── [if -ListUpdates] 列出可更新步骤 → exit
+  ├── 统一检测所有组件状态（Get-UpdateStatus）
+  ├── 展示组件状态表（Show-UpdateStatus，仅显示已安装组件）
+  ├── [if -ListUpdates] 退出
   ├── Mutex 获取（不等待，失败则退出）
   ├── try:
+  │   ├── 交互多选（Select-UpdateSteps）
   │   ├── 构建执行计划（Build-UpdatePlan）
-  │   │   ├── [-All] 全部已安装的可更新步骤
-  │   │   ├── [-Steps] 指定步骤 + 依赖闭包
-  │   │   └── [交互] Select-UpdateSteps 多选菜单
+  │   ├── 指纹预检（跳过模板未变更的步骤）
   │   ├── 创建快照（New-UpdateSnapshot）
   │   ├── 遍历执行计划 → Invoke-UpdateLifecycle
   │   ├── 清理旧快照（Clear-OldUpdateSnapshots）
