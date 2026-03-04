@@ -157,8 +157,9 @@ function Install-ApiKey {
 
             $providersDir = Join-Path (Get-UserHome) ".claude\providers"
             if (Test-Path $providersDir) {
-                $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue
-                if ($profiles -and $profiles.Count -gt 0) {
+                # HC-13: 必须用 @() 包裹，防止 $null.Count 抛异常
+                $profiles = @(Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue)
+                if ($profiles.Count -gt 0) {
                     Write-UiInfo "  已保存的供应商 Profile: $($profiles.Count) 个"
                 }
             }
@@ -592,8 +593,9 @@ function Invoke-ProviderSwitcherInjection {
             '    $providersDir = Join-Path $homeDir ".claude\providers"'
             ''
             '    if (-not $Provider) {'
-            '        $profiles = Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue'
-            '        if (-not $profiles -or $profiles.Count -eq 0) {'
+            '        # HC-13: 必须用 @() 包裹，防止 $null.Count 抛异常'
+            '        $profiles = @(Get-ChildItem $providersDir -Filter "*.json" -ErrorAction SilentlyContinue)'
+            '        if ($profiles.Count -eq 0) {'
             '            Write-Host "未找到供应商 Profile，请先运行安装器配置供应商" -ForegroundColor Yellow'
             '            return'
             '        }'
