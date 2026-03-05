@@ -46,20 +46,28 @@ function Invoke-SelfElevated {
         return $true
     }
 
+    # 空路径防御：irm|iex 管道场景下 $ScriptPath 为空，无法用 -File 提权
+    if (-not $ScriptPath) {
+        Write-Host "✗ 无法提权：脚本路径不可用（管道执行模式不支持自动提权）" -ForegroundColor Red
+        Write-Host "  请以管理员身份重新运行此脚本" -ForegroundColor Yellow
+        return $false
+    }
+
     Write-Host "此步骤需要管理员权限，正在请求提权..." -ForegroundColor Yellow
 
-    # 构造传递给提权进程的参数
-    $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$ScriptPath`"")
+    # 构造传递给提权进程的参数（单字符串拼接，避免 PS 5.1 数组传参引号问题）
+    # 注意：不使用 $args 作为变量名（与 PowerShell 自动变量冲突）
+    $elevationArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
 
     foreach ($a in $ArgumentList) {
-        $args += $a
+        $elevationArgs += " $a"
     }
 
     # 优先使用 pwsh（PS7），回退到 powershell（PS5）
     $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
 
     try {
-        Start-Process $shell -ArgumentList $args -Verb RunAs -Wait:$false
+        Start-Process $shell -ArgumentList $elevationArgs -Verb RunAs -Wait:$false
         Write-Host "已启动提权进程，当前窗口将退出" -ForegroundColor Cyan
         exit 0
     } catch {

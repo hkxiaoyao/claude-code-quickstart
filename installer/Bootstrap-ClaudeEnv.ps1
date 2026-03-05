@@ -44,9 +44,20 @@ $scriptRoot = try {
 } catch {
     $null  # iex 管道场景，依赖已内联，无需本地路径
 }
-. "$scriptRoot\core\Admin.ps1"
-. "$scriptRoot\core\Ui.ps1"
-. "$scriptRoot\core\Process.ps1"
+# dot-source 核心模块（加 try-catch 防止提权后初始化异常导致窗口闪退）
+try {
+    . "$scriptRoot\core\Admin.ps1"
+    . "$scriptRoot\core\Ui.ps1"
+    . "$scriptRoot\core\Process.ps1"
+} catch {
+    Write-Host "✗ 核心模块加载失败: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  脚本路径: $scriptRoot" -ForegroundColor Gray
+    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Write-Host "" ; Write-Host "按任意键退出..." -ForegroundColor Gray
+        try { $null = [Console]::ReadKey($true) } catch { }
+    }
+    exit 1
+}
 
 # 全局配置
 $script:MinWindowsVersion = [Version]"10.0.18362"  # Windows 10 1903
