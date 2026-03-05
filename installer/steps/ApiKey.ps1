@@ -284,8 +284,16 @@ function Install-ApiKey {
         $provider = $script:ApiProviders[$selectedKey]
         Write-UiSuccess "已选择: $($provider.Name)"
 
-        # 处理自定义供应商的 Base URL 输入
+        # 处理自定义供应商的名称和 Base URL 输入
         if ($selectedKey -eq "custom") {
+            Write-UiInfo "请输入供应商名称（可选，直接回车跳过）:"
+            $customName = (Read-Host -Prompt "供应商名称").Trim()
+
+            if (-not [string]::IsNullOrWhiteSpace($customName)) {
+                $provider.Name = $customName
+                Write-UiSuccess "供应商名称已设置: $customName"
+            }
+
             Write-UiInfo "请输入自定义 API Base URL（例如: https://api.example.com）:"
             do {
                 $customBaseUrl = Read-Host -Prompt "Base URL"
@@ -411,11 +419,16 @@ function Install-ApiKey {
 
             $profileKey = $selectedKey
             if ($selectedKey -eq "custom") {
-                try {
-                    $uri = [System.Uri]$provider.BaseUrl
-                    $profileKey = "custom-$($uri.Host -replace '\.', '-')"
-                } catch {
-                    $profileKey = "custom"
+                if (-not [string]::IsNullOrWhiteSpace($customName)) {
+                    # 使用供应商名称作为文件名（替换文件系统非法字符）
+                    $profileKey = "custom-$($customName -replace '[\\/:*?\"<>|\s]', '-')"
+                } else {
+                    # 未输入名称，自动编号 custom-1, custom-2, ...
+                    $num = 1
+                    while (Test-Path (Join-Path $providersDir "custom-$num.json")) {
+                        $num++
+                    }
+                    $profileKey = "custom-$num"
                 }
             }
 
@@ -616,7 +629,7 @@ function Invoke-ProviderSwitcherInjection {
             '    }'
             ''
             '    # 防御路径遍历'
-            '    if ($Provider -notmatch ''^[a-zA-Z0-9._-]+$'') {'
+            '    if ($Provider -notmatch ''^[\w._-]+$'') {'
             '        Write-Host "无效的供应商名称: $Provider" -ForegroundColor Red'
             '        return'
             '    }'

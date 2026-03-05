@@ -144,9 +144,9 @@ function Invoke-StepActionLifecycle {
         $stepResult.StartTime = Get-Date
         $State.CurrentStep = $stepId
 
-        # 1. 执行测试阶段（实时检测）
+        # 1. 执行测试阶段（实时检测，抑制 UI 输出避免 [FAIL] 噪音）
         Write-UiOutput "  🔍 测试阶段: $testFunction" -Level Debug -Type Info
-        $testResult = & $testFunction
+        $testResult = & $testFunction 6>$null
         $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
 
         if ($Action -eq "Install") {
