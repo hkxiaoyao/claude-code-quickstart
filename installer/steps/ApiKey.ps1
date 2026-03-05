@@ -432,7 +432,7 @@ function Install-ApiKey {
                 }
             }
 
-            $profile = @{
+            $providerProfile = @{
                 "_meta" = @{
                     "provider"     = $provider.Name
                     "key"          = $selectedKey
@@ -446,12 +446,12 @@ function Install-ApiKey {
             }
 
             if ($provider.ContainsKey("ModelMapping") -and $provider.ModelMapping) {
-                $profile["modelMapping"] = $provider.ModelMapping
+                $providerProfile["modelMapping"] = $provider.ModelMapping
             }
 
             $profilePath = Join-Path $providersDir "$profileKey.json"
             $profileTempPath = "$profilePath.tmp"
-            $profile | ConvertTo-Json -Depth 10 | Set-Content $profileTempPath -Encoding UTF8
+            $providerProfile | ConvertTo-Json -Depth 10 | Set-Content $profileTempPath -Encoding UTF8
             Move-Item $profileTempPath $profilePath -Force
 
             Write-UiSuccess "✓ 供应商 Profile 已保存: ~/.claude/providers/$profileKey.json"
