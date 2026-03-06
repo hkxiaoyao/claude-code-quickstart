@@ -1680,7 +1680,7 @@ function Verify-Mcp {
             -not $settings["permissions"]["allow"]) {
             throw "缺少权限配置"
         }
-        $requiredPermissions = @("mcp", "read", "write")
+        $requiredPermissions = @("Mcp", "Read", "Write")
         foreach ($permission in $requiredPermissions) {
             if ($settings["permissions"]["allow"] -notcontains $permission) {
                 Write-UiWarn "⚠ 缺少权限: $permission"

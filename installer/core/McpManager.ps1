@@ -1053,9 +1053,9 @@ function Enable-McpServer {
                         }
                     }
                 } else {
-                    # 无保存的权限记录，确保基础 mcp 权限存在
-                    if ($settings["permissions"]["allow"] -notcontains "mcp") {
-                        $settings["permissions"]["allow"] += "mcp"
+                    # 无保存的权限记录，确保基础 Mcp 权限存在
+                    if ($settings["permissions"]["allow"] -notcontains "Mcp") {
+                        $settings["permissions"]["allow"] += "Mcp"
                         $permChanged = $true
                     }
                 }
