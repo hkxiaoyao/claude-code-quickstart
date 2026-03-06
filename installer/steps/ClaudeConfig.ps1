@@ -45,28 +45,44 @@ $script:ClaudeConfigBasePermissions = @(
     "Write"
 )
 
+# ─── Fingerprint（供 Manage 更新指纹预检使用）─────────────────────────────────
+
+function Get-ClaudeConfigFingerprint {
+    <#
+    .SYNOPSIS
+    计算 ClaudeConfig 步骤的内容指纹（基于 env defaults + deprecated keys + permissions）
+    .RETURNS
+    string - SHA-256 指纹
+    #>
+    $parts = @()
+    foreach ($key in ($script:ClaudeConfigEnvDefaults.Keys | Sort-Object)) {
+        $parts += "${key}=$($script:ClaudeConfigEnvDefaults[$key])"
+    }
+    $parts += "deprecated:" + (($script:ClaudeConfigDeprecatedEnvKeys | Sort-Object) -join ",")
+    $parts += "permissions:" + (($script:ClaudeConfigBasePermissions | Sort-Object) -join ",")
+    return Get-StringFingerprint -Text ($parts -join "`n")
+}
+
 # ─── Test / Install / Verify ─────────────────────────────────────────────────
 
 function Test-ClaudeConfigInstalled {
     <#
     .SYNOPSIS
-    检测 ClaudeConfig 自有字段是否已配置（不检测 ApiKey 的 ANTHROPIC_AUTH_TOKEN）
+    检测 ClaudeConfig 基础结构是否已配置（仅判断"已安装"，不要求模板完全一致）
+    .DESCRIPTION
+    只检查 settings.json 存在 + language + env 节非空。
+    模板新增字段导致的漂移由 Update（指纹/声明式对齐）处理，
+    避免因新增模板字段而误判为"未安装"导致被踢出更新候选。
     .RETURNS
     标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
     $settingsPath = Get-ClaudeSettingsPath
-    $envFields = @($script:ClaudeConfigEnvDefaults.Keys | ForEach-Object {
-        @{ Path = "env.$_"; MatchMode = "Exists" }
-    })
-
     return Invoke-UnifiedCheck -StepId "ClaudeConfig" -DisplayName "Claude Code 常用配置" `
         -ConfigFile $settingsPath `
-        -RequiredFields (@(
+        -RequiredFields @(
             @{ Path = "language"; MatchMode = "Exists" }
-        ) + $envFields) `
-        -RequiredArrayItems @(
-            @{ Path = "permissions.allow"; Items = $script:ClaudeConfigBasePermissions }
+            @{ Path = "env"; MatchMode = "Exists" }
         ) -UseCache
 }
 

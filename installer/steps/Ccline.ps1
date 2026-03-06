@@ -212,7 +212,7 @@ function Install-Ccline {
 
         # 7. 执行 ccline patch
         Write-Host ""
-        Write-Host "7. 执行 ccline patch..." -ForegroundColor Gray
+        Write-Host "7. 执行 CCometixLine patch..." -ForegroundColor Gray
 
         $patchApplied = $false
         $claudeCliPath = $null
@@ -237,14 +237,14 @@ function Install-Ccline {
             $patchResult = Invoke-ExternalCommand -Command "ccline" -Arguments @("--patch", $claudeCliArg) -TimeoutSeconds 30
             if ($patchResult.Success) {
                 $patchApplied = $true
-                Write-Host "✓ ccline patch 执行成功" -ForegroundColor Green
+                Write-Host "✓ CCometixLine patch 执行成功" -ForegroundColor Green
             } else {
-                Write-Host "⚠ ccline patch 执行失败，但不影响基本功能" -ForegroundColor Yellow
+                Write-Host "⚠ CCometixLine patch 执行失败，但不影响基本功能" -ForegroundColor Yellow
                 Write-Host "  错误信息: $($patchResult.Error)" -ForegroundColor Gray
                 Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
             }
         } catch {
-            Write-Host "⚠ ccline patch 执行失败: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "⚠ CCometixLine patch 执行失败: $($_.Exception.Message)" -ForegroundColor Yellow
             Write-Host "  状态栏功能可能受限，但不影响基本使用" -ForegroundColor Gray
             if ($claudeCliPath) {
                 Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
@@ -302,7 +302,7 @@ function Verify-Ccline {
 function Update-Ccline {
     <#
     .SYNOPSIS
-    更新 CCometixLine 到最新版本并重新 patch
+    更新 CCometixLine 到最新版本并无条件重新 patch（Claude Code 更新后 cli.js 被替换）
     .RETURNS
     @{ Success; ErrorMessage; Data; UpdatedItems }
     #>
@@ -327,6 +327,9 @@ function Update-Ccline {
         }
         Write-UiInfo "当前版本: $oldVersion"
 
+        $updatedItems = [System.Collections.ArrayList]::new()
+        $newVersion = $oldVersion
+
         # 检测是否有新版本（使用 npm outdated -g 批量缓存）
         $updateCheck = Test-NpmUpdateAvailable -PackageName $script:CclinePackage -CurrentVersion $oldVersion
         if ($updateCheck.LatestVersion) {
@@ -334,60 +337,55 @@ function Update-Ccline {
         }
         if ($updateCheck.Available -eq $false) {
             Write-UiInfo "CCometixLine 已是最新版本 ($oldVersion)"
-            $result.UpdatedItems = @("noop::Ccline::no-change")
-            $result.Data["OldVersion"] = $oldVersion
-            $result.Data["NewVersion"] = $oldVersion
-            $result.Success = $true
-            return $result
-        }
-
-        # 执行 npm install -g @latest
-        $installSuccess = $false
-        $lastError = ""
-        for ($attempt = 0; $attempt -lt 3; $attempt++) {
-            if ($attempt -gt 0) {
-                $waitSec = [math]::Pow(2, $attempt)
-                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
-                Start-Sleep -Seconds $waitSec
+            [void]$updatedItems.Add("noop::Ccline::no-change")
+        } else {
+            # 执行 npm install -g @latest
+            $installSuccess = $false
+            $lastError = ""
+            for ($attempt = 0; $attempt -lt 3; $attempt++) {
+                if ($attempt -gt 0) {
+                    $waitSec = [math]::Pow(2, $attempt)
+                    Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                    Start-Sleep -Seconds $waitSec
+                }
+                $installResult = Invoke-ExternalCommand -Command "npm" `
+                    -Arguments @("install", "-g", "$($script:CclinePackage)@latest") `
+                    -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
+                if ($installResult.ExitCode -eq 0) {
+                    $installSuccess = $true
+                    break
+                }
+                $lastError = $installResult.Error
             }
-            $installResult = Invoke-ExternalCommand -Command "npm" `
-                -Arguments @("install", "-g", "$($script:CclinePackage)@latest") `
-                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
-            if ($installResult.ExitCode -eq 0) {
-                $installSuccess = $true
-                break
+
+            if (-not $installSuccess) {
+                # 回退到旧版本
+                Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+                Invoke-ExternalCommand -Command "npm" `
+                    -Arguments @("install", "-g", "$($script:CclinePackage)@$oldVersion") `
+                    -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
+                throw "npm install @latest 失败 (已尝试 3 次): $lastError"
             }
-            $lastError = $installResult.Error
+
+            # 刷新 PATH
+            Refresh-SessionPath
+
+            # 获取新版本
+            $newVersion = Get-CommandVersion -Command "ccline"
+
+            if ($oldVersion -eq $newVersion) {
+                [void]$updatedItems.Add("noop::Ccline::no-change")
+                Write-UiInfo "CCometixLine 已是最新版本 ($newVersion)"
+            } else {
+                [void]$updatedItems.Add("npm::ccline::${oldVersion}->${newVersion}")
+                Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion"
+            }
         }
 
-        if (-not $installSuccess) {
-            # 回退到旧版本
-            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
-            Invoke-ExternalCommand -Command "npm" `
-                -Arguments @("install", "-g", "$($script:CclinePackage)@$oldVersion") `
-                -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
-            throw "npm install @latest 失败 (已尝试 3 次): $lastError"
-        }
-
-        # 刷新 PATH
-        Refresh-SessionPath
-
-        # 获取新版本
-        $newVersion = Get-CommandVersion -Command "ccline"
         $result.Data["OldVersion"] = $oldVersion
         $result.Data["NewVersion"] = $newVersion
 
-        $updatedItems = [System.Collections.ArrayList]::new()
-
-        if ($oldVersion -eq $newVersion) {
-            [void]$updatedItems.Add("noop::Ccline::no-change")
-            Write-UiInfo "CCometixLine 已是最新版本 ($newVersion)"
-        } else {
-            [void]$updatedItems.Add("npm::ccline::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion"
-        }
-
-        # 重新执行 ccline patch（升级后必须重新 patch）
+        # 无条件重新执行 ccline patch（Claude Code 更新后 cli.js 被替换，必须重新 patch）
         $patchApplied = $false
         try {
             $npmRoot = (& npm root -g 2>$null | Select-Object -First 1)
@@ -401,16 +399,16 @@ function Update-Ccline {
                     if ($patchResult.Success) {
                         $patchApplied = $true
                         [void]$updatedItems.Add("patch::ccline::re-patched")
-                        Write-UiSuccess "✓ ccline patch 重新应用成功"
+                        Write-UiSuccess "✓ CCometixLine patch 重新应用成功"
                     } else {
-                        Write-UiWarn "ccline patch 重新应用失败，不影响基本功能"
+                        Write-UiWarn "CCometixLine patch 重新应用失败，不影响基本功能"
                     }
                 } else {
                     Write-UiWarn "Claude Code cli.js 未找到，跳过 patch"
                 }
             }
         } catch {
-            Write-UiWarn "ccline patch 执行异常: $($_.Exception.Message)"
+            Write-UiWarn "CCometixLine patch 执行异常: $($_.Exception.Message)"
         }
 
         $result.Data["PatchApplied"] = $patchApplied

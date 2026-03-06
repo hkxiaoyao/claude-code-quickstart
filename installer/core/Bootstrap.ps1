@@ -557,29 +557,12 @@ function Build-UpdatePlan {
         $planStepIds = @($RequestedSteps)
     }
 
-    # 前置依赖闭包补齐
-    $dependencies = Get-StepDependencies
+    # 更新计划不做前置依赖闭包补齐：
+    # 更新场景下依赖已安装，无需连带更新（安装场景由 Install 侧的 Get-DependencyClosure 处理）
     $closureIds = [System.Collections.ArrayList]::new()
     foreach ($id in $planStepIds) {
         if ($closureIds -notcontains $id) {
             [void]$closureIds.Add($id)
-        }
-    }
-
-    # 递归补齐依赖（仅补齐可更新的依赖）
-    $changed = $true
-    while ($changed) {
-        $changed = $false
-        foreach ($stepId in @($closureIds)) {
-            if ($dependencies.ContainsKey($stepId)) {
-                foreach ($depId in $dependencies[$stepId]) {
-                    $depUpdatable = $updatableSteps | Where-Object { $_.StepId -eq $depId }
-                    if ($depUpdatable -and $closureIds -notcontains $depId) {
-                        [void]$closureIds.Add($depId)
-                        $changed = $true
-                    }
-                }
-            }
         }
     }
 
@@ -593,7 +576,7 @@ function Build-UpdatePlan {
                 $cclineInstalled = Resolve-TestResultBool -TestResult $cclineTestResult -PropertyName "IsInstalled"
                 if ($cclineInstalled) {
                     [void]$closureIds.Add("Ccline")
-                    Write-UiOutput "  ⚡ 联动追加: Ccline（ClaudeCode 更新后需重新 patch）" -Level Essential -Type Info
+                    Write-UiOutput "  ⚡ 联动追加: CCometixLine（ClaudeCode 更新后需重新 patch）" -Level Essential -Type Info
                 }
             } catch {
                 # 检测失败，不追加

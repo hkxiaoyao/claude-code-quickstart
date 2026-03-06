@@ -1,7 +1,7 @@
 # installer/steps/ — 安装步骤模块
 
 > 面包屑：[根目录](../../CLAUDE.md) › [installer/](../CLAUDE.md) › steps/
-> 生成时间：2026-02-23 (架构重构后更新)
+> 生成时间：2026-03-06 (Install+Manage 分离架构)
 
 ---
 
@@ -70,7 +70,7 @@ function Update-<StepId> {
 | NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | — | 无 | 基础 |
 | Git | Git | `Git.ps1` | — | ✓ | — | 无 | 基础 |
 | ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | ✓ | NodeFnm | 基础 |
-| ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | — | — | ClaudeCode | 基础 |
+| ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | ✓ | — | ClaudeCode | 基础 |
 | Ccline | ccline | `Ccline.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
 | CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
@@ -118,85 +118,48 @@ function Update-<StepId> {
 ## ApiKey — 第三方供应商配置（HC-12 关键）
 
 **文件**：`ApiKey.ps1`
+**依赖核心模块**：`Provider.ps1`（供应商 CRUD + 交互菜单）
 **配置路径**：`$env:USERPROFILE\.claude\settings.json`
 
-### 支持的 AI 供应商
+### 架构变更（Install+Manage 分离）
 
-```powershell
-$script:ApiProviders = @{
-    zhipu    = @{
-        Name        = "智谱 GLM"
-        Description = "智谱 AI，服务端自动路由到最新 GLM 模型"
-        BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
-        PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
-        # 无 ModelMapping — 服务端自动翻译模型名
-    }
-    minimax  = @{
-        Name         = "MiniMax"
-        BaseUrl      = "https://api.minimaxi.com/anthropic"
-        PlatformUrl  = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
-        ModelMapping = @{
-            "opus"   = "MiniMax-M2.5"
-            "sonnet" = "MiniMax-M2.5"
-            "haiku"  = "MiniMax-M2.5"
-        }
-    }
-    moonshot = @{
-        Name         = "Kimi (Moonshot)"
-        BaseUrl      = "https://api.moonshot.cn/anthropic"
-        PlatformUrl  = "https://platform.moonshot.cn/console/api-keys"
-        ModelMapping = @{
-            "opus"   = "kimi-k2.5"
-            "sonnet" = "kimi-k2.5"
-            "haiku"  = "kimi-k2.5"
-        }
-    }
-    custom   = @{
-        Name        = "自定义供应商"
-        Description = "手动配置 Base URL 和 API Key"
-        BaseUrl     = ""  # 用户输入
-        # 无 ModelMapping — 用户按需自行配置
-    }
-}
+ApiKey 步骤已精简为**薄包装层**，核心供应商逻辑委托给 `core/Provider.ps1`：
+
+| 职责 | 旧版 ApiKey.ps1 (~710行) | 新版 ApiKey.ps1 (~170行) |
+|------|--------------------------|--------------------------|
+| 供应商模板 | `$script:ApiProviders` 自行定义 | 引用 `Provider.ps1` 的 `$script:BuiltinProviders` |
+| 供应商选择 + API Key 输入 | 自行实现完整流程 | 委托 `Add-Provider -Activate` |
+| Profile 文件管理 | 自行写入 `~/.claude/providers/` | 由 `Provider.ps1` 统一管理 |
+| 供应商切换 (ccp) | 注入 `Switch-ClaudeProvider` 到 `$PROFILE` | **已移除**，改用 `Manage → 供应商管理` |
+| settings.json 写入 | 自行实现 JSON 合并 | 由 `Provider.ps1` 的 `Switch-Provider` 处理 |
+
+### SkipIfInstalled
+
+`SkipIfInstalled = $true`（注册表已更新）。首次配置后自动跳过，用户通过 `Manage-ClaudeEnv.ps1 -Action Provider` 管理供应商。
+
+### Install-ApiKey 流程
+
+```
+Install-ApiKey($state)
+  ├── 清理旧版 ccp 标记块（Remove-ManagedBlockFromFile）
+  ├── 调用 Add-Provider -Activate（委托给 Provider.ps1）
+  │   ├── 供应商选择菜单（内置 4 个 + 自定义）
+  │   ├── API Key 输入（SecureString）
+  │   ├── 写入 Provider Profile → ~/.claude/providers/<key>.json
+  │   └── 激活：合并到 settings.json
+  └── 写入 ~/.claude.json（hasCompletedOnboarding = true）
 ```
 
-### 重入支持
+### 供应商模板（定义于 Provider.ps1）
 
-`SkipIfInstalled = $false`，每次运行都进入 Install-ApiKey。已配置时提供二选一：
-- **保持当前配置**：跳过，自动补生成 Profile（迁移旧用户）
-- **重新配置**：进入完整供应商选择流程
+内置供应商由 `core/Provider.ps1` 的 `$script:BuiltinProviders` 统一定义：
 
-### 供应商 Profile 文件
-
-配置供应商后，同时保存独立 Profile 文件到 `~/.claude/providers/`：
-
-```json
-{
-  "_meta": {
-    "provider": "智谱 GLM",
-    "key": "zhipu",
-    "baseUrl": "https://open.bigmodel.cn/api/anthropic",
-    "configuredAt": "2026-03-01T12:00:00Z"
-  },
-  "env": {
-    "ANTHROPIC_AUTH_TOKEN": "<API_KEY>",
-    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic"
-  }
-}
-```
-
-含 `modelMapping` 的供应商（MiniMax/Moonshot）会额外包含 `modelMapping` 字段。
-
-### 供应商切换函数
-
-Install-ApiKey 末尾注入 `Switch-ClaudeProvider` 函数到 `$PROFILE`（独立标记块 `# >>> Claude Code Provider Switcher >>>`）：
-
-```powershell
-ccp              # 交互式选择供应商
-ccp zhipu        # 直接切换到智谱
-```
-
-切换时从 Profile 读取，合并到 `settings.json`（仅覆盖供应商字段，不影响其他配置）。
+| Key | Name | ModelMapping |
+|-----|------|-------------|
+| `zhipu` | 智谱 GLM | 无（服务端自动路由） |
+| `minimax` | MiniMax | opus/sonnet/haiku → MiniMax-M2.5 |
+| `moonshot` | Kimi (Moonshot) | opus/sonnet/haiku → kimi-k2.5 |
+| `custom` | 自定义供应商 | 无（用户按需配置） |
 
 ### 写入格式（HC-12）
 
@@ -234,11 +197,9 @@ ccp zhipu        # 直接切换到智谱
 
 此配置用于标记 Claude Code 环境已完成初始化，由 ApiKey 步骤自动创建。如果文件已存在，将合并写入，保留用户已有字段。
 
-### 自定义供应商流程
+### 供应商后续管理
 
-1. 用户选择"自定义供应商"
-2. 输入自定义 Base URL（必须以 `http://` 或 `https://` 开头）
-3. 输入 API Key
+安装完成后，供应商的增删改查和切换统一通过 `Manage-ClaudeEnv.ps1 -Action Provider` 管理（详见 [core/CLAUDE.md](../core/CLAUDE.md) Provider.ps1 章节）。
 
 > **禁止**写入 `anthropicApiKey`、`openaiApiKey` 等顶层字段。
 > **禁止**写入 Anthropic / OpenAI / Azure 供应商。

@@ -23,10 +23,10 @@ function Get-BootstrapBuildOrder {
     )
 }
 
-function Get-MainInstallerBuildOrder {
+function Get-InstallBuildOrder {
     <#
     .SYNOPSIS
-    返回主安装脚本构建时需要按顺序拼接的文件路径数组
+    返回安装入口脚本构建时需要按顺序拼接的文件路径数组
     .RETURNS
     string[] - 相对于 installer/ 目录的文件路径数组
     #>
@@ -40,6 +40,7 @@ function Get-MainInstallerBuildOrder {
         'core/Registry.ps1'
         'core/Bootstrap.ps1'
         'core/McpManager.ps1'
+        'core/Provider.ps1'
     )
 
     # 步骤文件从 Registry 动态获取
@@ -52,11 +53,10 @@ function Get-MainInstallerBuildOrder {
 function Get-ManageBuildOrder {
     <#
     .SYNOPSIS
-    返回分组管理入口脚本构建时需要按顺序拼接的文件路径数组
+    返回管理入口脚本构建时需要按顺序拼接的文件路径数组
     .RETURNS
     string[] - 相对于 installer/ 目录的文件路径数组
     #>
-    # 核心模块（顺序敏感：Registry 在 Bootstrap 之前）
     $coreFiles = @(
         'core/Ui.ps1'
         'core/Process.ps1'
@@ -66,37 +66,13 @@ function Get-ManageBuildOrder {
         'core/Registry.ps1'
         'core/Bootstrap.ps1'
         'core/McpManager.ps1'
+        'core/Provider.ps1'
     )
 
-    # 步骤文件从 Registry 动态获取
     . "$PSScriptRoot\..\core\Registry.ps1"
     $stepFiles = Get-StepFiles
 
     return @($coreFiles + $stepFiles + @('Manage-ClaudeEnv.ps1'))
-}
-
-function Get-UpdateBuildOrder {
-    <#
-    .SYNOPSIS
-    返回更新入口脚本构建时需要按顺序拼接的文件路径数组
-    .RETURNS
-    string[] - 相对于 installer/ 目录的文件路径数组
-    #>
-    $coreFiles = @(
-        'core/Ui.ps1'
-        'core/Process.ps1'
-        'core/Profile.ps1'
-        'core/Admin.ps1'
-        'core/Net.ps1'
-        'core/Registry.ps1'
-        'core/Bootstrap.ps1'
-        'core/McpManager.ps1'
-    )
-
-    . "$PSScriptRoot\..\core\Registry.ps1"
-    $stepFiles = Get-StepFiles
-
-    return @($coreFiles + $stepFiles + @('Update-ClaudeEnv.ps1'))
 }
 
 function Get-ScriptParamBlockInfo {
@@ -335,7 +311,7 @@ function Test-BuiltScriptSyntax {
 function Main {
     <#
     .SYNOPSIS
-    构建入口：生成 Bootstrap、Installer、Manage 的单文件版本
+    构建入口：生成 Bootstrap、Install、Manage 的单文件版本
     .PARAMETER InstallerRoot
     installer/ 目录的绝对路径
     .PARAMETER OutputDir
@@ -377,15 +353,15 @@ function Main {
         -RequiresHeader "#Requires -Version 5.1" `
         -OutputEncoding 'UTF8'
 
-    # 构建 Installer 单文件版本
+    # 构建 Install 单文件版本
     Write-Host ""
-    Write-Host "─── 构建 Installer 单文件版本 ──────────────────────────────" -ForegroundColor Yellow
-    $installerOrder = Get-MainInstallerBuildOrder
-    $installerOutput = Join-Path $OutputDir "Install-ClaudeEnv.built.ps1"
+    Write-Host "─── 构建 Install 单文件版本 ───────────────────────────────" -ForegroundColor Yellow
+    $installOrder = Get-InstallBuildOrder
+    $installOutput = Join-Path $OutputDir "Install-ClaudeEnv.built.ps1"
     Build-SingleFileScript `
         -InstallerRoot $InstallerRoot `
-        -FileOrder $installerOrder `
-        -OutputPath $installerOutput `
+        -FileOrder $installOrder `
+        -OutputPath $installOutput `
         -RequiresHeader "#Requires -Version 7.0" `
         -HoistParamFromRelativePath 'Install-ClaudeEnv.ps1'
 
@@ -401,25 +377,12 @@ function Main {
         -RequiresHeader "#Requires -Version 7.0" `
         -HoistParamFromRelativePath 'Manage-ClaudeEnv.ps1'
 
-    # 构建 Update 单文件版本
-    Write-Host ""
-    Write-Host "─── 构建 Update 单文件版本 ─────────────────────────────────" -ForegroundColor Yellow
-    $updateOrder = Get-UpdateBuildOrder
-    $updateOutput = Join-Path $OutputDir "Update-ClaudeEnv.built.ps1"
-    Build-SingleFileScript `
-        -InstallerRoot $InstallerRoot `
-        -FileOrder $updateOrder `
-        -OutputPath $updateOutput `
-        -RequiresHeader "#Requires -Version 7.0" `
-        -HoistParamFromRelativePath 'Update-ClaudeEnv.ps1'
-
     # 语法检查
     Write-Host ""
     Write-Host "─── 语法检查 ───────────────────────────────────────────────" -ForegroundColor Yellow
     $bootstrapOk = Test-BuiltScriptSyntax -ScriptPath $bootstrapOutput
-    $installerOk = Test-BuiltScriptSyntax -ScriptPath $installerOutput
+    $installOk = Test-BuiltScriptSyntax -ScriptPath $installOutput
     $manageOk = Test-BuiltScriptSyntax -ScriptPath $manageOutput
-    $updateOk = Test-BuiltScriptSyntax -ScriptPath $updateOutput
 
     # 构建摘要
     Write-Host ""
@@ -428,21 +391,18 @@ function Main {
     Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Cyan
 
     $bootstrapSize = if (Test-Path $bootstrapOutput) { (Get-Item $bootstrapOutput).Length } else { 0 }
-    $installerSize = if (Test-Path $installerOutput) { (Get-Item $installerOutput).Length } else { 0 }
+    $installSize = if (Test-Path $installOutput) { (Get-Item $installOutput).Length } else { 0 }
     $manageSize = if (Test-Path $manageOutput) { (Get-Item $manageOutput).Length } else { 0 }
-    $updateSize = if (Test-Path $updateOutput) { (Get-Item $updateOutput).Length } else { 0 }
 
     Write-Host "  Bootstrap:  $bootstrapOutput"
     Write-Host "              大小: $([math]::Round($bootstrapSize / 1KB, 1)) KB | 语法: $(if ($bootstrapOk) { '[PASS]' } else { '[FAIL]' })"
-    Write-Host "  Installer:  $installerOutput"
-    Write-Host "              大小: $([math]::Round($installerSize / 1KB, 1)) KB | 语法: $(if ($installerOk) { '[PASS]' } else { '[FAIL]' })"
+    Write-Host "  Install:    $installOutput"
+    Write-Host "              大小: $([math]::Round($installSize / 1KB, 1)) KB | 语法: $(if ($installOk) { '[PASS]' } else { '[FAIL]' })"
     Write-Host "  Manage:     $manageOutput"
     Write-Host "              大小: $([math]::Round($manageSize / 1KB, 1)) KB | 语法: $(if ($manageOk) { '[PASS]' } else { '[FAIL]' })"
-    Write-Host "  Update:     $updateOutput"
-    Write-Host "              大小: $([math]::Round($updateSize / 1KB, 1)) KB | 语法: $(if ($updateOk) { '[PASS]' } else { '[FAIL]' })"
     Write-Host ""
 
-    if ($bootstrapOk -and $installerOk -and $manageOk -and $updateOk) {
+    if ($bootstrapOk -and $installOk -and $manageOk) {
         Write-Host "  构建完成！所有文件语法检查通过。" -ForegroundColor Green
     } else {
         Write-Host "  构建完成，但存在语法错误，请检查。" -ForegroundColor Red

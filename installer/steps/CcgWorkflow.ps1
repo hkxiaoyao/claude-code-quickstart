@@ -79,6 +79,119 @@ TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
 若检索后需求仍有模糊空间，输出引导性问题列表，直至需求边界清晰。
 '@
 
+function Get-CcgWorkflowFingerprint {
+    <#
+    .SYNOPSIS
+    计算 CcgWorkflow 步骤的组合内容指纹（引擎版本 + 规则模板哈希）
+    .DESCRIPTION
+    组合指纹确保引擎版本变更或规则模板变更都能触发更新检测。
+    .RETURNS
+    string - 组合指纹字符串，或空字符串（未安装时）
+    #>
+    $parts = @()
+
+    # 引擎版本分量
+    if (Test-CommandAvailable "codeagent-wrapper") {
+        $parts += "engine:" + (Get-CommandVersion -Command "codeagent-wrapper")
+    } else {
+        $parts += "engine:unknown"
+    }
+
+    # 规则模板分量
+    $parts += "rules:" + (Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate)
+
+    return Get-StringFingerprint -Text ($parts -join "`n")
+}
+
+function Get-CcgWorkflowUpdateComponents {
+    <#
+    .SYNOPSIS
+    独立检测 CcgWorkflow 的引擎版本与规则文件漂移状态
+    .DESCRIPTION
+    拆分检测引擎（npm 版本）和规则（文件内容+旧文件迁移）两个分量，
+    使 Get-UpdateStatus 和 Update-CcgWorkflow 能精准区分更新类型。
+    .PARAMETER LatestVersion
+    可选：预查询的 npm 最新版本（避免重复查询）
+    .RETURNS
+    hashtable — EngineNeedUpdate, RulesNeedUpdate, UpdateKind, StatusHint, LocalVersion, LatestVersion
+    #>
+    param(
+        [string]$LatestVersion = ""
+    )
+
+    $result = @{
+        EngineNeedUpdate = $false
+        RulesNeedUpdate  = $false
+        UpdateKind       = "none"
+        StatusHint       = "已是最新"
+        LocalVersion     = ""
+        LatestVersion    = ""
+    }
+
+    # ── 引擎分量：config.toml 本地版本 vs npm 最新版本 ──
+    $configToml = "$script:ClaudeDir\.ccg\config.toml"
+    if (Test-Path $configToml) {
+        $content = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+        if ($content -match 'version\s*=\s*"([^"]+)"') {
+            $result.LocalVersion = $matches[1]
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($LatestVersion)) {
+        $result.LatestVersion = $LatestVersion
+    } else {
+        $updateCheck = Test-NpmUpdateAvailable -PackageName "ccg-workflow" -CurrentVersion $result.LocalVersion -NonGlobal
+        if ($updateCheck.LatestVersion) {
+            $result.LatestVersion = $updateCheck.LatestVersion
+        }
+    }
+
+    if ($result.LocalVersion -and $result.LatestVersion -and $result.LocalVersion -ne $result.LatestVersion) {
+        $result.EngineNeedUpdate = $true
+    }
+
+    # ── 规则分量：文件内容对比 + 遗留旧文件检查 ──
+    $rulesDir = "$script:ClaudeDir\rules"
+    $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
+
+    # 检查目标规则文件是否存在且内容一致
+    $ruleContentMatch = $false
+    if (Test-Path $ccgRulePath) {
+        $existingRule = Get-Content $ccgRulePath -Raw -ErrorAction SilentlyContinue
+        $ruleNormalized = $script:CcgWorkflowRuleTemplate -replace "`r`n", "`n"
+        $existingNormalized = if ($existingRule) { $existingRule -replace "`r`n", "`n" } else { "" }
+        $ruleContentMatch = ($ruleNormalized.Trim() -eq $existingNormalized.Trim())
+    }
+
+    # 检查遗留旧规则文件（需迁移删除）
+    $legacyRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
+    $legacyFilesExist = $false
+    foreach ($f in $legacyRuleFiles) {
+        if (Test-Path (Join-Path $rulesDir $f)) {
+            $legacyFilesExist = $true
+            break
+        }
+    }
+
+    if (-not $ruleContentMatch -or $legacyFilesExist) {
+        $result.RulesNeedUpdate = $true
+    }
+
+    # ── 综合判定 ──
+    if ($result.EngineNeedUpdate -and $result.RulesNeedUpdate) {
+        $result.UpdateKind = "engine+rules"
+        $result.StatusHint = "引擎与规则均需更新"
+    } elseif ($result.EngineNeedUpdate) {
+        $result.UpdateKind = "engine-only"
+        $result.StatusHint = "引擎版本可更新 ($($result.LocalVersion) -> $($result.LatestVersion))"
+    } elseif ($result.RulesNeedUpdate) {
+        $result.UpdateKind = "rules-only"
+        $result.StatusHint = "规则文件更新"
+    }
+
+    return $result
+}
+
 function Test-CcgWorkflowInstalled {
     <#
     .SYNOPSIS
@@ -93,8 +206,7 @@ function Test-CcgWorkflowInstalled {
             @{ Path = "$claudeDir\commands\ccg"; Type = "Dir"; Filter = "*.md"; MinCount = 20 },
             @{ Path = "$claudeDir\agents\ccg"; Type = "Dir" },
             @{ Path = "$claudeDir\.ccg"; Type = "Dir" },
-            @{ Path = "$claudeDir\bin\codeagent-wrapper.exe"; Type = "File" },
-            @{ Path = "$claudeDir\rules\ccq-ccgworkflow.md"; Type = "File"; ContentMatch = "# 多模型协作 + 工作流增强" }
+            @{ Path = "$claudeDir\bin\codeagent-wrapper.exe"; Type = "File" }
         ) `
         -CustomVerify {
             # 从 config.toml 提取版本
@@ -385,7 +497,10 @@ function Verify-CcgWorkflow {
 function Update-CcgWorkflow {
     <#
     .SYNOPSIS
-    更新 CCG Workflow（重新执行官方 init）
+    更新 CCG Workflow（支持引擎/规则分量独立更新）
+    .DESCRIPTION
+    拆分为引擎更新（npx init）和规则更新（文件同步+旧文件迁移）两个独立分支。
+    "仅规则更新"场景不再提前 noop。
     .RETURNS
     @{ Success; ErrorMessage; Data; UpdatedItems }
     #>
@@ -408,143 +523,129 @@ function Update-CcgWorkflow {
             throw "npx 不可用，请检查 Node.js 安装"
         }
 
-        # ── 获取当前本地版本（从 config.toml）──
-        $oldVersion = ""
-        $configToml = "$script:ClaudeDir\.ccg\config.toml"
-        if (Test-Path $configToml) {
-            $configContent = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
-            if ($configContent -match 'version\s*=\s*"([^"]+)"') {
-                $oldVersion = $matches[1]
-            }
-        }
-        if ([string]::IsNullOrWhiteSpace($oldVersion)) {
-            $oldVersion = "未知"
-        }
-        Write-UiInfo "当前版本: $oldVersion"
+        # ── 分量检测 ──
+        $components = Get-CcgWorkflowUpdateComponents
+        $oldVersion = if ($components.LocalVersion) { $components.LocalVersion } else { "未知" }
+        $result.Data["OldVersion"] = $oldVersion
+        $result.Data["UpdateKind"] = $components.UpdateKind
 
-        # ── 查询 npm 最新版本（非全局包，使用 npm view）──
-        $updateCheck = Test-NpmUpdateAvailable -PackageName "ccg-workflow" -CurrentVersion $oldVersion -NonGlobal
-        if ($updateCheck.LatestVersion) {
-            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+        Write-UiInfo "当前版本: $oldVersion"
+        if ($components.LatestVersion) {
+            Write-UiInfo "最新版本: $($components.LatestVersion)"
         }
-        if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "CCG Workflow 已是最新版本 ($oldVersion)"
+
+        # ── 无更新 → noop ──
+        if (-not $components.EngineNeedUpdate -and -not $components.RulesNeedUpdate) {
+            Write-UiInfo "CCG Workflow 已是最新（引擎与规则均无变更）"
             $result.UpdatedItems = @("noop::CcgWorkflow::no-change")
-            $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
             $result.Success = $true
             return $result
         }
-        if ($null -eq $updateCheck.Available) {
-            Write-UiWarn "无法查询 npm 最新版本，将继续执行更新"
-        }
 
-        # ── MCP 快照（更新前）— HC-U1 保护 ──
-        $claudeJsonPath = "$(Get-UserHome)\.claude.json"
-        $mcpSnapshotBefore = $null
-        if (Test-Path $claudeJsonPath) {
-            $claudeJsonRaw = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
-            if ($claudeJsonRaw) {
-                $claudeJson = $claudeJsonRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
-                if ($null -ne $claudeJson -and $claudeJson.ContainsKey("mcpServers")) {
-                    $mcpSnapshotBefore = $claudeJson["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
-                }
-            }
-        }
+        Write-UiInfo "更新类型: $($components.StatusHint)"
 
-        # ── 执行 npx ccg-workflow@latest init（--skip-mcp 必须保留）──
-        Write-UiInfo "正在通过 npx 获取最新版 CCG Workflow..."
-        $npxResult = Invoke-ExternalCommand `
-            -Command "npx" `
-            -Arguments @("--yes", "ccg-workflow@latest", "init", "--skip-prompt", "--skip-mcp", "--lang", "zh-CN", "--install-dir", "$script:ClaudeDir") `
-            -TimeoutSeconds 300 `
-            -RetryCount 3
-
-        if ($npxResult.ExitCode -ne 0) {
-            $errorDetail = $npxResult.Error
-            if ([string]::IsNullOrWhiteSpace($errorDetail)) {
-                $errorDetail = $npxResult.Output
-            }
-            throw "CCG Workflow 更新失败 (ExitCode: $($npxResult.ExitCode)): $errorDetail"
-        }
-
-        # ── MCP 快照比对（更新后）──
-        if ($null -ne $mcpSnapshotBefore -and (Test-Path $claudeJsonPath)) {
-            $claudeJsonRawAfter = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
-            if ($claudeJsonRawAfter) {
-                $claudeJsonAfter = $claudeJsonRawAfter | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
-                if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
-                    $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
-                    if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                        Write-UiWarn "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查"
+        # ── 引擎更新分支 ──
+        if ($components.EngineNeedUpdate) {
+            # MCP 快照（更新前）— HC-U1 保护
+            $claudeJsonPath = "$(Get-UserHome)\.claude.json"
+            $mcpSnapshotBefore = $null
+            if (Test-Path $claudeJsonPath) {
+                $claudeJsonRaw = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
+                if ($claudeJsonRaw) {
+                    $claudeJson = $claudeJsonRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                    if ($null -ne $claudeJson -and $claudeJson.ContainsKey("mcpServers")) {
+                        $mcpSnapshotBefore = $claudeJson["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                     }
                 }
             }
-        }
 
-        # ── 刷新 PATH + 获取新版本 ──
-        Refresh-SessionPath
+            # 执行 npx ccg-workflow@latest init（--skip-mcp 必须保留）
+            Write-UiInfo "正在通过 npx 获取最新版 CCG Workflow..."
+            $npxResult = Invoke-ExternalCommand `
+                -Command "npx" `
+                -Arguments @("--yes", "ccg-workflow@latest", "init", "--skip-prompt", "--skip-mcp", "--lang", "zh-CN", "--install-dir", "$script:ClaudeDir") `
+                -TimeoutSeconds 300 `
+                -RetryCount 3
 
-        $newVersion = ""
-        if (Test-Path $configToml) {
-            $configContentAfter = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
-            if ($configContentAfter -match 'version\s*=\s*"([^"]+)"') {
-                $newVersion = $matches[1]
+            if ($npxResult.ExitCode -ne 0) {
+                $errorDetail = $npxResult.Error
+                if ([string]::IsNullOrWhiteSpace($errorDetail)) {
+                    $errorDetail = $npxResult.Output
+                }
+                throw "CCG Workflow 引擎更新失败 (ExitCode: $($npxResult.ExitCode)): $errorDetail"
             }
-        }
-        if ([string]::IsNullOrWhiteSpace($newVersion)) {
-            $newVersion = "未知"
-        }
 
-        $result.Data["OldVersion"] = $oldVersion
-        $result.Data["NewVersion"] = $newVersion
-
-        # ── 构建 UpdatedItems ──
-        if ($oldVersion -eq $newVersion) {
-            $result.UpdatedItems = @("noop::CcgWorkflow::no-change")
-            Write-UiInfo "CCG Workflow 已是最新版本 ($newVersion)"
-        }
-        else {
-            $result.UpdatedItems = @("npx::ccg-workflow::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ CCG Workflow 已更新: $oldVersion -> $newVersion"
-        }
-
-        # ── 更新 CCG 规则文件 + 迁移旧文件 ──
-        $rulesDir = "$script:ClaudeDir\rules"
-        if (-not (Test-Path $rulesDir)) {
-            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
-        }
-
-        # 迁移：删除旧的 rules 文件（已整合到 ccq-ccgworkflow.md）
-        $oldRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
-        foreach ($oldFile in $oldRuleFiles) {
-            $oldPath = Join-Path $rulesDir $oldFile
-            if (Test-Path $oldPath) {
-                try {
-                    Remove-Item $oldPath -Force -ErrorAction Stop
-                    $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
-                    Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）"
-                } catch {
-                    Write-UiWarn "无法删除旧文件: $oldFile"
+            # MCP 快照比对（更新后）
+            if ($null -ne $mcpSnapshotBefore -and (Test-Path $claudeJsonPath)) {
+                $claudeJsonRawAfter = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
+                if ($claudeJsonRawAfter) {
+                    $claudeJsonAfter = $claudeJsonRawAfter | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                    if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
+                        $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
+                        if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
+                            Write-UiWarn "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查"
+                        }
+                    }
                 }
             }
+
+            # 刷新 PATH + 获取新版本
+            Refresh-SessionPath
+
+            $configToml = "$script:ClaudeDir\.ccg\config.toml"
+            $newVersion = ""
+            if (Test-Path $configToml) {
+                $configContentAfter = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+                if ($configContentAfter -match 'version\s*=\s*"([^"]+)"') {
+                    $newVersion = $matches[1]
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($newVersion)) {
+                $newVersion = "未知"
+            }
+
+            $result.Data["NewVersion"] = $newVersion
+
+            if ($oldVersion -ne $newVersion) {
+                $result.UpdatedItems += "npx::ccg-workflow::${oldVersion}->${newVersion}"
+                Write-UiSuccess "CCG Workflow 引擎已更新: $oldVersion -> $newVersion"
+            } else {
+                $result.UpdatedItems += "npx::ccg-workflow::reinstalled"
+                Write-UiInfo "CCG Workflow 引擎已重新安装 ($newVersion)"
+            }
+        } else {
+            $result.Data["NewVersion"] = $oldVersion
         }
 
-        # 写入/更新 CCG 规则文件
-        $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
-        $ruleChanged = $true
-        if (Test-Path $ccgRulePath) {
-            $existingRule = Get-Content $ccgRulePath -Raw -ErrorAction SilentlyContinue
-            $ruleNormalized = $script:CcgWorkflowRuleTemplate -replace "`r`n", "`n"
-            $existingNormalized = if ($existingRule) { $existingRule -replace "`r`n", "`n" } else { "" }
-            if ($ruleNormalized.Trim() -eq $existingNormalized.Trim()) {
-                $ruleChanged = $false
+        # ── 规则更新分支 ──
+        if ($components.RulesNeedUpdate) {
+            $rulesDir = "$script:ClaudeDir\rules"
+            if (-not (Test-Path $rulesDir)) {
+                New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
             }
-        }
-        if ($ruleChanged) {
+
+            # 迁移：删除旧的 rules 文件（CcgWorkflow 所有权范围内的显式名单）
+            $legacyRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
+            foreach ($oldFile in $legacyRuleFiles) {
+                $oldPath = Join-Path $rulesDir $oldFile
+                if (Test-Path $oldPath) {
+                    try {
+                        Remove-Item $oldPath -Force -ErrorAction Stop
+                        $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
+                        Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）"
+                    } catch {
+                        Write-UiWarn "无法删除旧文件: $oldFile"
+                    }
+                }
+            }
+
+            # 写入/更新 CCG 规则文件
+            $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
             $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
             if ($ruleWriteResult) {
                 $result.UpdatedItems += "file::rules/ccq-ccgworkflow.md::overwritten"
+                Write-UiSuccess "CCG Workflow 规则文件已更新"
             }
         }
 

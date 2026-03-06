@@ -1,14 +1,20 @@
 #Requires -Version 7.0
-# Manage-ClaudeEnv.ps1 - CCQ（分组安装入口）
-# 功能: 两级分组安装（基础环境 / 进阶扩展），支持一键、多选、断点续传
+# Manage-ClaudeEnv.ps1 - CCQ（统一管理入口）
+# 功能: 生命周期管理 — 更新已安装组件 + 供应商管理 + MCP 管理
 
 param(
-    [switch]$ListSteps,
-    [ValidateSet("Basic", "Advanced", "Mcp", "")]
-    [string]$Group = "",
-    [ValidateSet("OneClick", "Select", "")]
-    [string]$Mode = "",
-    [switch]$Staged,
+    # 管理动作（CLI 模式）
+    [ValidateSet("Update", "Mcp", "Provider", "")]
+    [string]$Action = "",
+
+    # Update 专用参数
+    [switch]$ListUpdates,
+
+    # Provider 专用参数
+    [string]$Provider,
+    [switch]$ListProviders,
+
+    # 通用参数
     [ValidateSet("Normal", "Developer")]
     [string]$OutputMode = "Normal"
 )
@@ -16,19 +22,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ─── PS5 中文编码修复（版本拦截前必须设置，否则中文乱码）─────────────────────
+# ─── 中文编码修复（必须在 PS 版本检查前执行，不能移入 core/ 模块）─────────────
+# 注意：此块与 Install-ClaudeEnv.ps1 中的相同代码共用 _CcqKernel32Cp 类名。
+#       因为必须在 dot-source core/ 之前运行，无法提取为共享模块。
 try {
-    if (-not ([System.Management.Automation.PSTypeName]'_ManageKernel32Cp').Type) {
+    if (-not ([System.Management.Automation.PSTypeName]'_CcqKernel32Cp').Type) {
         Add-Type -TypeDefinition @'
 using System.Runtime.InteropServices;
-public class _ManageKernel32Cp {
+public class _CcqKernel32Cp {
     [DllImport("kernel32.dll")] public static extern bool SetConsoleOutputCP(uint cp);
     [DllImport("kernel32.dll")] public static extern bool SetConsoleCP(uint cp);
 }
 '@ -ErrorAction SilentlyContinue
     }
-    [_ManageKernel32Cp]::SetConsoleOutputCP(65001) | Out-Null
-    [_ManageKernel32Cp]::SetConsoleCP(65001) | Out-Null
+    [_CcqKernel32Cp]::SetConsoleOutputCP(65001) | Out-Null
+    [_CcqKernel32Cp]::SetConsoleCP(65001) | Out-Null
 } catch { }
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -61,6 +69,7 @@ $script:InstallerRoot = $PSScriptRoot
 . "$script:InstallerRoot\core\Registry.ps1"
 . "$script:InstallerRoot\core\Bootstrap.ps1"
 . "$script:InstallerRoot\core\McpManager.ps1"
+. "$script:InstallerRoot\core\Provider.ps1"
 
 # ─── Dot-source 所有步骤模块（从 Registry 动态加载）──────────────────────────
 
@@ -77,725 +86,741 @@ Set-CcqOutputMode -Mode ([CcqOutputMode]$OutputMode)
 
 $script:StepRegistry = Get-StepRegistry
 
-# ─── 步骤分组定义（从共享 Registry 获取）─────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 更新管理（迁移自 Update-ClaudeEnv.ps1）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-$script:StepGroups = Get-StepGroups
+# ─── 内容指纹管理（跳过模板未变更的步骤）─────────────────────────────────
 
-# ─── 核心函数 ───────────────────────────────────────────────────────────────
+$script:FingerprintManagedSteps = @("ClaudeMd", "ClaudeConfig", "CcgWorkflow")
 
-function Get-GroupStatus {
+function Get-StepDesiredFingerprint {
     <#
     .SYNOPSIS
-    获取分组的安装状态统计
-    .PARAMETER GroupName
-    分组名称（Basic / Advanced）
+    计算步骤的"期望"内容指纹（基于源模板 SHA256 或工具版本号）
+    .DESCRIPTION
+    采用约定优于配置：每个支持指纹的步骤定义 Get-<StepId>Fingerprint 函数，
+    本函数自动发现并调度，无需硬编码步骤内部逻辑（开闭原则）。
+    .PARAMETER StepId
+    步骤 ID（仅支持 FingerprintManagedSteps 中的步骤）
     .RETURNS
-    @{ Total; Installed; StepStatuses }
+    string - 指纹值；空字符串表示无法计算
     #>
     param(
         [Parameter(Mandatory = $true)]
-        [string]$GroupName
+        [string]$StepId
     )
 
-    $group = $script:StepGroups[$GroupName]
-    $total = $group.StepIds.Count
-    $installed = 0
-    $stepStatuses = @{}
-
-    foreach ($stepId in $group.StepIds) {
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-        if (-not $stepConfig) { continue }
-
-        # 静默检测：抑制 TestFunction 的所有输出
-        $testResult = $null
-        try {
-            # 保存原始 Preference 设置
-            $originalVerbose = $VerbosePreference
-            $originalDebug = $DebugPreference
-            $originalInfo = $InformationPreference
-            $originalWarning = $WarningPreference
-
-            # 设置为静默模式
-            $VerbosePreference = 'SilentlyContinue'
-            $DebugPreference = 'SilentlyContinue'
-            $InformationPreference = 'SilentlyContinue'
-            $WarningPreference = 'SilentlyContinue'
-
-            # 调用 TestFunction 并抑制所有输出流（移除 *>&1 避免 WarningRecord/ErrorRecord 污染）
-            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
-
-            # 恢复原始设置
-            $VerbosePreference = $originalVerbose
-            $DebugPreference = $originalDebug
-            $InformationPreference = $originalInfo
-            $WarningPreference = $originalWarning
-        } catch {
-            # 忽略检测错误，视为未安装
-            $testResult = $null
-        }
-
-        $isInstalled = if ($testResult -is [bool]) { $testResult }
-                       elseif ($testResult) { [bool]$testResult.IsInstalled }
-                       else { $false }
-
-        $stepStatuses[$stepId] = $isInstalled
-        if ($isInstalled) { $installed++ }
+    $fnName = "Get-${StepId}Fingerprint"
+    if (-not (Get-Command $fnName -ErrorAction SilentlyContinue)) {
+        return ""
     }
 
-    return @{
-        Total        = $total
-        Installed    = $installed
-        StepStatuses = $stepStatuses
+    try {
+        return & $fnName
+    } catch {
+        Write-UiWarn "指纹计算失败 (${StepId}): $($_.Exception.Message)"
+        return ""
     }
 }
 
-function Get-DependencyClosure {
+# ─── 更新摘要显示 ─────────────────────────────────────────────────────────────
+
+function Show-UpdateSummary {
     <#
     .SYNOPSIS
-    计算选定步骤的完整依赖闭包（保留完整依赖链，已安装步骤由生命周期自动跳过）
-    .PARAMETER SelectedStepIds
-    用户选择的步骤 ID 数组
-    .RETURNS
-    @{ OriginalSelection; AutoAdded; FinalPlan }
+    显示更新结果摘要（分四类：已更新/已最新/失败/跳过）
     #>
     param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$SelectedStepIds
-    )
-
-    $dependencies = Get-StepDependencies
-    $allRequired = [System.Collections.Generic.HashSet[string]]::new()
-
-    # 递归收集传递依赖
-    function Collect-Deps {
-        param([string]$StepId)
-        if ($allRequired.Contains($StepId)) { return }
-        [void]$allRequired.Add($StepId)
-        if ($dependencies.ContainsKey($StepId)) {
-            foreach ($dep in $dependencies[$StepId]) {
-                Collect-Deps -StepId $dep
-            }
-        }
-    }
-
-    foreach ($id in $SelectedStepIds) {
-        Collect-Deps -StepId $id
-    }
-
-    # 不在此处过滤已安装步骤，避免与 Test-StepDependencies 的状态判定冲突
-    # 已安装步骤由 Invoke-StepLifecycle 的 SkipIfInstalled 机制自动处理
-
-    # 安全地将 HashSet 转换为数组
-    $allRequiredArray = @()
-    if ($allRequired.Count -gt 0) {
-        $allRequiredArray = @($allRequired)
-    }
-
-    # 强制类型声明确保 $finalPlan 始终是数组
-    [string[]]$finalPlan = if ($allRequiredArray.Count -gt 0) {
-        @(Get-ExecutionOrder -StepIds $allRequiredArray)
-    } else {
-        @()
-    }
-
-    # 识别自动补齐的依赖
-    [string[]]$autoAdded = @()
-    if ($finalPlan -and $finalPlan.Count -gt 0) {
-        $autoAdded = @($finalPlan | Where-Object { $_ -notin $SelectedStepIds })
-    }
-
-    return @{
-        OriginalSelection = $SelectedStepIds
-        AutoAdded         = $autoAdded
-        FinalPlan         = $finalPlan
-    }
-}
-
-function Show-ExecutionPlan {
-    <#
-    .SYNOPSIS
-    显示执行计划并请求确认（无条件显示）
-    .RETURNS
-    $true = 用户确认执行，$false = 取消
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$OriginalSelection,
-
-        [Parameter(Mandatory = $true)]
-        [AllowEmptyCollection()]
-        [string[]]$AutoAdded,
-
-        [Parameter(Mandatory = $true)]
-        [string[]]$FinalPlan
-    )
-
-    Write-Host ""
-
-    if ($AutoAdded -and $AutoAdded.Count -gt 0) {
-        Write-UiWarn "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
-        foreach ($stepId in $AutoAdded) {
-            $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-            $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-            Write-UiInfo "  + $name（自动补齐）"
-        }
-        Write-Host ""
-    }
-
-    Write-UiInfo "执行计划："
-
-    $orderedPlan = @(Get-ExecutionOrder -StepIds $FinalPlan)
-    $index = 0
-    foreach ($stepId in $orderedPlan) {
-        $index++
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-        $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-        $tag = if ($AutoAdded -and $AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
-        Write-UiInfo "  $index. $name $tag"
-    }
-
-    Write-Host ""
-    $confirmIndex = Show-SingleSelectMenu `
-        -Title "确认执行以上计划？" `
-        -Options @("是，开始执行", "否，取消")
-
-    return ($confirmIndex -eq 0)
-}
-
-function Invoke-GroupedInstall {
-    <#
-    .SYNOPSIS
-    执行分组安装（依赖闭包 + 确认 + 拓扑排序 + 执行）
-    .PARAMETER StepIds
-    目标步骤 ID 数组
-    .PARAMETER State
-    安装状态对象
-    .RETURNS
-    执行结果统计
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string[]]$StepIds,
-
-        [Parameter(Mandatory = $true)]
-        [InstallState]$State
-    )
-
-    # 计算依赖闭包
-    $closure = Get-DependencyClosure -SelectedStepIds $StepIds
-
-    if (-not $closure.FinalPlan -or $closure.FinalPlan.Count -eq 0) {
-        Write-Host ""
-        Write-UiSuccess "所有选定步骤已安装，无需操作"
-        return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
-    }
-
-    # 无条件显示执行计划并确认
-    $confirmed = Show-ExecutionPlan `
-        -OriginalSelection $closure.OriginalSelection `
-        -AutoAdded $closure.AutoAdded `
-        -FinalPlan $closure.FinalPlan
-
-    if (-not $confirmed) {
-        Write-UiWarn "安装已取消"
-        return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
-    }
-
-    # 拓扑排序
-    $orderedStepIds = @(Get-ExecutionOrder -StepIds $closure.FinalPlan)
-
-    $results = @{
-        Total           = $orderedStepIds.Count
-        Success         = 0
-        Failed          = 0
-        Skipped         = 0
-        ExecutedStepIds = $orderedStepIds
-    }
-
-    $stepIndex = 0
-    foreach ($stepId in $orderedStepIds) {
-        $stepIndex++
-
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-        if (-not $stepConfig) {
-            Write-UiWarn "未找到步骤配置: $stepId，跳过"
-            $results.Skipped++
-            continue
-        }
-
-        Write-Host ""
-        Write-UiInfo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        Write-UiInfo "步骤 $stepIndex / $($results.Total)：$($stepConfig.StepName)"
-        Write-Host "     $($stepConfig.Description)" -ForegroundColor Gray
-        Write-UiInfo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-        # 检查前置依赖
-        $depCheck = Test-StepDependencies -StepId $stepId -State $State
-        if (-not $depCheck.CanExecute) {
-            if ($depCheck.FailedDependencies -and $depCheck.FailedDependencies.Count -gt 0) {
-                Write-UiError "前置依赖失败，跳过此步骤: $($depCheck.FailedDependencies -join ', ')"
-            } else {
-                Write-UiWarn "前置依赖未完成，跳过此步骤: $($depCheck.MissingDependencies -join ', ')"
-            }
-            $results.Skipped++
-            continue
-        }
-
-        # 构建步骤执行参数
-        $stepParams = @{
-            StepId          = $stepConfig.StepId
-            StepName        = $stepConfig.StepName
-            TestFunction    = $stepConfig.TestFunction
-            InstallFunction = $stepConfig.InstallFunction
-            State           = $State
-        }
-
-        if ($stepConfig.VerifyFunction) {
-            $stepParams.VerifyFunction = $stepConfig.VerifyFunction
-        }
-        if ($stepConfig.SkipIfInstalled) {
-            $stepParams.SkipIfInstalled = $true
-        }
-
-        $stepResult = Invoke-StepLifecycle @stepParams
-
-        switch ($stepResult.Status) {
-            ([StepStatus]::Success) { $results.Success++ }
-            ([StepStatus]::Skipped) { $results.Skipped++ }
-            ([StepStatus]::Failed)  {
-                $results.Failed++
-                Write-UiError "步骤 [$($stepConfig.StepName)] 执行失败，错误已记录"
-            }
-        }
-    }
-
-    return $results
-}
-
-function Show-AdvancedSelectMenu {
-    <#
-    .SYNOPSIS
-    显示进阶步骤的多选菜单（带状态标签）
-    .RETURNS
-    用户选择的 StepId 数组
-    #>
-    param()
-
-    Write-Host ""
-    Write-UiInfo "正在检测进阶扩展组件状态..."
-    Write-Host ""
-
-    $advancedGroup = $script:StepGroups["Advanced"]
-    $options = @()
-    $stepIdMap = @()
-    $defaultSelected = @()
-
-    for ($i = 0; $i -lt $advancedGroup.StepIds.Count; $i++) {
-        $stepId = $advancedGroup.StepIds[$i]
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-        if (-not $stepConfig) { continue }
-
-        $stepNum = $i + 1
-
-        # 静默获取安装状态
-        $testResult = $null
-        try {
-            # 保存原始 Preference 设置
-            $originalVerbose = $VerbosePreference
-            $originalDebug = $DebugPreference
-            $originalInfo = $InformationPreference
-            $originalWarning = $WarningPreference
-
-            # 设置为静默模式
-            $VerbosePreference = 'SilentlyContinue'
-            $DebugPreference = 'SilentlyContinue'
-            $InformationPreference = 'SilentlyContinue'
-            $WarningPreference = 'SilentlyContinue'
-
-            # 调用 TestFunction 并抑制所有输出流（移除 *>&1 避免 WarningRecord/ErrorRecord 污染）
-            $testResult = & $stepConfig.TestFunction 2>$null 3>$null 4>$null 5>$null 6>$null
-
-            # 恢复原始设置
-            $VerbosePreference = $originalVerbose
-            $DebugPreference = $originalDebug
-            $InformationPreference = $originalInfo
-            $WarningPreference = $originalWarning
-        } catch {
-            # 忽略检测错误，视为未安装
-            $testResult = $null
-        }
-
-        $isInstalled = if ($testResult -is [bool]) { $testResult }
-                       elseif ($testResult) { [bool]$testResult.IsInstalled }
-                       else { $false }
-
-        $tag = if ($isInstalled) { "[PASS]" } else { "[    ]" }
-        $displayText = "$tag $($stepNum). $($stepConfig.StepName) - $($stepConfig.Description)"
-
-        $options += $displayText
-        $stepIdMap += $stepId
-
-        # 默认勾选策略：未安装 + 非可选 → 勾选
-        if (-not $isInstalled -and -not $stepConfig.IsOptional) {
-            $defaultSelected += $i
-        }
-    }
-
-    $selectedIndices = @(Show-MultiSelectMenu `
-        -Title "进阶扩展 - 选择要安装的组件：" `
-        -Options $options `
-        -DefaultSelected $defaultSelected)
-
-    # 安全的空值检查：处理 $null 或空数组
-    if (-not $selectedIndices -or $selectedIndices.Count -eq 0) {
-        return @()
-    }
-
-    $selectedStepIds = @()
-    foreach ($idx in $selectedIndices) {
-        $selectedStepIds += $stepIdMap[$idx]
-    }
-
-    return $selectedStepIds
-}
-
-# ─── 菜单函数 ───────────────────────────────────────────────────────────────
-
-function Select-TopLevelAction {
-    <#
-    .SYNOPSIS
-    显示顶层分组选择菜单
-    .RETURNS
-    选中的索引（0=基础, 1=进阶, 2=MCP管理, -1=Esc）
-    #>
-    param()
-
-    $options = @(
-        "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置"
-        "进阶扩展 - 增强工具, 配置, 工作流, 多模型"
-        "MCP 管理 - 查看状态, 切换, 删除"
-    )
-
-    return Show-SingleSelectMenu -Title "请选择操作：" -Options $options -DefaultIndex 0
-}
-
-function Select-AdvancedAction {
-    <#
-    .SYNOPSIS
-    显示进阶扩展的子菜单
-    .RETURNS
-    选中的索引（0=一键, 1=可选, -1=Esc）
-    #>
-    param()
-
-    $options = @(
-        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Gemini CLI）"
-        "可选安装 - 选择要安装的组件"
-    )
-
-    return Show-SingleSelectMenu -Title "进阶扩展 - 请选择安装模式：" -Options $options -DefaultIndex 0
-}
-
-# ─── 步骤列表输出 ────────────────────────────────────────────────────────────
-
-function Show-StepList {
-    <#
-    .SYNOPSIS
-    列出所有注册步骤（供 -ListSteps 使用）
-    #>
-    param()
-
-    Write-UiInfo "已注册的安装步骤："
-    Write-Host ""
-
-    $stepIndex = 0
-    foreach ($groupName in @("Basic", "Advanced")) {
-        $group = $script:StepGroups[$groupName]
-        Write-UiInfo "─── $($group.Label)（$($group.Description)）───"
-        Write-Host ""
-
-        foreach ($stepId in $group.StepIds) {
-            $step = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
-            if (-not $step) { continue }
-
-            $stepIndex++
-            $tag = if ($step.IsOptional) { "[可选]" } else { "[必选]" }
-            Write-UiInfo "  $stepIndex. $tag $($step.StepName)"
-            Write-Host "       $($step.Description)" -ForegroundColor Gray
-            $deps = (Get-StepDependencies)[$stepId]
-            Write-Host "       依赖: $(if (-not $deps -or $deps.Count -eq 0) { '无' } else { $deps -join ', ' })" -ForegroundColor Gray
-            Write-Host ""
-        }
-    }
-}
-
-# ─── 最终摘要展示 ────────────────────────────────────────────────────────────
-
-function Show-FinalSummary {
-    param(
-        [Parameter(Mandatory = $true)]
         [InstallState]$State,
-
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Results
+        [string[]]$ExecutedStepIds,
+        [string[]]$SkippedStepIds = @(),
+        [string]$SnapshotDir = ""
     )
 
-    Write-Host ""
+    $updated = @()
+    $upToDate = @()
+    $failed = @()
 
-    # 仅展示本次执行计划中涉及的步骤
-    $summaryItems = @()
-
-    foreach ($stepId in $Results.ExecutedStepIds) {
+    foreach ($stepId in $ExecutedStepIds) {
         $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
         $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
 
         if ($State.StepResults.ContainsKey($stepId)) {
             $stepResult = $State.StepResults[$stepId]
-            $statusText = switch ($stepResult.Status) {
-                ([StepStatus]::Success) { "成功" }
-                ([StepStatus]::Skipped) { "跳过" }
-                ([StepStatus]::Failed)  { "失败" }
-                ([StepStatus]::Pending) { "未执行" }
-                default                 { "未知" }
+            $items = @()
+            if ($stepResult.Data -and $stepResult.Data.ContainsKey("UpdatedItems")) {
+                $items = @($stepResult.Data["UpdatedItems"])
             }
 
-            $version = if ($stepResult.Data -and $stepResult.Data.ContainsKey("Version") -and $stepResult.Data["Version"]) {
-                [string]$stepResult.Data["Version"]
+            if ($stepResult.Status -eq [StepStatus]::Failed) {
+                $failed += @{ Name = $stepName; Detail = $stepResult.ErrorDetails }
+            } elseif ($items.Count -gt 0 -and @($items | Where-Object { $_ -match "^noop::" }).Count -eq $items.Count) {
+                $upToDate += @{ Name = $stepName; Items = ($items -join ", ") }
+            } elseif ($stepResult.Status -eq [StepStatus]::Skipped) {
+                # Skipped 由生命周期标记
             } else {
-                "-"
-            }
-        } else {
-            # 在执行计划中但未进入生命周期（如依赖检查失败）
-            $statusText = "跳过"
-            $version = "-"
-        }
-
-        $summaryItems += [PSCustomObject]@{
-            Name    = $stepName
-            Status  = $statusText
-            Version = $version
-        }
-    }
-
-    if ($summaryItems -and $summaryItems.Count -gt 0) {
-        Show-InstallSummary -Items $summaryItems
-    }
-
-    Write-Host ""
-    Write-UiInfo "安装统计："
-    Write-UiSuccess "  成功: $($Results.Success)"
-    if ($Results.Skipped -gt 0) {
-        Write-UiWarn "  跳过: $($Results.Skipped)"
-    }
-    if ($Results.Failed -gt 0) {
-        Write-UiError "  失败: $($Results.Failed)"
-    }
-
-    Write-Host ""
-
-    if ($Results.Failed -eq 0) {
-        Write-Host ""
-        Write-UiInfo "快速开始："
-        Write-UiInfo "  claude          - 启动 Claude Code"
-        Write-UiInfo "  claude --help   - 查看帮助信息"
-    } else {
-        Write-UiWarn "安装完成，但有 $($Results.Failed) 个步骤失败"
-        Write-Host ""
-        Write-UiInfo "失败步骤列表："
-        foreach ($stepId in $Results.ExecutedStepIds) {
-            if ($State.StepResults.ContainsKey($stepId)) {
-                $stepResult = $State.StepResults[$stepId]
-                if ($stepResult.Status -eq [StepStatus]::Failed) {
-                    Write-UiError "  $($stepResult.StepName): $($stepResult.ErrorDetails)"
+                $realChanges = @($items | Where-Object { $_ -notmatch "^noop::" })
+                if ($realChanges.Count -gt 0) {
+                    $updated += @{ Name = $stepName; Items = ($realChanges -join ", ") }
+                } else {
+                    $upToDate += @{ Name = $stepName; Items = "no-change" }
                 }
             }
         }
-        Write-Host ""
-        Write-UiInfo "重新运行安装器可重试失败步骤"
     }
 
     Write-Host ""
+    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "  更新结果摘要" -ForegroundColor Cyan
+    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
 
-    $State.IsCompleted = ($Results.Failed -eq 0)
+    Write-Host ""
+    if ($updated.Count -gt 0) {
+        Write-Host "  Updated ($($updated.Count)):" -ForegroundColor Green
+        foreach ($item in $updated) {
+            Write-Host "    $($item.Name)" -ForegroundColor White -NoNewline
+            Write-Host "  $($item.Items)" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "  Updated (0)" -ForegroundColor Green
+    }
+
+    if ($upToDate.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Already Up-to-Date ($($upToDate.Count)):" -ForegroundColor DarkGray
+        foreach ($item in $upToDate) {
+            Write-Host "    $($item.Name)" -ForegroundColor DarkGray -NoNewline
+            if ($item.Items -match "fingerprint-match") {
+                Write-Host "  (指纹一致)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  (内容无变更)" -ForegroundColor DarkGray
+            }
+        }
+    }
+
+    if ($failed.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Failed ($($failed.Count)):" -ForegroundColor Red
+        foreach ($item in $failed) {
+            Write-Host "    $($item.Name)" -ForegroundColor Red -NoNewline
+            Write-Host "  $($item.Detail)" -ForegroundColor DarkRed
+        }
+    }
+
+    if ($SkippedStepIds.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Skipped ($($SkippedStepIds.Count)):" -ForegroundColor Yellow
+        foreach ($stepId in $SkippedStepIds) {
+            $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+            $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
+            Write-Host "    $stepName" -ForegroundColor Yellow -NoNewline
+            Write-Host "  (未安装)" -ForegroundColor DarkYellow
+        }
+    }
+
+    if ($SnapshotDir -and (Test-Path $SnapshotDir)) {
+        Write-Host ""
+        Write-Host "  备份路径: $SnapshotDir" -ForegroundColor DarkGray
+    }
+
+    Write-Host ""
+    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
 }
 
-# ─── 主函数 ──────────────────────────────────────────────────────────────────
+# ─── 更新状态检测（统一入口，一次性完成）────────────────────────────────────
+
+$script:NpmPackageMap = @{
+    "ClaudeCode"  = "@anthropic-ai/claude-code"
+    "Ccline"      = "@cometix/ccline"
+    "CodexCli"    = "@openai/codex"
+    "GeminiCli"   = "@google/gemini-cli"
+    "OpenSpec"    = "@fission-ai/openspec"
+}
+
+function Get-UpdateStatus {
+    <#
+    .SYNOPSIS
+    一次性检测所有可更新步骤的安装状态 + 远程版本
+    .RETURNS
+    hashtable[] — 每项包含 StepId/StepName/IsOptional/IsInstalled/CurrentVersion/LatestVersion/HasUpdate/StatusHint/Data
+    #>
+
+    $registry = Get-StepRegistry
+    $updatableSteps = @($registry | Where-Object { $_.UpdateFunction -ne "" })
+
+    Write-Host ""
+    Write-Host "正在检测组件状态与远程版本..." -ForegroundColor Gray
+
+    $outdated = Get-NpmOutdatedGlobal -Force
+
+    $ccgLatest = ""
+    try {
+        $ccgViewResult = Invoke-ExternalCommand `
+            -Command "npm" `
+            -Arguments @("view", "ccg-workflow", "version") `
+            -TimeoutSeconds 30 -RetryCount 0 -SuppressOutput
+        if ($ccgViewResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($ccgViewResult.Output)) {
+            $ccgLatest = $ccgViewResult.Output.Trim()
+        }
+    } catch { }
+
+    $fpManifest = Read-UpdateManifest
+
+    $statusList = @()
+
+    foreach ($step in $updatableSteps) {
+        $entry = @{
+            StepId         = $step.StepId
+            StepName       = $step.StepName
+            IsOptional     = $step.IsOptional
+            IsInstalled    = $false
+            CurrentVersion = ""
+            LatestVersion  = ""
+            HasUpdate      = $null
+            StatusHint     = ""
+            Data           = @{}
+        }
+
+        try {
+            $testResult = & $step.TestFunction
+            if ($testResult -is [hashtable] -and $testResult.IsInstalled) {
+                $entry.IsInstalled = $true
+                $entry.CurrentVersion = if ($testResult.Version) { $testResult.Version } else { "" }
+            } elseif ($testResult -is [bool] -and $testResult) {
+                $entry.IsInstalled = $true
+            }
+        } catch { }
+
+        if ($entry.IsInstalled) {
+            $npmPkg = $script:NpmPackageMap[$step.StepId]
+            if ($npmPkg) {
+                if ($outdated.ContainsKey($npmPkg)) {
+                    $entry.LatestVersion = $outdated[$npmPkg].Latest
+                    $entry.HasUpdate = $true
+                }
+                else {
+                    $entry.LatestVersion = $entry.CurrentVersion
+                    $entry.HasUpdate = $false
+                }
+            }
+            elseif ($step.StepId -eq "CcgWorkflow") {
+                # 分量检测：引擎版本 + 规则文件独立判定
+                $ccgComponents = Get-CcgWorkflowUpdateComponents -LatestVersion $ccgLatest
+                $entry.LatestVersion = $ccgComponents.LatestVersion
+                $entry.HasUpdate = ($ccgComponents.EngineNeedUpdate -or $ccgComponents.RulesNeedUpdate)
+                $entry.StatusHint = $ccgComponents.StatusHint
+                $entry.Data = @{
+                    UpdateKind       = $ccgComponents.UpdateKind
+                    EngineNeedUpdate = $ccgComponents.EngineNeedUpdate
+                    RulesNeedUpdate  = $ccgComponents.RulesNeedUpdate
+                }
+            }
+            elseif ($step.StepId -in $script:FingerprintManagedSteps) {
+                $desiredFp = Get-StepDesiredFingerprint -StepId $step.StepId
+                if ($desiredFp) {
+                    $storedEntry = $fpManifest["steps"][$step.StepId]
+                    if ($storedEntry -and $storedEntry["fingerprint"] -eq $desiredFp) {
+                        $entry.HasUpdate = $false
+                    } else {
+                        $entry.HasUpdate = $true
+                    }
+                }
+            }
+        }
+
+        $statusList += $entry
+    }
+
+    return $statusList
+}
+
+function Show-UpdateStatus {
+    <#
+    .SYNOPSIS
+    展示组件状态表（统一格式）
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$StatusList
+    )
+
+    Write-Host ""
+    Write-Host "组件状态:" -ForegroundColor Cyan
+    Write-Host ""
+
+    foreach ($entry in $StatusList) {
+        if (-not $entry.IsInstalled) { continue }
+
+        $stepIdDisplay = $entry.StepId.PadRight(15)
+        $stepNameDisplay = $entry.StepName.PadRight(20)
+        $versionDisplay = if ($entry.CurrentVersion) { " ($($entry.CurrentVersion))" } else { "" }
+
+        if ($entry.HasUpdate -eq $true) {
+            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
+            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
+            # 优先使用 StatusHint 进行分级展示
+            if (-not [string]::IsNullOrWhiteSpace($entry.StatusHint)) {
+                Write-Host "[$($entry.StatusHint)]" -ForegroundColor Yellow
+            } else {
+                Write-Host "[有更新]$versionDisplay" -ForegroundColor Yellow -NoNewline
+                Write-Host " -> $($entry.LatestVersion)" -ForegroundColor Cyan
+            }
+        }
+        elseif ($entry.HasUpdate -eq $false) {
+            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
+            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
+            Write-Host "[已是最新]$versionDisplay" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
+            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
+            Write-Host "[已安装]" -ForegroundColor Green
+        }
+    }
+
+    $updatesCount = @($StatusList | Where-Object { $_.HasUpdate -eq $true }).Count
+    $installedCount = @($StatusList | Where-Object { $_.IsInstalled }).Count
+
+    Write-Host ""
+    if ($updatesCount -gt 0) {
+        Write-Host "  $installedCount 个组件已安装，其中 $updatesCount 个有可用更新" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "  $installedCount 个组件已安装，所有 npm 组件均为最新版本" -ForegroundColor Green
+    }
+    Write-Host ""
+}
+
+# ─── 交互式步骤选择 ───────────────────────────────────────────────────────────
+
+function Select-UpdateSteps {
+    <#
+    .SYNOPSIS
+    交互式多选可更新步骤（使用预计算的状态数据）
+    .RETURNS
+    选中的 StepId 数组
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [array]$StatusList
+    )
+
+    $installedList = @($StatusList | Where-Object { $_.IsInstalled })
+
+    if ($installedList.Count -eq 0) {
+        Write-UiWarn "没有已安装的可更新步骤"
+        return @()
+    }
+
+    $options = @()
+    $defaultSelected = @()
+
+    for ($i = 0; $i -lt $installedList.Count; $i++) {
+        $entry = $installedList[$i]
+        $label = "$($entry.StepName)"
+
+        if ($entry.HasUpdate -eq $true) {
+            # 优先使用 StatusHint 进行分级展示
+            if (-not [string]::IsNullOrWhiteSpace($entry.StatusHint)) {
+                $label += " ($($entry.StatusHint))"
+            } elseif ($entry.LatestVersion -and $entry.CurrentVersion) {
+                $label += " ($($entry.CurrentVersion) -> $($entry.LatestVersion))"
+            } elseif ($entry.LatestVersion) {
+                $label += " (有更新 -> $($entry.LatestVersion))"
+            } else {
+                $label += " (模板已变更)"
+            }
+            $defaultSelected += $i
+        }
+        elseif ($entry.HasUpdate -eq $false) {
+            $label += if ($entry.CurrentVersion) { " (已是最新 $($entry.CurrentVersion))" } else { " (已是最新)" }
+        }
+        else {
+            $label += " (已安装)"
+            $defaultSelected += $i
+        }
+        $options += $label
+    }
+
+    Write-Host ""
+    Write-Host "选择要更新的组件（空格切换选择，Enter 确认，Esc 取消）:" -ForegroundColor Cyan
+    Write-Host ""
+
+    $selectedIndices = Show-MultiSelectMenu -Title "可更新组件" -Options $options -DefaultSelected $defaultSelected
+
+    if ($null -eq $selectedIndices -or @($selectedIndices).Count -eq 0) {
+        Write-UiInfo "未选择任何步骤，退出更新"
+        return @()
+    }
+
+    $selectedStepIds = @()
+    foreach ($idx in @($selectedIndices)) {
+        $selectedStepIds += $installedList[$idx].StepId
+    }
+
+    return $selectedStepIds
+}
+
+# ─── 更新核心执行 ─────────────────────────────────────────────────────────────
+
+function Invoke-UpdateAction {
+    <#
+    .SYNOPSIS
+    执行更新动作（统一入口，含 Mutex/快照/指纹预检）
+    .PARAMETER ListOnly
+    仅显示状态，不执行更新
+    #>
+    param([switch]$ListOnly)
+
+    $updateStatus = Get-UpdateStatus
+    Show-UpdateStatus -StatusList $updateStatus
+
+    if ($ListOnly) {
+        $hasUpdates = @($updateStatus | Where-Object { $_.HasUpdate -eq $true }).Count -gt 0
+        if ($hasUpdates) {
+            Write-Host "提示: 运行 " -ForegroundColor Gray -NoNewline
+            Write-Host "pwsh -File installer/Manage-ClaudeEnv.ps1 -Action Update" -ForegroundColor Cyan -NoNewline
+            Write-Host " 选择并更新组件" -ForegroundColor Gray
+            Write-Host ""
+        }
+        return 0
+    }
+
+    # Mutex 获取
+    $mutex = $null
+    $acquired = $false
+
+    try {
+        $mutex = [System.Threading.Mutex]::new($false, "Global\CCQ.Update.Lock")
+        $acquired = $mutex.WaitOne(0)
+
+        if (-not $acquired) {
+            Write-Host ""
+            Write-Host "[ERROR] 另一个更新实例正在运行，请等待其完成后再试" -ForegroundColor Red
+            Write-Host ""
+            return -1
+        }
+
+        # 构建执行计划
+        $selectedIds = @(Select-UpdateSteps -StatusList $updateStatus)
+        if ($selectedIds.Count -eq 0) { return 0 }
+
+        $plan = @(Build-UpdatePlan -RequestedSteps $selectedIds)
+        if ($plan.Count -eq 0) {
+            Write-UiInfo "没有需要更新的步骤"
+            return 0
+        }
+
+        # 指纹预检（CcgWorkflow 排除：由其内部分量逻辑决定是否 noop）
+        $manifest = Read-UpdateManifest
+        $fingerprintSkips = @{}
+
+        foreach ($stepConfig in $plan) {
+            $sid = $stepConfig.StepId
+            if ($sid -notin $script:FingerprintManagedSteps) { continue }
+            # CcgWorkflow 不走通用指纹预检，避免"分量更新"被短路
+            if ($sid -eq "CcgWorkflow") { continue }
+
+            $desiredFp = Get-StepDesiredFingerprint -StepId $sid
+            if (-not $desiredFp) { continue }
+
+            $storedEntry = $manifest["steps"][$sid]
+            if ($storedEntry -and $storedEntry["fingerprint"] -eq $desiredFp) {
+                $testFn = $stepConfig.TestFunction
+                $isHealthy = $false
+                try {
+                    $testResult = & $testFn
+                    if ($testResult -is [hashtable]) {
+                        $isHealthy = [bool]$testResult.IsInstalled
+                    } elseif ($testResult -is [bool]) {
+                        $isHealthy = $testResult
+                    }
+                } catch { }
+
+                if ($isHealthy) {
+                    $fingerprintSkips[$sid] = $desiredFp
+                }
+            }
+        }
+
+        # 显示执行计划
+        Write-Host ""
+        Write-Host "更新执行计划:" -ForegroundColor Cyan
+        for ($i = 0; $i -lt $plan.Count; $i++) {
+            $sid = $plan[$i].StepId
+            if ($fingerprintSkips.ContainsKey($sid)) {
+                Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor DarkGray -NoNewline
+                Write-Host "  [指纹一致, 跳过]" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor White
+            }
+        }
+        if ($fingerprintSkips.Count -gt 0) {
+            Write-Host ""
+            Write-UiInfo "指纹预检: $($fingerprintSkips.Count) 个步骤模板未变更，将跳过"
+        }
+        Write-Host ""
+
+        # 条件快照
+        $stepsNeedingExecution = @($plan | Where-Object { -not $fingerprintSkips.ContainsKey($_.StepId) })
+        $snapshotDir = ""
+
+        if ($stepsNeedingExecution.Count -gt 0) {
+            $filesToBackup = @(
+                "$(Get-UserHome)\.claude\settings.json",
+                "$(Get-UserHome)\.claude.json",
+                "$(Get-UserHome)\.claude\CLAUDE.md",
+                (Get-McpMetaPath)
+            )
+            $rulesDir = "$(Get-UserHome)\.claude\rules"
+            if (Test-Path $rulesDir) {
+                $ruleFiles = Get-ChildItem $rulesDir -Include "ccq-*.md", "ccg-*.md" -ErrorAction SilentlyContinue
+                if ($ruleFiles) {
+                    foreach ($rf in $ruleFiles) {
+                        $filesToBackup += $rf.FullName
+                    }
+                }
+            }
+            $existingFiles = @($filesToBackup | Where-Object { Test-Path $_ })
+
+            if ($existingFiles.Count -gt 0) {
+                $snapshotDir = New-UpdateSnapshot -FilePaths $existingFiles
+                Write-UiInfo "备份快照已创建: $snapshotDir"
+            } else {
+                Write-UiWarn "没有找到需要备份的文件，跳过快照"
+            }
+        } else {
+            Write-UiInfo "所有步骤均为指纹命中，跳过备份快照"
+        }
+
+        # 创建安装状态
+        $state = [InstallState]::new()
+        $state.Mode = "Update"
+
+        $executedStepIds = @()
+        $skippedStepIds = @()
+        $successCount = 0
+        $failCount = 0
+
+        # 遍历执行计划
+        foreach ($stepConfig in $plan) {
+            $stepId = $stepConfig.StepId
+
+            # 指纹命中 → noop
+            if ($fingerprintSkips.ContainsKey($stepId)) {
+                Write-Host ""
+                Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor DarkGray
+                Write-UiInfo "模板指纹一致，跳过"
+
+                $skipResult = [StepResult]::new($stepId, $stepConfig.StepName)
+                $skipResult.Status = [StepStatus]::Success
+                $skipResult.Message = "fingerprint-match"
+                $skipResult.Data = @{ UpdatedItems = @("noop::${stepId}::fingerprint-match") }
+                $skipResult.StartTime = Get-Date
+                $skipResult.EndTime = Get-Date
+                $state.StepResults[$stepId] = $skipResult
+
+                $executedStepIds += $stepId
+                $successCount++
+                continue
+            }
+
+            Write-Host ""
+            Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor Cyan
+
+            $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing "Ask"
+
+            $executedStepIds += $stepId
+
+            if ($stepResult.Status -eq [StepStatus]::Success) {
+                $successCount++
+
+                # 指纹管理步骤更新成功 → 回写清单
+                if ($stepId -in $script:FingerprintManagedSteps) {
+                    $newFp = Get-StepDesiredFingerprint -StepId $stepId
+                    if ($newFp) {
+                        $manifestEntry = @{
+                            fingerprint = $newFp
+                            appliedAt   = (Get-Date).ToUniversalTime().ToString("o")
+                        }
+                        # CcgWorkflow 增加 components 子字段以记录分量状态
+                        if ($stepId -eq "CcgWorkflow") {
+                            $configToml = "$(Get-UserHome)\.claude\.ccg\config.toml"
+                            $engineVer = ""
+                            if (Test-Path $configToml) {
+                                $tomlContent = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+                                if ($tomlContent -match 'version\s*=\s*"([^"]+)"') {
+                                    $engineVer = $matches[1]
+                                }
+                            }
+                            $manifestEntry["components"] = @{
+                                engineVersion    = $engineVer
+                                rulesFingerprint = Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate
+                            }
+                        }
+                        $manifest["steps"][$stepId] = $manifestEntry
+                        try {
+                            Write-UpdateManifest -Manifest $manifest
+                        } catch {
+                            Write-UiWarn "清单回写失败: $($_.Exception.Message)"
+                        }
+                    }
+                }
+            } elseif ($stepResult.Status -eq [StepStatus]::Failed) {
+                $failCount++
+            } elseif ($stepResult.Status -eq [StepStatus]::Skipped) {
+                $skippedStepIds += $stepId
+            }
+        }
+
+        # 清理旧快照
+        try {
+            Clear-OldUpdateSnapshots -CurrentSnapshotDir $snapshotDir
+        } catch {
+            Write-UiWarn "旧快照清理失败: $($_.Exception.Message)"
+        }
+
+        # 显示结果摘要
+        Show-UpdateSummary -State $state -ExecutedStepIds $executedStepIds `
+            -SkippedStepIds $skippedStepIds -SnapshotDir $snapshotDir
+
+        if ($failCount -gt 0) {
+            Write-UiError "有 $failCount 个步骤更新失败"
+        }
+
+        return $failCount
+
+    } finally {
+        if ($acquired -and $mutex) {
+            try {
+                $mutex.ReleaseMutex()
+            } catch { }
+        }
+        if ($mutex) {
+            $mutex.Dispose()
+        }
+    }
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 顶层菜单
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function Select-ManageAction {
+    <#
+    .SYNOPSIS
+    显示管理动作选择菜单
+    .RETURNS
+    选中的索引（0=更新, 1=供应商, 2=MCP, -1=Esc）
+    #>
+    param()
+
+    $options = @(
+        "更新管理   - 检测并更新已安装组件"
+        "供应商管理  - 管理 AI 供应商配置"
+        "MCP 管理   - 管理 MCP Server 配置"
+    )
+
+    return Show-SingleSelectMenu -Title "CCQ 环境管理" -Options $options -DefaultIndex 0
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 主函数
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function Main {
     param()
 
     try {
-        # 仅列出步骤时快速退出
-        if ($ListSteps) {
-            Show-StepList
-            return
-        }
-
         # 欢迎横幅
-        Show-CcqLogo -Subtitle "Claude Code Quickstart"
+        Show-CcqLogo -Subtitle "CCQ 环境管理"
 
-        Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
+        Write-UiInfo "管理已安装组件的更新、供应商和 MCP 配置"
         Write-Host ""
 
-        # 创建新的安装状态（纯内存，不持久化）
-        $state = [InstallState]::new()
-
-        # ── 参数组合校验
-        if ($Mode -ne "" -and $Group -eq "") {
-            Write-UiError "参数错误：-Mode 必须与 -Group 一起使用"
-            return
-        }
-        if ($Group -eq "Basic" -and $Mode -eq "Select") {
-            Write-UiError "参数错误：基础环境仅支持一键安装（-Group Basic），不支持 -Mode Select"
-            return
-        }
-
         # ── CLI 参数模式
-        if ($Group -ne "") {
-            $state.Mode = "Manage-$Group"
-
-            if ($Group -eq "Basic") {
-                # 基础环境：直接一键安装
-                Write-UiInfo "基础环境一键安装模式"
-                Write-Host ""
-                $basicStepIds = $script:StepGroups["Basic"].StepIds
-                $results = Invoke-GroupedInstall -StepIds $basicStepIds -State $state
-                if ($results.Total -gt 0) {
-                    Show-FinalSummary -State $state -Results $results
+        if ($Action -ne "") {
+            $exitCode = 0
+            switch ($Action) {
+                "Update" {
+                    $updateResult = Invoke-UpdateAction -ListOnly:$ListUpdates
+                    if ($updateResult -ne 0) { $exitCode = 1 }
                 }
-            }
-            elseif ($Group -eq "Advanced") {
-                if ($Mode -eq "Select") {
-                    # 进阶：多选模式
-                    Write-UiInfo "进阶扩展可选安装模式"
-                    Write-Host ""
-                    $selectedIds = @(Show-AdvancedSelectMenu)
-                    if ($selectedIds -and $selectedIds.Count -gt 0) {
-                        $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state
-                        if ($results.Total -gt 0) {
-                            Show-FinalSummary -State $state -Results $results
-                        }
-                    } else {
-                        Write-UiWarn "未选择任何步骤"
+                "Provider" {
+                    if ($ListProviders) {
+                        # CLI 查看供应商列表
+                        try { Sync-ProviderFromSettings } catch { }
+                        Show-ProviderStatus
+                    }
+                    elseif (-not [string]::IsNullOrWhiteSpace($Provider)) {
+                        # CLI 直接切换供应商
+                        try { Sync-ProviderFromSettings } catch { }
+                        Switch-Provider -Key $Provider
+                    }
+                    else {
+                        # 交互式供应商管理
+                        Show-ProviderManageMenu
                     }
                 }
-                else {
-                    # 进阶：一键安装（默认，排除可选步骤）
-                    Write-UiInfo "进阶扩展一键安装模式"
-                    Write-Host ""
-                    $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {
-                        $sid = $_
-                        $stepCfg = $script:StepRegistry | Where-Object { $_.StepId -eq $sid } | Select-Object -First 1
-                        if (-not $stepCfg.IsOptional) { $sid }
-                    })
-                    $results = Invoke-GroupedInstall -StepIds $advancedStepIds -State $state
-                    if ($results.Total -gt 0) {
-                        Show-FinalSummary -State $state -Results $results
-                    }
+                "Mcp" {
+                    Show-McpManageMenu
                 }
             }
-            elseif ($Group -eq "Mcp") {
-                # MCP 管理
-                Show-McpManageMenu
-            }
-
+            if ($exitCode -ne 0) { exit $exitCode }
             return
         }
 
-        # ── -Staged 参数：进入交互菜单
-        # ── 无参数：也进入交互菜单
-
-        $state.Mode = "Manage-Interactive"
-
+        # ── 交互模式
         while ($true) {
-            $topChoice = Select-TopLevelAction
+            $choice = Select-ManageAction
 
-            if ($topChoice -eq -1) {
+            if ($choice -eq -1) {
                 Write-Host ""
-                Write-UiInfo "退出 CCQ"
+                Write-UiInfo "退出 CCQ 管理"
                 break
             }
 
-            if ($topChoice -eq 0) {
-                # 基础环境：直接一键安装
-                Write-Host ""
-                Write-UiInfo "基础环境一键安装"
-                Write-Host ""
-
-                $basicStepIds = $script:StepGroups["Basic"].StepIds
-                $results = Invoke-GroupedInstall -StepIds $basicStepIds -State $state
-
-                if ($results.Total -gt 0) {
-                    Show-FinalSummary -State $state -Results $results
-                }
-
-                Write-Host ""
-                Write-Host "按任意键返回主菜单..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            elseif ($topChoice -eq 1) {
-                # 进阶扩展：显示子菜单
-                $advChoice = Select-AdvancedAction
-
-                if ($advChoice -eq -1) {
-                    continue
-                }
-
-                if ($advChoice -eq 0) {
-                    # 一键安装（排除可选步骤）
-                    Write-Host ""
-                    Write-UiInfo "进阶扩展一键安装"
-                    Write-Host ""
-
-                    $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {
-                        $sid = $_
-                        $stepCfg = $script:StepRegistry | Where-Object { $_.StepId -eq $sid } | Select-Object -First 1
-                        if (-not $stepCfg.IsOptional) { $sid }
-                    })
-                    $results = Invoke-GroupedInstall -StepIds $advancedStepIds -State $state
-
-                    if ($results.Total -gt 0) {
-                        Show-FinalSummary -State $state -Results $results
-                    }
-
+            switch ($choice) {
+                0 {
+                    # 更新管理（捕获返回值，防止 $failCount 泄漏到控制台）
+                    $null = Invoke-UpdateAction
                     Write-Host ""
                     Write-Host "按任意键返回主菜单..." -ForegroundColor Gray
                     $null = [Console]::ReadKey($true)
                 }
-                elseif ($advChoice -eq 1) {
-                    # 可选安装
-                    Write-Host ""
-                    $selectedIds = @(Show-AdvancedSelectMenu)
-
-                    if ($selectedIds -and $selectedIds.Count -gt 0) {
-                        $results = Invoke-GroupedInstall -StepIds $selectedIds -State $state
-
-                        if ($results.Total -gt 0) {
-                            Show-FinalSummary -State $state -Results $results
-                        }
-                    } else {
-                        Write-UiWarn "未选择任何步骤"
-                    }
-
-                    Write-Host ""
-                    Write-Host "按任意键返回主菜单..." -ForegroundColor Gray
-                    $null = [Console]::ReadKey($true)
+                1 {
+                    # 供应商管理
+                    Show-ProviderManageMenu
                 }
-            }
-            elseif ($topChoice -eq 2) {
-                # MCP 管理
-                Show-McpManageMenu
+                2 {
+                    # MCP 管理
+                    Show-McpManageMenu
+                }
             }
         }
 
     } catch {
-        Write-UiError "CCQ 运行中发生严重错误: $($_.Exception.Message)"
+        Write-UiError "CCQ 管理运行中发生严重错误: $($_.Exception.Message)"
         Write-Host ""
         Show-ErrorDetails `
             -FriendlyMessage "CCQ 遇到未预期的错误，请查看技术详情" `
             -TechnicalDetails "$($_.Exception.Message)`n$($_.ScriptStackTrace)"
         exit 1
     }
+}
+
+# ─── 异常保护 ──────────────────────────────────────────────────────────────
+trap {
+    Write-Host ""
+    if ($_.Exception -is [System.Management.Automation.PipelineStoppedException] -or
+        $_.Exception -is [System.OperationCanceledException]) {
+        Write-UiWarn "操作被用户中断 (Ctrl+C)"
+    } else {
+        Write-UiError "异常中断: $($_.Exception.Message)"
+    }
+    Write-UiInfo "已完成的操作将保留，未完成的可重新运行"
+    break
 }
 
 # ─── 脚本入口点 ──────────────────────────────────────────────────────────────

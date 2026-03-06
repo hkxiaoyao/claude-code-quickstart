@@ -37,7 +37,7 @@ jobs:
           if (-not (Test-Path $managePath))    { throw "Manage 构建产物不存在" }
           Write-Host "[PASS] 构建产物验证通过" -ForegroundColor Green
           Write-Host "  Bootstrap: $([math]::Round((Get-Item $bootstrapPath).Length / 1KB, 1)) KB"
-          Write-Host "  Installer: $([math]::Round((Get-Item $installerPath).Length / 1KB, 1)) KB"
+          Write-Host "  Install:   $([math]::Round((Get-Item $installerPath).Length / 1KB, 1)) KB"
           Write-Host "  Manage:    $([math]::Round((Get-Item $managePath).Length / 1KB, 1)) KB"
 
       - name: 上传构建产物（Artifacts）
@@ -81,7 +81,7 @@ jobs:
             **步骤 2**（在 PowerShell 7 中运行）：
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Manage-ClaudeEnv.built.ps1' | iex
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Install-ClaudeEnv.built.ps1' | iex
             ```
 
             ---
@@ -91,7 +91,7 @@ jobs:
             | 文件 | PS 版本要求 | 用途 |
             |------|------------|------|
             | `Bootstrap-ClaudeEnv.built.ps1` | 5.1+ | 安装前置依赖（首先运行）|
-            | `Manage-ClaudeEnv.built.ps1` | 7.0+ | 分组安装 Claude Code 开发环境（推荐）|
-            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 全量安装 Claude Code 开发环境（维护中）|
+            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 安装 Claude Code 开发环境（基础 + 进阶）|
+            | `Manage-ClaudeEnv.built.ps1` | 7.0+ | 统一管理（更新组件 / 供应商管理 / MCP 管理）|
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

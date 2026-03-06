@@ -111,6 +111,16 @@ function Get-ClaudeMdPath {
     }
 }
 
+function Get-ClaudeMdFingerprint {
+    <#
+    .SYNOPSIS
+    计算 ClaudeMd 步骤的内容指纹（供 Manage 更新指纹预检使用）
+    .RETURNS
+    string - 基于模板内容的 SHA-256 指纹
+    #>
+    return Get-StringFingerprint -Text $script:ClaudeMdTemplate
+}
+
 # ============================================================
 # 步骤生命周期函数
 # ============================================================
@@ -118,7 +128,11 @@ function Get-ClaudeMdPath {
 function Test-ClaudeMdInstalled {
     <#
     .SYNOPSIS
-    检测 CLAUDE.md 是否已配置（仅检查主文件）
+    检测 CLAUDE.md 是否已配置（仅检查基础安装态）
+    .DESCRIPTION
+    只检查主文件存在 + 主标题标识存在。
+    章节完整性和模板版本漂移由 Update（指纹比对）处理，
+    避免因大幅模板变更而误判为"未安装"导致被踢出更新候选。
     .RETURNS
     标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
@@ -127,13 +141,7 @@ function Test-ClaudeMdInstalled {
     return Invoke-UnifiedCheck -StepId "ClaudeMd" -DisplayName "CLAUDE.md 配置" `
         -PathChecks @(
             @{ Path = $claudeMdPath; Type = "File"; ContentMatch = "# Claude  Code 增强配置" }
-        ) `
-        -CustomVerify {
-            $content = Get-Content $claudeMdPath -Raw -ErrorAction SilentlyContinue
-            $has1 = $content -match "## 一、核心原则"
-            $has2 = $content -match "## 二、工作流原则"
-            return ($has1 -and $has2)
-        } -UseCache
+        ) -UseCache
 }
 
 function Install-ClaudeMd {

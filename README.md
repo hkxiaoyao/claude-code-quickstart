@@ -24,9 +24,9 @@
 - **依赖自动排序**：步骤按拓扑依赖顺序执行，无需手动关心安装顺序
 - **实时检测**：每次运行都实时检测组件状态，已安装组件自动跳过，无状态漂移问题
 - **两种安装模式**：一键安装全部组件 / 分阶段手动选择需要的组件
-- **统一更新系统**：声明式更新已安装组件，支持一键全量更新或指定步骤更新，自动备份快照
+- **统一管理系统**：更新已安装组件、管理 AI 供应商配置、管理 MCP Server，一站式管理
 - **MCP 管理器**：交互式管理 MCP Server — 查看状态、启用/禁用、删除，凭据持久化
-- **国内 AI 供应商适配**：支持智谱 GLM、MiniMax、Kimi（月之暗面），开箱即用
+- **国内 AI 供应商适配**：支持智谱 GLM、MiniMax、Kimi（月之暗面），开箱即用，供应商管理支持完整 CRUD
 - **智能命令验证**：验证命令实际可执行性，避免 PATH 记录存在但文件缺失的误报
 
 ---
@@ -57,27 +57,20 @@ Set-ExecutionPolicy Bypass -Scope Process -Force
 
 > 使用 `WebClient.DownloadData` + `UTF8.GetString` 显式 UTF-8 解码，避免 PS 5.1 默认代码页导致中文乱码
 
-#### 分组安装（PS 7+）
+#### 安装 Claude Code 环境（PS 7+）
 
 引导完成后，在 **PowerShell 7**（`pwsh`）中运行：
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1' | iex
 ```
 
-#### 更新已安装组件（PS 7+）
+#### 管理已安装环境（PS 7+）
 
 ```powershell
-# 交互式多选更新（默认）
-irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Update-ClaudeEnv.built.ps1' | iex
-
-# 一键更新全部
-$s = irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Update-ClaudeEnv.built.ps1'
-& ([scriptblock]::Create($s)) -All
-
-# 仅查看可更新内容（不执行）
-& ([scriptblock]::Create($s)) -ListUpdates
+# 交互式管理（更新/供应商/MCP）
+irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
 ```
 
 ---
@@ -95,26 +88,21 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\Bootstrap-ClaudeEnv.built.ps1
 ```
 
-#### 分组安装（PS 7+）
+#### 安装 Claude Code 环境（PS 7+）
 
 ```powershell
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
+pwsh -File ".\Install-ClaudeEnv.built.ps1"
 ```
 
-#### 更新已安装组件（PS 7+）
+#### 管理已安装环境（PS 7+）
 
 ```powershell
-# 交互式多选更新（默认）
-pwsh -File ".\Update-ClaudeEnv.built.ps1"
+# 交互式管理（更新/供应商/MCP）
+pwsh -File ".\Manage-ClaudeEnv.built.ps1"
 
-# 一键更新全部
-pwsh -File ".\Update-ClaudeEnv.built.ps1" -All
-
-# 查看哪些组件有更新（不执行）
-pwsh -File ".\Update-ClaudeEnv.built.ps1" -ListUpdates
-
-# 指定步骤更新
-pwsh -File ".\Update-ClaudeEnv.built.ps1" -Steps ClaudeCode, Ccline
+# CLI 模式示例
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Action Update -ListUpdates
+pwsh -File ".\Manage-ClaudeEnv.built.ps1" -Action Provider -ListProviders
 ```
 
 ---
@@ -134,26 +122,22 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 引导脚本会自动完成：检测 Windows 版本 → 安装 winget → 推荐 Windows Terminal → **安装 PowerShell 7** → 配置 Git Bash UTF-8
 
-#### 分组安装（PS 7+）
+#### 安装 Claude Code 环境（PS 7+）
 
 ```powershell
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+pwsh -File ".\installer\Install-ClaudeEnv.ps1"
 ```
 
-#### 更新已安装组件（PS 7+）
+#### 管理已安装环境（PS 7+）
 
 ```powershell
-# 交互式多选更新（默认）
-pwsh -File ".\installer\Update-ClaudeEnv.ps1"
+# 交互式管理（更新/供应商/MCP）
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 
-# 一键更新全部
-pwsh -File ".\installer\Update-ClaudeEnv.ps1" -All
-
-# 查看哪些组件有更新（不执行）
-pwsh -File ".\installer\Update-ClaudeEnv.ps1" -ListUpdates
-
-# 指定步骤更新
-pwsh -File ".\installer\Update-ClaudeEnv.ps1" -Steps ClaudeCode, Ccline
+# CLI 模式示例
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Update -ListUpdates
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -ListProviders
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -Provider zhipu
 ```
 
 ---
@@ -168,8 +152,8 @@ pwsh -File ".\installer\Update-ClaudeEnv.ps1" -Steps ClaudeCode, Ccline
 
 ```powershell
 # 查看全部步骤列表及状态
-pwsh -File ".\Manage-ClaudeEnv.built.ps1" -ListSteps       # 单文件版
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps   # 源码版
+pwsh -File ".\Install-ClaudeEnv.built.ps1" -ListSteps       # 单文件版
+pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps   # 源码版
 ```
 
 ---
@@ -190,6 +174,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps   # 源码版
 | OpenSpec | npm install @latest |
 
 > **更新前自动备份**：更新前在 `%TEMP%\ClaudeEnvInstaller\Backups\` 创建快照目录，保留最近 5 个快照，方便回滚。
+> 更新组件请使用 `Manage-ClaudeEnv.ps1 -Action Update` 或交互式管理菜单。
 
 ---
 
@@ -200,9 +185,12 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -ListSteps   # 源码版
 ### 进入 MCP 管理
 
 ```powershell
-# 在分组安装器主菜单中选择"MCP 管理"
+# 在管理脚本中选择"MCP 管理"
 pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 # → 选择 [MCP 管理]
+
+# 或直接通过 CLI 进入
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Mcp
 ```
 
 ### 功能说明
@@ -289,18 +277,19 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 }
 ```
 
-### 供应商快速切换
+### 供应商管理
 
-配置供应商后，安装器会自动保存 Profile 文件到 `~/.claude/providers/`，并注入 `ccp` 命令到 PowerShell Profile。
+配置供应商后，安装器会自动保存 Profile 文件到 `~/.claude/providers/`。供应商管理（查看/切换/添加/修改/删除）通过管理脚本完成：
 
 ```powershell
-# 交互式选择供应商
-ccp
+# 交互式供应商管理
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider
 
-# 直接切换到指定供应商
-ccp zhipu
-ccp minimax
-ccp moonshot
+# CLI 直接切换供应商
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -Provider zhipu
+
+# 查看供应商列表
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -ListProviders
 ```
 
 切换时从 Profile 读取配置，合并到 `settings.json`（仅覆盖供应商字段，不影响其他配置）。切换后直接运行 `claude` 即可使用新供应商。
@@ -313,9 +302,8 @@ ccp moonshot
 claude-code-quickstart/
 ├── installer/
 │   ├── Bootstrap-ClaudeEnv.ps1   # PS 5.1 引导入口
-│   ├── Install-ClaudeEnv.ps1     # PS 7+ 主安装入口（全量安装）
-│   ├── Manage-ClaudeEnv.ps1      # PS 7+ 分组安装入口（推荐）
-│   ├── Update-ClaudeEnv.ps1      # PS 7+ 统一更新入口（声明式更新已安装组件）
+│   ├── Install-ClaudeEnv.ps1     # PS 7+ 安装入口（基础环境 + 进阶扩展）
+│   ├── Manage-ClaudeEnv.ps1      # PS 7+ 统一管理入口（更新/供应商/MCP）
 │   ├── build/                    # 构建工具目录
 │   │   ├── Build-SingleFile.ps1  # 单文件打包构建脚本
 │   │   └── dist/                 # 构建产物输出（gitignored，由 CI 自动构建）
@@ -327,7 +315,8 @@ claude-code-quickstart/
 │   │   ├── Net.ps1               # 网络检测与代理配置
 │   │   ├── Registry.ps1          # 共享步骤注册表（元数据、分组、依赖）
 │   │   ├── Bootstrap.ps1         # 步骤状态模型与调度引擎
-│   │   └── McpManager.ps1        # MCP Server 管理（状态/启用/禁用/删除/凭据 vault）
+│   │   ├── McpManager.ps1        # MCP Server 管理（状态/启用/禁用/删除/凭据 vault）
+│   │   └── Provider.ps1          # 供应商管理核心（CRUD + Sync + 菜单）
 │   └── steps/                    # 安装步骤模块（语义化命名）
 │       ├── NodeFnm.ps1
 │       ├── Git.ps1
@@ -380,19 +369,22 @@ gemini --help
 
 ```powershell
 # 单文件版
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
+pwsh -File ".\Install-ClaudeEnv.built.ps1"
 
 # 源码版
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+pwsh -File ".\installer\Install-ClaudeEnv.ps1"
 ```
 
 **Q：想重新配置供应商？**
 
-安装器的供应商配置步骤支持重入，每次运行都会检测当前配置，提供"保持/重新配置"选择。如果只是切换供应商，使用 `ccp` 更快：
+通过管理脚本的供应商管理功能完成：
 
 ```powershell
-ccp          # 交互式选择
-ccp zhipu    # 直接切换
+# 交互式供应商管理（查看/切换/添加/修改/删除）
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider
+
+# CLI 直接切换
+pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -Provider zhipu
 ```
 
 **Q：运行脚本报 "无法加载文件" 错误？**
@@ -436,11 +428,10 @@ pwsh -File ".\installer\build\Build-SingleFile.ps1"
 构建脚本会自动：
 - ✓ 按依赖顺序合并所有源文件
 - ✓ 移除 dot-source 引用和重复的 #Requires 声明
-- ✓ 生成四个单文件脚本到 `installer/build/dist/` 目录：
+- ✓ 生成三个单文件脚本到 `installer/build/dist/` 目录：
   - `Bootstrap-ClaudeEnv.built.ps1` - 引导脚本（PS 5.1+）
-  - `Install-ClaudeEnv.built.ps1` - 全量安装脚本（PS 7+）
-  - `Manage-ClaudeEnv.built.ps1` - 分组安装脚本（PS 7+，推荐）
-  - `Update-ClaudeEnv.built.ps1` - 统一更新脚本（PS 7+）
+  - `Install-ClaudeEnv.built.ps1` - 安装脚本（PS 7+，基础 + 进阶）
+  - `Manage-ClaudeEnv.built.ps1` - 管理脚本（PS 7+，更新/供应商/MCP）
 - ✓ 自动进行语法检查验证
 
 构建产物可直接分发给用户使用，无需携带整个源码目录。

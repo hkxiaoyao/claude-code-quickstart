@@ -70,7 +70,7 @@ function Get-StepRegistry {
             InstallFunction = "Install-ApiKey"
             VerifyFunction  = "Verify-ApiKey"
             UpdateFunction  = ""
-            SkipIfInstalled = $false
+            SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 40
             Dependencies    = @("ClaudeCode")
@@ -78,8 +78,8 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "Ccline"
-            StepName        = "ccline"
-            Description     = "安装 ccline 状态栏增强工具"
+            StepName        = "CCometixLine"
+            Description     = "安装 CCometixLine 状态栏增强工具"
             StepFile        = "steps/Ccline.ps1"
             TestFunction    = "Test-CclineInstalled"
             InstallFunction = "Install-Ccline"

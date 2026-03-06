@@ -1,0 +1,874 @@
+# Provider.ps1 - 供应商管理核心模块（CRUD + 同步 + 菜单）
+# 功能: 统一管理 AI 供应商配置，支持完整 CRUD、自动同步、交互式管理
+
+#Requires -Version 7.0
+
+Set-StrictMode -Version Latest
+
+# ─── 内置供应商模板（单一数据源，ApiKey.ps1 也引用此处）───────────────────────
+
+$script:BuiltinProviders = @{
+    "zhipu" = @{
+        Name        = "智谱 GLM"
+        Description = "智谱 AI，服务端自动路由到最新 GLM 模型"
+        BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
+        PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
+    }
+    "minimax" = @{
+        Name        = "MiniMax"
+        Description = "MiniMax API，支持 M2.5 系列模型"
+        BaseUrl     = "https://api.minimaxi.com/anthropic"
+        PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
+        ModelMapping = @{
+            "opus"   = "MiniMax-M2.5"
+            "sonnet" = "MiniMax-M2.5"
+            "haiku"  = "MiniMax-M2.5"
+        }
+    }
+    "moonshot" = @{
+        Name        = "Kimi (Moonshot)"
+        Description = "月之暗面 Kimi，支持 K2.5 系列模型"
+        BaseUrl     = "https://api.moonshot.cn/anthropic"
+        PlatformUrl = "https://platform.moonshot.cn/console/api-keys"
+        ModelMapping = @{
+            "opus"   = "kimi-k2.5"
+            "sonnet" = "kimi-k2.5"
+            "haiku"  = "kimi-k2.5"
+        }
+    }
+    "custom" = @{
+        Name        = "自定义供应商"
+        Description = "手动配置 Base URL 和 API Key"
+        BaseUrl     = ""
+        PlatformUrl = ""
+    }
+}
+
+# ─── 辅助函数 ──────────────────────────────────────────────────────────────────
+
+function Get-ProviderSettingsPath {
+    return "$(Get-UserHome)\.claude\settings.json"
+}
+
+function Get-ProviderProfilesDir {
+    return "$(Get-UserHome)\.claude\providers"
+}
+
+function Read-SettingsJson {
+    <#
+    .SYNOPSIS
+    安全读取 settings.json 并返回 hashtable
+    #>
+    $path = Get-ProviderSettingsPath
+    if (-not (Test-Path $path)) { return @{} }
+    try {
+        $content = Get-Content $path -Raw -Encoding UTF8
+        $settings = $content | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if (-not $settings) { return @{} }
+        return $settings
+    } catch {
+        return @{}
+    }
+}
+
+function Write-SettingsJsonAtomic {
+    <#
+    .SYNOPSIS
+    原子写入 settings.json（临时文件 + Move-Item）
+    #>
+    param([Parameter(Mandatory)] [hashtable]$Settings)
+
+    $path = Get-ProviderSettingsPath
+    $dir = Split-Path $path -Parent
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $tempPath = "$path.tmp"
+    $Settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+    Move-Item $tempPath $path -Force
+}
+
+function Get-MaskedApiKey {
+    <#
+    .SYNOPSIS
+    脱敏 API Key（前 4 位 + ... + 后 2 位）
+    #>
+    param([string]$Key)
+    if ([string]::IsNullOrWhiteSpace($Key)) { return "-" }
+    if ($Key.Length -le 8) { return "***" }
+    return $Key.Substring(0, 4) + "..." + $Key.Substring($Key.Length - 2)
+}
+
+function Test-ProviderKey {
+    <#
+    .SYNOPSIS
+    校验 Provider Key 合法性（防止路径穿越和非法字符）
+    #>
+    param([string]$Key)
+    return (-not [string]::IsNullOrWhiteSpace($Key) -and $Key -match '^[A-Za-z0-9._-]+$')
+}
+
+# ─── Sync（自动同步）──────────────────────────────────────────────────────────
+
+function Sync-ProviderFromSettings {
+    <#
+    .SYNOPSIS
+    检测 settings.json 中的活跃供应商是否在 providers/ 中有对应 Profile
+    如果没有，自动创建（迁移旧用户场景）
+    #>
+
+    $settings = Read-SettingsJson
+
+    # 提取当前配置的供应商信息
+    $authToken = ""
+    $baseUrl = ""
+    if ($settings.ContainsKey("env") -and $settings["env"]) {
+        $env = $settings["env"]
+        if ($env.ContainsKey("ANTHROPIC_AUTH_TOKEN")) { $authToken = $env["ANTHROPIC_AUTH_TOKEN"] }
+        if ($env.ContainsKey("ANTHROPIC_BASE_URL")) { $baseUrl = $env["ANTHROPIC_BASE_URL"] }
+    }
+
+    # 两者都必须非空才视为有效供应商配置（防止半配置状态触发同步）
+    if ([string]::IsNullOrWhiteSpace($authToken) -or [string]::IsNullOrWhiteSpace($baseUrl)) {
+        return
+    }
+
+    # 扫描现有 Profile → 匹配 BaseUrl
+    $profilesDir = Get-ProviderProfilesDir
+    if (Test-Path $profilesDir) {
+        # HC-13: 必须用 @() 包裹
+        $existingProfiles = @(Get-ChildItem $profilesDir -Filter "*.json" -ErrorAction SilentlyContinue)
+        foreach ($pf in $existingProfiles) {
+            try {
+                $profile = Get-Content $pf.FullName -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if ($profile -and $profile.ContainsKey("env") -and $profile["env"]) {
+                    $pfBaseUrl = if ($profile["env"].ContainsKey("ANTHROPIC_BASE_URL")) { $profile["env"]["ANTHROPIC_BASE_URL"] } else { "" }
+                    if (-not [string]::IsNullOrWhiteSpace($pfBaseUrl) -and -not [string]::IsNullOrWhiteSpace($baseUrl) -and
+                        $baseUrl -like "$pfBaseUrl*") {
+                        # 已有匹配 Profile → 无需同步
+                        return
+                    }
+                }
+            } catch { }
+        }
+    }
+
+    # 无匹配 Profile → 自动创建
+    $migrateKey = "custom"
+    $providerName = "自定义供应商"
+    foreach ($k in $script:BuiltinProviders.Keys) {
+        if ($k -eq "custom") { continue }
+        $p = $script:BuiltinProviders[$k]
+        if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and
+            -not [string]::IsNullOrWhiteSpace($baseUrl) -and
+            $baseUrl -like "$($p.BaseUrl)*") {
+            $migrateKey = $k
+            $providerName = $p.Name
+            break
+        }
+    }
+
+    # 自定义供应商: 用域名 + 路径哈希作 key（防止同域名不同路径冲突）
+    if ($migrateKey -eq "custom" -and -not [string]::IsNullOrWhiteSpace($baseUrl)) {
+        try {
+            $uri = [System.Uri]::new($baseUrl)
+            $hostPart = $uri.Host -replace '\.', '-'
+            # 路径非空且不只是 "/" 时追加路径哈希消歧
+            if ($uri.AbsolutePath -and $uri.AbsolutePath -ne "/") {
+                $pathHash = (Get-StringFingerprint -Text $uri.AbsolutePath).Substring(0, 4)
+                $migrateKey = "custom-${hostPart}-${pathHash}"
+            } else {
+                $migrateKey = "custom-${hostPart}"
+            }
+        } catch {
+            $migrateKey = "custom-unknown"
+        }
+    }
+
+    $newProfile = @{
+        "_meta" = @{
+            "provider"     = $providerName
+            "key"          = $migrateKey
+            "baseUrl"      = $baseUrl
+            "configuredAt" = (Get-Date -Format "o")
+        }
+        "env" = @{
+            "ANTHROPIC_AUTH_TOKEN" = $authToken
+            "ANTHROPIC_BASE_URL"  = $baseUrl
+        }
+    }
+
+    # 检查是否有 modelMapping
+    if ($settings.ContainsKey("modelMapping") -and $settings["modelMapping"]) {
+        $newProfile["modelMapping"] = $settings["modelMapping"]
+    }
+
+    # 原子写入 Profile
+    if (-not (Test-Path $profilesDir)) {
+        New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
+    }
+    $profilePath = Join-Path $profilesDir "$migrateKey.json"
+    $tempPath = "$profilePath.tmp"
+    $newProfile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+    Move-Item $tempPath $profilePath -Force
+
+    Write-UiInfo "已从当前配置自动同步供应商 Profile: $migrateKey.json"
+}
+
+# ─── Read ──────────────────────────────────────────────────────────────────────
+
+function Get-ProviderProfiles {
+    <#
+    .SYNOPSIS
+    扫描 ~/.claude/providers/*.json，返回 Profile 哈希表数组
+    .RETURNS
+    hashtable[] — 每项包含: Key, Name, BaseUrl, ConfiguredAt, HasModelMapping, AuthToken
+    #>
+
+    $profilesDir = Get-ProviderProfilesDir
+    if (-not (Test-Path $profilesDir)) { return @() }
+
+    # HC-13: 必须用 @() 包裹
+    $files = @(Get-ChildItem $profilesDir -Filter "*.json" -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { return @() }
+
+    $results = @()
+    foreach ($f in $files) {
+        try {
+            $profile = Get-Content $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            if (-not $profile -or -not $profile.ContainsKey("_meta")) { continue }
+
+            $meta = $profile["_meta"]
+            $results += @{
+                Key             = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+                Name            = if ($meta.ContainsKey("provider")) { $meta["provider"] } else { "未知" }
+                BaseUrl         = if ($meta.ContainsKey("baseUrl")) { $meta["baseUrl"] } else { "" }
+                ConfiguredAt    = if ($meta.ContainsKey("configuredAt")) { $meta["configuredAt"] } else { "" }
+                HasModelMapping = $profile.ContainsKey("modelMapping") -and $null -ne $profile["modelMapping"]
+                AuthToken       = if ($profile.ContainsKey("env") -and $profile["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) { $profile["env"]["ANTHROPIC_AUTH_TOKEN"] } else { "" }
+                ProfilePath     = $f.FullName
+            }
+        } catch { }
+    }
+
+    return $results
+}
+
+function Get-ActiveProvider {
+    <#
+    .SYNOPSIS
+    从 settings.json 读取 ANTHROPIC_BASE_URL，与 providers/ 目录比对
+    .RETURNS
+    hashtable: @{ Key; Name; BaseUrl; ProfilePath } 或 $null
+    #>
+
+    $settings = Read-SettingsJson
+    $baseUrl = ""
+    if ($settings.ContainsKey("env") -and $settings["env"] -and $settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
+        $baseUrl = $settings["env"]["ANTHROPIC_BASE_URL"]
+    }
+
+    if ([string]::IsNullOrWhiteSpace($baseUrl)) { return $null }
+
+    # HC-13: @() 包裹
+    $profiles = @(Get-ProviderProfiles)
+    foreach ($p in $profiles) {
+        if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and $baseUrl -like "$($p.BaseUrl)*") {
+            return @{
+                Key         = $p.Key
+                Name        = $p.Name
+                BaseUrl     = $p.BaseUrl
+                ProfilePath = $p.ProfilePath
+            }
+        }
+    }
+
+    return $null
+}
+
+function Show-ProviderStatus {
+    <#
+    .SYNOPSIS
+    显示供应商状态表格（MCP 状态表视觉风格）
+    #>
+
+    # HC-13: @() 包裹
+    $profiles = @(Get-ProviderProfiles)
+    if ($profiles.Count -eq 0) {
+        Write-UiWarn "未找到任何供应商 Profile"
+        Write-UiInfo "提示: 使用 [添加供应商] 配置新的供应商连接"
+        return
+    }
+
+    $active = Get-ActiveProvider
+
+    Write-Host ""
+    Write-UiInfo "供应商列表："
+    Write-Host ""
+
+    # 列宽定义
+    $colWidths = @(15, 35, 15, 10)
+
+    # 表头
+    $headerLine = "  " +
+        (Format-DisplayPad "供应商" $colWidths[0]) + " " +
+        (Format-DisplayPad "Base URL" $colWidths[1]) + " " +
+        (Format-DisplayPad "API Key" $colWidths[2]) + " " +
+        (Format-DisplayPad "状态" $colWidths[3])
+    Write-Host $headerLine -ForegroundColor White
+    $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
+    Write-Host ("  " + [string]::new("-", $sepWidth)) -ForegroundColor Gray
+
+    foreach ($p in $profiles) {
+        $isActive = $active -and $active.Key -eq $p.Key
+        $statusText = if ($isActive) { "Active" } else { "Inactive" }
+        $color = if ($isActive) { "Green" } else { "Gray" }
+
+        # 截断 BaseUrl 以适应列宽
+        $urlDisplay = $p.BaseUrl
+        if ($urlDisplay.Length -gt $colWidths[1]) {
+            $urlDisplay = $urlDisplay.Substring(0, $colWidths[1] - 3) + "..."
+        }
+
+        $line = "  " +
+            (Format-DisplayPad $p.Name $colWidths[0]) + " " +
+            (Format-DisplayPad $urlDisplay $colWidths[1]) + " " +
+            (Format-DisplayPad (Get-MaskedApiKey $p.AuthToken) $colWidths[2]) + " " +
+            (Format-DisplayPad $statusText $colWidths[3])
+        Write-Host $line -ForegroundColor $color
+    }
+    Write-Host ""
+}
+
+# ─── Create ────────────────────────────────────────────────────────────────────
+
+function Add-Provider {
+    <#
+    .SYNOPSIS
+    交互式添加新供应商（安装步骤和管理菜单共用）
+    .PARAMETER Activate
+    添加后立即激活（安装步骤传 $true，管理菜单默认询问）
+    .RETURNS
+    @{ Success; Key; Name; BaseUrl; Activated }
+    #>
+    param([switch]$Activate)
+
+    $result = @{ Success = $false; Key = ""; Name = ""; BaseUrl = ""; Activated = $false }
+
+    # 构建菜单
+    $providerLabels = @(
+        "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型"
+        "MiniMax        - MiniMax API，支持 M2.5 系列"
+        "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列"
+        "自定义供应商    - 手动配置 Base URL 和 API Key"
+    )
+    $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
+
+    Write-UiInfo "请选择 API 供应商:"
+    $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
+
+    if ($selectedIndex -lt 0 -or $selectedIndex -ge $providerKeys.Count) {
+        Write-UiWarn "未选择供应商"
+        return $result
+    }
+
+    $selectedKey = $providerKeys[$selectedIndex]
+    $template = $script:BuiltinProviders[$selectedKey]
+    $providerName = $template.Name
+    $providerBaseUrl = $template.BaseUrl
+
+    Write-UiSuccess "已选择: $providerName"
+
+    # 自定义供应商: 输入名称 + Base URL
+    if ($selectedKey -eq "custom") {
+        Write-Host ""
+        $customName = Read-Host "供应商名称（可选，直接回车使用默认）"
+        if (-not [string]::IsNullOrWhiteSpace($customName)) {
+            $providerName = $customName
+        }
+
+        do {
+            $customUrl = Read-Host "Base URL（必填，如 https://api.example.com/anthropic）"
+            if ([string]::IsNullOrWhiteSpace($customUrl)) {
+                Write-UiError "Base URL 不能为空"
+                continue
+            }
+            if ($customUrl -notmatch '^https?://') {
+                Write-UiError "Base URL 必须以 http:// 或 https:// 开头"
+                continue
+            }
+            break
+        } while ($true)
+
+        $providerBaseUrl = $customUrl.TrimEnd('/')
+        Write-UiSuccess "Base URL 已设置: $providerBaseUrl"
+
+        # 生成 Profile Key
+        try {
+            $uri = [System.Uri]::new($providerBaseUrl)
+            $selectedKey = "custom-$($uri.Host -replace '\.', '-')"
+        } catch {
+            $selectedKey = "custom-manual"
+        }
+    } else {
+        Write-UiInfo "请前往以下平台获取 API Key: $($template.PlatformUrl)"
+    }
+
+    # 安全输入 API Key
+    Write-Host ""
+    Write-UiInfo "请粘贴 $providerName 的 API Key（输入不会回显）:"
+    Write-UiWarn "注意: API Key 将写入 ~/.claude/settings.json 和 ~/.claude/providers/"
+
+    $apiKeyPlain = $null
+    try {
+        do {
+            $apiKeySecure = Read-Host -Prompt "API Key" -AsSecureString
+            $bstr = [System.IntPtr]::Zero
+            try {
+                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($apiKeySecure)
+                $apiKeyPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            } finally {
+                if ($bstr -ne [System.IntPtr]::Zero) {
+                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($apiKeyPlain)) {
+                Write-UiError "API Key 不能为空，请重新输入"
+                continue
+            }
+            if ($apiKeyPlain.Length -lt 10) {
+                Write-UiError "API Key 长度过短，请检查后重新输入"
+                continue
+            }
+            break
+        } while ($true)
+
+        # 显示配置摘要
+        Write-Host ""
+        Write-UiWarn "即将写入以下配置："
+        Write-UiInfo "  供应商: $providerName"
+        Write-UiInfo "  Base URL: $providerBaseUrl"
+        Write-UiInfo "  Key 摘要: $(Get-MaskedApiKey $apiKeyPlain)"
+        Write-Host ""
+
+        $confirmIndex = Show-SingleSelectMenu -Title "确认保存配置？" -Options @("是，保存", "否，取消")
+        if ($confirmIndex -ne 0) {
+            Write-UiWarn "已取消"
+            return $result
+        }
+
+        # 构建 Profile
+        $providerProfile = @{
+            "_meta" = @{
+                "provider"     = $providerName
+                "key"          = $selectedKey
+                "baseUrl"      = $providerBaseUrl
+                "configuredAt" = (Get-Date -Format "o")
+            }
+            "env" = @{
+                "ANTHROPIC_AUTH_TOKEN" = $apiKeyPlain
+                "ANTHROPIC_BASE_URL"  = $providerBaseUrl
+            }
+        }
+
+        # 内置供应商的 ModelMapping
+        if ($template.ContainsKey("ModelMapping") -and $template.ModelMapping) {
+            $providerProfile["modelMapping"] = $template.ModelMapping
+        }
+
+        # 保存 Profile 到 ~/.claude/providers/
+        $profilesDir = Get-ProviderProfilesDir
+        if (-not (Test-Path $profilesDir)) {
+            New-Item -ItemType Directory -Path $profilesDir -Force | Out-Null
+        }
+        $profilePath = Join-Path $profilesDir "$selectedKey.json"
+        $tempPath = "$profilePath.tmp"
+        $providerProfile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+        Move-Item $tempPath $profilePath -Force
+
+        Write-UiSuccess "供应商 Profile 已保存: ~/.claude/providers/$selectedKey.json"
+
+        $result.Success = $true
+        $result.Key = $selectedKey
+        $result.Name = $providerName
+        $result.BaseUrl = $providerBaseUrl
+
+        # 激活逻辑
+        if ($Activate) {
+            Switch-Provider -Key $selectedKey
+            $result.Activated = $true
+        } else {
+            $activateIndex = Show-SingleSelectMenu -Title "是否立即激活此供应商？" -Options @("是，立即激活", "否，稍后激活")
+            if ($activateIndex -eq 0) {
+                Switch-Provider -Key $selectedKey
+                $result.Activated = $true
+            }
+        }
+    }
+    finally {
+        # 确保清除敏感变量
+        $apiKeyPlain = $null
+        $apiKeySecure = $null
+    }
+
+    return $result
+}
+
+# ─── Update ────────────────────────────────────────────────────────────────────
+
+function Edit-Provider {
+    <#
+    .SYNOPSIS
+    修改已有供应商配置
+    .PARAMETER Key
+    Provider Key（如 zhipu、custom-1）
+    #>
+    param([Parameter(Mandatory)] [string]$Key)
+
+    if (-not (Test-ProviderKey -Key $Key)) {
+        Write-UiError "非法 Provider Key: $Key"
+        return
+    }
+
+    $profilesDir = Get-ProviderProfilesDir
+    $profilePath = Join-Path $profilesDir "$Key.json"
+
+    if (-not (Test-Path $profilePath)) {
+        Write-UiError "供应商 Profile 不存在: $Key"
+        return
+    }
+
+    $profile = Get-Content $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+    # 显示当前配置
+    $meta = $profile["_meta"]
+    $envData = $profile["env"]
+    Write-Host ""
+    Write-UiInfo "当前配置:"
+    Write-UiInfo "  供应商: $($meta["provider"])"
+    Write-UiInfo "  Base URL: $($meta["baseUrl"])"
+    Write-UiInfo "  API Key: $(Get-MaskedApiKey $envData["ANTHROPIC_AUTH_TOKEN"])"
+    Write-Host ""
+
+    $editOptions = @(
+        "修改 API Key"
+        "修改 Base URL"
+        "修改供应商名称"
+        "全部重新配置"
+    )
+    $editChoice = Show-SingleSelectMenu -Title "选择修改项：" -Options $editOptions
+
+    if ($editChoice -eq -1) { return }
+
+    switch ($editChoice) {
+        0 {
+            # 修改 API Key
+            Write-UiInfo "请输入新的 API Key（输入不会回显）:"
+            $newKeySecure = Read-Host -Prompt "新 API Key" -AsSecureString
+            $bstr = [System.IntPtr]::Zero
+            try {
+                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($newKeySecure)
+                $newKeyPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            } finally {
+                if ($bstr -ne [System.IntPtr]::Zero) {
+                    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($newKeyPlain) -or $newKeyPlain.Length -lt 10) {
+                Write-UiError "API Key 无效，取消修改"
+                $newKeyPlain = $null
+                return
+            }
+            $envData["ANTHROPIC_AUTH_TOKEN"] = $newKeyPlain
+            $newKeyPlain = $null
+        }
+        1 {
+            # 修改 Base URL
+            $newUrl = Read-Host "新 Base URL"
+            if ([string]::IsNullOrWhiteSpace($newUrl) -or $newUrl -notmatch '^https?://') {
+                Write-UiError "Base URL 无效，取消修改"
+                return
+            }
+            $newUrl = $newUrl.TrimEnd('/')
+            $meta["baseUrl"] = $newUrl
+            $envData["ANTHROPIC_BASE_URL"] = $newUrl
+        }
+        2 {
+            # 修改名称
+            $newName = Read-Host "新供应商名称"
+            if ([string]::IsNullOrWhiteSpace($newName)) {
+                Write-UiError "名称不能为空，取消修改"
+                return
+            }
+            $meta["provider"] = $newName
+        }
+        3 {
+            # 全部重新配置 → 备份旧配置，添加新配置，成功后清理旧备份
+            $backupPath = "$profilePath.bak"
+            try {
+                Copy-Item $profilePath $backupPath -Force
+                $addResult = Add-Provider
+                if ($addResult.Success) {
+                    # 新配置已由 Add-Provider 写入（可能是新 key），安全清理旧文件
+                    if (Test-Path $backupPath) { Remove-Item $backupPath -Force }
+                    # 若新 key 不同于旧 key，删除旧 Profile 文件
+                    if ($addResult.Key -ne $Key -and (Test-Path $profilePath)) {
+                        Remove-Item $profilePath -Force
+                    }
+                } else {
+                    # Add-Provider 失败或取消 → 恢复旧配置
+                    if (Test-Path $backupPath) {
+                        Move-Item $backupPath $profilePath -Force
+                        Write-UiWarn "已恢复原有配置"
+                    }
+                }
+            } catch {
+                # 异常恢复
+                if (Test-Path $backupPath) {
+                    Move-Item $backupPath $profilePath -Force -ErrorAction SilentlyContinue
+                    Write-UiWarn "操作异常，已恢复原有配置"
+                }
+            }
+            return
+        }
+    }
+
+    # 原子写入更新后的 Profile
+    $profile["_meta"] = $meta
+    $profile["env"] = $envData
+    $tempPath = "$profilePath.tmp"
+    $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+    Move-Item $tempPath $profilePath -Force
+
+    Write-UiSuccess "供应商配置已更新: $Key"
+
+    # 如果修改的是当前活跃供应商 → 自动同步 settings.json
+    $active = Get-ActiveProvider
+    if ($active -and $active.Key -eq $Key) {
+        Write-UiInfo "正在同步活跃供应商配置到 settings.json..."
+        Switch-Provider -Key $Key
+    }
+}
+
+# ─── Delete ────────────────────────────────────────────────────────────────────
+
+function Remove-Provider {
+    <#
+    .SYNOPSIS
+    删除供应商 Profile
+    .PARAMETER Key
+    Provider Key
+    #>
+    param([Parameter(Mandatory)] [string]$Key)
+
+    if (-not (Test-ProviderKey -Key $Key)) {
+        Write-UiError "非法 Provider Key: $Key"
+        return
+    }
+
+    $profilesDir = Get-ProviderProfilesDir
+    $profilePath = Join-Path $profilesDir "$Key.json"
+
+    if (-not (Test-Path $profilePath)) {
+        Write-UiError "供应商 Profile 不存在: $Key"
+        return
+    }
+
+    # 安全检查: 活跃供应商不能直接删除
+    $active = Get-ActiveProvider
+    if ($active -and $active.Key -eq $Key) {
+        Write-UiError "无法删除当前活跃的供应商: $($active.Name)"
+        Write-UiWarn "请先切换到其他供应商后再删除"
+        return
+    }
+
+    $confirmIndex = Show-SingleSelectMenu -Title "确认删除供应商 Profile: $Key？" -Options @("是，删除", "否，取消")
+    if ($confirmIndex -ne 0) {
+        Write-UiInfo "已取消"
+        return
+    }
+
+    Remove-Item $profilePath -Force
+    Write-UiSuccess "已删除供应商 Profile: $Key"
+}
+
+# ─── Switch ────────────────────────────────────────────────────────────────────
+
+function Switch-Provider {
+    <#
+    .SYNOPSIS
+    切换活跃供应商（读 Profile → 合并 settings.json）
+    .PARAMETER Key
+    Provider Key（可选，不指定则交互选择）
+    #>
+    param([string]$Key = "")
+
+    # HC-13: @() 包裹
+    $profiles = @(Get-ProviderProfiles)
+    if ($profiles.Count -eq 0) {
+        Write-UiWarn "未找到供应商 Profile，请先添加供应商"
+        return
+    }
+
+    # 交互选择
+    if ([string]::IsNullOrWhiteSpace($Key)) {
+        $active = Get-ActiveProvider
+        $options = @()
+        foreach ($p in $profiles) {
+            $tag = if ($active -and $active.Key -eq $p.Key) { " [当前]" } else { "" }
+            $options += "$($p.Name) ($($p.Key))$tag"
+        }
+
+        $selectedIdx = Show-SingleSelectMenu -Title "选择要切换的供应商：" -Options $options
+        if ($selectedIdx -lt 0 -or $selectedIdx -ge $profiles.Count) {
+            Write-UiInfo "已取消"
+            return
+        }
+        $Key = $profiles[$selectedIdx].Key
+    }
+
+    if (-not (Test-ProviderKey -Key $Key)) {
+        Write-UiError "非法 Provider Key: $Key"
+        return
+    }
+
+    # 读取 Profile
+    $profilePath = Join-Path (Get-ProviderProfilesDir) "$Key.json"
+    if (-not (Test-Path $profilePath)) {
+        Write-UiError "供应商 Profile 不存在: $Key"
+        return
+    }
+
+    $profile = Get-Content $profilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+
+    # 读取 settings.json → 合并供应商字段
+    $settings = Read-SettingsJson
+
+    # 确保 env 存在
+    if (-not $settings.ContainsKey("env")) {
+        $settings["env"] = @{}
+    }
+
+    # 仅覆盖供应商相关字段
+    if ($profile.ContainsKey("env") -and $profile["env"]) {
+        if ($profile["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) {
+            $settings["env"]["ANTHROPIC_AUTH_TOKEN"] = $profile["env"]["ANTHROPIC_AUTH_TOKEN"]
+        }
+        if ($profile["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
+            $settings["env"]["ANTHROPIC_BASE_URL"] = $profile["env"]["ANTHROPIC_BASE_URL"]
+        }
+    }
+
+    # modelMapping 处理
+    if ($profile.ContainsKey("modelMapping") -and $profile["modelMapping"]) {
+        $settings["modelMapping"] = $profile["modelMapping"]
+    } elseif ($settings.ContainsKey("modelMapping")) {
+        $settings.Remove("modelMapping")
+    }
+
+    # 原子写入
+    Write-SettingsJsonAtomic -Settings $settings
+
+    $providerName = if ($profile.ContainsKey("_meta") -and $profile["_meta"].ContainsKey("provider")) { $profile["_meta"]["provider"] } else { $Key }
+    Write-UiSuccess "已切换到: $providerName"
+}
+
+# ─── 交互菜单 ──────────────────────────────────────────────────────────────────
+
+function Show-ProviderManageMenu {
+    <#
+    .SYNOPSIS
+    供应商管理主菜单（while 循环，Esc 返回上级）
+    入口处自动调用 Sync-ProviderFromSettings
+    #>
+
+    # 进入供应商管理时自动同步
+    try {
+        Sync-ProviderFromSettings
+    } catch {
+        Write-UiWarn "供应商自动同步失败: $($_.Exception.Message)"
+    }
+
+    while ($true) {
+        # Header: 显示当前活跃供应商
+        $active = Get-ActiveProvider
+        Write-Host ""
+        if ($active) {
+            Write-UiInfo "当前活跃: $($active.Name) ($($active.BaseUrl))"
+        } else {
+            Write-UiWarn "当前无活跃供应商"
+        }
+
+        $options = @(
+            "查看供应商列表  - 显示所有已配置的供应商状态"
+            "切换供应商      - 切换当前活跃的 AI 供应商"
+            "添加供应商      - 配置新的 AI 供应商连接"
+            "修改供应商      - 修改已有供应商的 Key/URL"
+            "删除供应商      - 删除已配置的供应商"
+        )
+        $choice = Show-SingleSelectMenu -Title "供应商管理" -Options $options -DefaultIndex 0
+
+        if ($choice -eq -1) { return }
+
+        switch ($choice) {
+            0 {
+                # 查看供应商列表
+                Show-ProviderStatus
+                Write-Host "按任意键返回..." -ForegroundColor Gray
+                $null = [Console]::ReadKey($true)
+            }
+            1 {
+                # 切换供应商
+                Switch-Provider
+                Write-Host ""
+                Write-Host "按任意键返回..." -ForegroundColor Gray
+                $null = [Console]::ReadKey($true)
+            }
+            2 {
+                # 添加供应商
+                Add-Provider
+                Write-Host ""
+                Write-Host "按任意键返回..." -ForegroundColor Gray
+                $null = [Console]::ReadKey($true)
+            }
+            3 {
+                # 修改供应商 → 先选择 Profile
+                # HC-13: @() 包裹
+                $profiles = @(Get-ProviderProfiles)
+                if ($profiles.Count -eq 0) {
+                    Write-UiWarn "没有可修改的供应商"
+                } else {
+                    $editOptions = @($profiles | ForEach-Object { "$($_.Name) ($($_.Key))" })
+                    $editIdx = Show-SingleSelectMenu -Title "选择要修改的供应商：" -Options $editOptions
+                    if ($editIdx -ge 0 -and $editIdx -lt $profiles.Count) {
+                        Edit-Provider -Key $profiles[$editIdx].Key
+                    }
+                }
+                Write-Host ""
+                Write-Host "按任意键返回..." -ForegroundColor Gray
+                $null = [Console]::ReadKey($true)
+            }
+            4 {
+                # 删除供应商 → 先选择 Profile
+                # HC-13: @() 包裹
+                $profiles = @(Get-ProviderProfiles)
+                if ($profiles.Count -eq 0) {
+                    Write-UiWarn "没有可删除的供应商"
+                } else {
+                    $delOptions = @($profiles | ForEach-Object { "$($_.Name) ($($_.Key))" })
+                    $delIdx = Show-SingleSelectMenu -Title "选择要删除的供应商：" -Options $delOptions
+                    if ($delIdx -ge 0 -and $delIdx -lt $profiles.Count) {
+                        Remove-Provider -Key $profiles[$delIdx].Key
+                    }
+                }
+                Write-Host ""
+                Write-Host "按任意键返回..." -ForegroundColor Gray
+                $null = [Console]::ReadKey($true)
+            }
+        }
+    }
+}
+
+# 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember
+# 所有函数在 dot-source 后自动可用

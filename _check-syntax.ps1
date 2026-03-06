@@ -1,9 +1,13 @@
 $files = @(
+    "installer/steps/Ccline.ps1"
+    "installer/steps/CcgWorkflow.ps1"
+    "installer/core/Registry.ps1"
+    "installer/core/Bootstrap.ps1"
     "installer/steps/Mcp.ps1"
     "installer/core/McpManager.ps1"
+    "installer/core/Provider.ps1"
     "installer/Manage-ClaudeEnv.ps1"
     "installer/Install-ClaudeEnv.ps1"
-    "installer/Update-ClaudeEnv.ps1"
     "installer/build/Build-SingleFile.ps1"
 )
 $hasError = $false
