@@ -17,7 +17,7 @@ Set-StrictMode -Version Latest
 
 # CLAUDE.md 主文件模板（~80 行，确保在 token 截断限制内完整可见）
 $script:ClaudeMdTemplate = @'
-# Claude  Code 增强配置 (CCG Enhanced)
+# Claude Code 增强配置 (CCG Enhanced)
 
 ## 一、核心原则
 
@@ -47,11 +47,8 @@ $script:ClaudeMdTemplate = @'
 
 ## 二、工作流原则
 
-1. **先检索，后生成** - 生成代码前必须先调用 search_context
+1. **先检索，后生成** - 修改代码前必须先检索相关代码
 2. **增强需求** - 复杂任务先明确需求边界
-3. **智能路由** - 根据任务类型选择 Codex/Gemini/Claude
-4. **交叉验证** - 关键决策可使用双模型并行分析
-5. **代码主权** - Codex/Gemini 仅负责分析、规划、审查；所有代码实现由 Claude 完成
 
 ---
 
@@ -140,7 +137,7 @@ function Test-ClaudeMdInstalled {
     $claudeMdPath = Get-ClaudeMdPath
     return Invoke-UnifiedCheck -StepId "ClaudeMd" -DisplayName "CLAUDE.md 配置" `
         -PathChecks @(
-            @{ Path = $claudeMdPath; Type = "File"; ContentMatch = "# Claude  Code 增强配置" }
+            @{ Path = $claudeMdPath; Type = "File"; ContentMatch = "# Claude Code 增强配置" }
         ) -UseCache
 }
 
@@ -180,7 +177,7 @@ function Install-ClaudeMd {
         Write-UiInfo "配置摘要:"
         Write-UiInfo "  - 主文件行数: $lineCount"
         Write-UiInfo "  - 核心原则: 5 项（调研优先/三问/红线/安全/风格）"
-        Write-UiInfo "  - 工作流原则: 5 条"
+        Write-UiInfo "  - 工作流原则: 2 条"
 
         $result.Success = $true
     }
@@ -214,7 +211,7 @@ function Verify-ClaudeMd {
 
         # 验证关键章节（瘦身后 4 个章节）
         $sections = @(
-            "# Claude  Code 增强配置",
+            "# Claude Code 增强配置",
             "## 一、核心原则",
             "## 二、工作流原则",
             "## 三、任务分级",

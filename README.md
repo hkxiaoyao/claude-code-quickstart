@@ -8,9 +8,9 @@
   ╚═════╝  ╚═════╝  ╚══▀▀═╝
 </pre>
 
-**Claude  Code Quickstart** — Windows 平台的 Claude  Code 开发环境自动化安装器
+**Claude Code Quickstart** — Windows 平台的 Claude Code 开发环境自动化安装器
 
-一键完成从零到 Claude  Code 的全套环境配置：Node.js、Git、Claude  Code CLI、第三方 AI 供应商配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
+一键完成从零到 Claude Code 的全套环境配置：Node.js、Git、Claude Code CLI、第三方 AI 供应商配置、MCP 插件、CCG 工作流等 12 个步骤，**全程自动化，实时检测**。
 
 </div>
 
@@ -145,7 +145,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -Provider zhipu
 ## 安装说明
 
 分组安装将步骤分为**基础环境**和**进阶扩展**两组：
-- **基础环境**：Node.js、Git、Claude  Code、第三方供应商配置 — 一键安装，无需选择
+- **基础环境**：Node.js、Git、Claude Code、第三方供应商配置 — 一键安装，无需选择
 - **进阶扩展**：ccline、cc-switch、配置优化、MCP、多模型工具 — 支持一键或多选
 
 安装器采用**实时检测机制**，每次运行都检测所有组件当前状态，已安装的自动跳过，失败后直接重新运行即可。
@@ -167,7 +167,7 @@ pwsh -File ".\installer\Install-ClaudeEnv.ps1" -ListSteps   # 源码版
 | ClaudeCode | npm install @latest + 版本回退保护 |
 | ClaudeConfig | 声明式对齐 env 字段 + 废弃键清理 |
 | ClaudeMd | 原子覆写 CLAUDE.md 及 rules/ 文件 |
-| Ccline | npm @latest + 重新 patch Claude  Code |
+| Ccline | npm @latest + 重新 patch Claude Code |
 | CcgWorkflow | npx ccg-workflow@latest init |
 | CodexCli | npm install @latest |
 | GeminiCli | npm install @latest |
@@ -211,14 +211,14 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Mcp
 |---|------|------|------|:----:|
 | 01 | Node.js (fnm) | 安装 fnm 版本管理器 + Node.js LTS | 基础 | — |
 | 02 | Git | 安装 Git，配置中文支持 | 基础 | — |
-| 03 | Claude  Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
+| 03 | Claude Code | 全局安装 `@anthropic-ai/claude-code` | 基础 | — |
 | 04 | 第三方供应商配置 | 配置第三方 AI 供应商连接 | 基础 | — |
 | 05 | ccline | 安装 ccline 状态栏工具 | 进阶 | — |
-| 06 | cc-switch | Claude  Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | ✓ |
+| 06 | cc-switch | Claude Code / Codex / Gemini CLI 全方位辅助工具 | 进阶 | ✓ |
 | 07 | Claude 基础配置 | 写入语言/模型/权限/环境变量配置 | 进阶 | — |
-| 08 | CLAUDE.md | 生成全局 Claude  Code 工作规范文件 | 进阶 | — |
+| 08 | CLAUDE.md | 生成全局 Claude Code 工作规范文件 | 进阶 | — |
 | 09 | MCP Server | 配置 MCP 插件服务器 | 进阶 | — |
-| 10 | CCG 工作流 | 安装 Claude  Code Generator 工作流 | 进阶 | — |
+| 10 | CCG 工作流 | 安装 Claude Code Generator 工作流 | 进阶 | — |
 | 11 | Codex CLI | 安装 OpenAI Codex CLI（多模型协作） | 进阶 | ✓ |
 | 12 | Gemini CLI | 安装 Google Gemini CLI（多模型协作） | 进阶 | ✓ |
 
@@ -226,7 +226,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Mcp
 
 ## 第三方供应商配置
 
-安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude  Code：
+安装器支持以下国内 AI 供应商，无需翻墙即可使用 Claude Code：
 
 | 供应商 | 最新模型系列 | 模型映射（2026-02 更新） | 获取 Key |
 |--------|------------|------------------------|---------|
@@ -330,7 +330,7 @@ claude-code-quickstart/
 ## 安装后使用
 
 ```powershell
-# 启动 Claude  Code
+# 启动 Claude Code
 claude
 
 # 查看帮助
@@ -343,7 +343,7 @@ codex --help
 gemini --help
 ```
 
-> **cc-switch**：安装后可在开始菜单或桌面快捷方式启动，提供 Claude  Code / Codex / Gemini CLI 的图形化辅助管理。
+> **cc-switch**：安装后可在开始菜单或桌面快捷方式启动，提供 Claude Code / Codex / Gemini CLI 的图形化辅助管理。
 
 ---
 
