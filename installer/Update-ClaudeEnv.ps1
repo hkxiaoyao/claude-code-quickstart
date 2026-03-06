@@ -461,7 +461,7 @@ function Select-UpdateSteps {
         $selectedStepIds += $installedList[$idx].StepId
     }
 
-    return ,$selectedStepIds
+    return $selectedStepIds
 }
 
 # ─── 主流程 ───────────────────────────────────────────────────────────────────

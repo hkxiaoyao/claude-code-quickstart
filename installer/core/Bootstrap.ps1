@@ -513,9 +513,8 @@ function Get-ExecutionOrder {
         $remaining = @($remaining | Where-Object { $_ -ne $next })
     }
 
-    # 使用 , 操作符防止 PowerShell 自动解包单元素数组
-    # 这确保即使只有一个元素，返回值仍然是数组类型
-    return ,$ordered
+    # HC-13 策略 A：调用方使用 @() 包裹确保数组安全
+    return $ordered
 }
 
 function Build-UpdatePlan {
@@ -603,7 +602,7 @@ function Build-UpdatePlan {
     }
 
     # 拓扑排序
-    $orderedIds = Get-ExecutionOrder -StepIds @($closureIds)
+    $orderedIds = @(Get-ExecutionOrder -StepIds @($closureIds))
 
     # 返回排序后的步骤配置数组
     $plan = @()
@@ -614,7 +613,7 @@ function Build-UpdatePlan {
         }
     }
 
-    return ,$plan
+    return $plan
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

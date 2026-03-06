@@ -361,8 +361,8 @@ function Invoke-AllSteps {
     }
 
     # 分别对必选和可选步骤进行拓扑排序
-    $orderedMandatoryIds = if ($mandatoryIds -and $mandatoryIds.Count -gt 0) { Get-ExecutionOrder -StepIds $mandatoryIds } else { @() }
-    $orderedOptionalIds = if ($optionalIds -and $optionalIds.Count -gt 0) { Get-ExecutionOrder -StepIds $optionalIds } else { @() }
+    $orderedMandatoryIds = if ($mandatoryIds -and $mandatoryIds.Count -gt 0) { @(Get-ExecutionOrder -StepIds $mandatoryIds) } else { @() }
+    $orderedOptionalIds = if ($optionalIds -and $optionalIds.Count -gt 0) { @(Get-ExecutionOrder -StepIds $optionalIds) } else { @() }
 
     # 合并：必选步骤在前，可选步骤在后
     $orderedStepIds = @($orderedMandatoryIds + $orderedOptionalIds)

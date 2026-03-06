@@ -193,7 +193,7 @@ function Get-DependencyClosure {
 
     # 强制类型声明确保 $finalPlan 始终是数组
     [string[]]$finalPlan = if ($allRequiredArray.Count -gt 0) {
-        Get-ExecutionOrder -StepIds $allRequiredArray
+        @(Get-ExecutionOrder -StepIds $allRequiredArray)
     } else {
         @()
     }
@@ -244,7 +244,7 @@ function Show-ExecutionPlan {
 
     Write-UiInfo "执行计划："
 
-    $orderedPlan = Get-ExecutionOrder -StepIds $FinalPlan
+    $orderedPlan = @(Get-ExecutionOrder -StepIds $FinalPlan)
     $index = 0
     foreach ($stepId in $orderedPlan) {
         $index++
@@ -302,7 +302,7 @@ function Invoke-GroupedInstall {
     }
 
     # 拓扑排序
-    $orderedStepIds = Get-ExecutionOrder -StepIds $closure.FinalPlan
+    $orderedStepIds = @(Get-ExecutionOrder -StepIds $closure.FinalPlan)
 
     $results = @{
         Total           = $orderedStepIds.Count
