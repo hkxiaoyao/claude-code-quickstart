@@ -85,6 +85,8 @@ OpenSpec (依赖 NodeFnm)
 ~/.claude/settings.json     # Claude Code 主配置（供应商 + env + 权限）
 ~/.claude.json              # Claude Code 初始化标记（hasCompletedOnboarding）
 ~/.claude/CLAUDE.md         # 全局 Claude 工作规范（ClaudeMd 写入）
+~/.claude/rules/ccq-ccgworkflow.md  # 多模型协作 + 工作流增强（CcgWorkflow 写入）
+~/.claude/rules/ccq-mcp-*.md       # MCP 工具速查（McpManager 动态渲染）
 ~/.claude/providers/        # 供应商 Profile 目录（ApiKey 写入）
 ~/.ccq/mcp-meta.json        # MCP Server vault（凭据持久化 + 状态管理）
 $PROFILE                    # PowerShell 配置文件（fnm）

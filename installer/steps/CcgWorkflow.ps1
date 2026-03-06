@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$(Get-UserHome)\.claude"
 
-# CCG 规则文件模板（整合原 ccq-multimodel.md + ccq-workflow.md）
+# CCG 规则文件模板（整合原 ccq-multimodel.md + ccq-workflow.md + ccq-tools.md 流程策略）
 $script:CcgWorkflowRuleTemplate = @'
 # 多模型协作 + 工作流增强（CCG）
 
@@ -60,23 +60,22 @@ Bash(command='"任务描述" | codeagent-wrapper --backend gemini ...', run_in_b
 TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
 ```
 
+## 知识获取（强制）
+
+遇到不熟悉的知识、库或 API，必须使用搜索工具联网验证，严禁猜测。
+
 ## 上下文检索（生成代码前执行）
-
-**工具优先级**：
-
-1. `mcp__ace-tool__search_context`（首选）- 纯语义搜索，适合开放性探索
-2. `mcp__contextweaver__codebase-retrieval`（次选）- 混合引擎（语义+精确匹配）
-3. `Glob` + `Grep`（回退）- MCP 不可用时的兜底方案
 
 **检索策略**：
 
-- 使用自然语言构建语义查询（Where/What/How）
-- 完整性检查：获取相关类、函数、变量的完整定义与签名
-- 若上下文不足，递归检索直至信息完整
+1. 优先使用语义检索工具，构建全局理解
+2. 辅以精确匹配工具（Grep/Glob）定位具体逻辑
+3. 根据所用工具特性补充精确过滤参数，提升检索召回率
+4. 若上下文不足，递归检索直至信息完整
 
 ## 需求对齐
 
-若检索后需求仍有模糊空间，输出引导性问题列表，直至需求边界清晰。
+若检索后需求仍有模糊空间，输出引导性问题列表，直至需求边界清晰（无遗漏、无冗余）。
 '@
 
 function Get-CcgWorkflowFingerprint {

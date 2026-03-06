@@ -1514,6 +1514,20 @@ function Install-Mcp {
             $sharedCredentials[$key] = $null
         }
 
+        # 同步 MCP Rules 文件（首次安装后生成工具速查）
+        try {
+            $syncResult = Sync-AllMcpRules
+            if ($syncResult -and $syncResult.Success) {
+                $changedCount = @($syncResult.ChangedFiles).Count
+                Write-UiInfo "MCP Rules 文件已同步（变更 $changedCount 项）"
+            } else {
+                $err = if ($syncResult -and $syncResult.ErrorMessage) { $syncResult.ErrorMessage } else { "未知错误" }
+                Write-UiWarn "MCP Rules 同步失败（不影响主安装）: $err"
+            }
+        } catch {
+            Write-UiWarn "MCP Rules 同步失败（不影响主安装）: $($_.Exception.Message)"
+        }
+
         return $true
     }
     catch {

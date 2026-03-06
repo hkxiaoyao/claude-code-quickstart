@@ -43,6 +43,13 @@ $script:McpRulesCategories = @{
                 Steps    = @( @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_extract" } )
             }
             @{
+                Scenario = "网站爬取/结构映射"
+                Steps    = @(
+                    @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_crawl" }
+                    @{ McpId = "tavily"; Tool = "mcp__tavily__tavily_map" }
+                )
+            }
+            @{
                 Scenario = "公司研究"
                 Steps    = @( @{ McpId = "exa"; Tool = "mcp__exa__company_research_exa" } )
             }
@@ -51,7 +58,10 @@ $script:McpRulesCategories = @{
                 Steps    = @( @{ McpId = "exa"; Tool = "mcp__exa__get_code_context_exa" } )
             }
         )
-        Tips = @( "exa 不可用时自动回退到 tavily" )
+        Tips = @(
+            "联网搜索优先 exa，不可用时自动回退 tavily"
+            "选择原则：语义理解优先搜索工具，精确匹配用 Grep"
+        )
     }
     "Documentation" = @{
         FileName = "ccq-mcp-docs.md"
@@ -94,8 +104,12 @@ $script:McpRulesCategories = @{
             @{ Scenario = "精确字符串/正则";  Tool = "Grep" }
             @{ Scenario = "文件名匹配";      Tool = "Glob" }
             @{ Scenario = "深度代码库探索";   Tool = "Agent + subagent_type=Explore" }
+            @{ Scenario = "技术方案规划";     Tool = "EnterPlanMode / Agent + subagent_type=Plan" }
         )
-        Tips = @( "语义理解用 ace-tool，精确匹配用 Grep" )
+        Tips = @(
+            "语义理解用 ace-tool/contextweaver，精确匹配用 Grep"
+            "使用 ContextWeaver 时，加入 `technical_terms`（精确符号名）可显著提升召回率"
+        )
     }
     "Design" = @{
         FileName = "ccq-mcp-design.md"
@@ -105,7 +119,7 @@ $script:McpRulesCategories = @{
             @{
                 Scenario = "设计稿解析"
                 Steps    = @(
-                    @{ McpId = "mastergo"; Tool = "mcp__mastergo__*（getDsl / getComponentLink / getMeta）" }
+                    @{ McpId = "mastergo"; Tool = "mcp__mastergo__*（getDsl / getComponentLink / getMeta / getComponentGenerator）" }
                     @{ McpId = "figma";    Tool = "mcp__figma__*" }
                 )
             }

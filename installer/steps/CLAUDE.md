@@ -285,22 +285,16 @@ Install-ApiKey($state)
 ## ClaudeMd — CLAUDE.md 配置
 
 **文件**：`ClaudeMd.ps1`
-**目标**：`$env:USERPROFILE\.claude\CLAUDE.md` + `$env:USERPROFILE\.claude\rules\`
+**目标**：`$env:USERPROFILE\.claude\CLAUDE.md`
 **依赖**：无（不依赖 Claude 基础配置）
 
-**功能**：生成全局 Claude Code 工作规范。主文件 ~80 行（确保在 token 截断限制内完整可见），详细内容拆分到 `rules/` 目录（Claude Code 无条件加载）。
-
-**瘦身结构**：
-- `CLAUDE.md`（~80 行）：核心原则 / 工作流原则 / 任务分级 / 交互与环境+输出设置
-- `rules/ccq-multimodel.md`：多模型协作（Codex/Gemini 调用格式、会话复用、并行调用）
-- `rules/ccq-tools.md`：工具速查表 + 知识获取 + 设计图获取
-- `rules/ccq-workflow.md`：工作流增强（上下文检索、Prompt 增强、需求对齐）
+**功能**：生成全局 Claude Code 工作规范主文件。~80 行（确保在 token 截断限制内完整可见）。详细的工具速查由 McpManager 动态渲染到 `rules/ccq-mcp-*.md`，多模型协作/工作流增强由 CcgWorkflow 管理到 `rules/ccq-ccgworkflow.md`。
 
 **命名约定**：CCQ 管理的 rules 文件统一使用 `ccq-` 前缀，与用户自定义 rules 隔离。
 
-**写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件和 rules 文件均采用原子覆写（直接替换，无备份）。
+**写入方式**：`Write-FileAtomically -FilePath`（**注意参数名**）。主文件采用原子覆写（直接替换，无备份）。
 
-**检测条件**：`Test-ClaudeMdInstalled` 检查主文件 3 个关键标识 + 3 个 rules 文件存在性。
+**检测条件**：`Test-ClaudeMdInstalled` 检查主文件 3 个关键标识。
 
 ---
 
@@ -334,6 +328,12 @@ Install-ApiKey($state)
 - 凭据在 vault 写入后立即清零（安全）
 - Vault 读写失败不阻塞主流程（仅 warning）
 
+**MCP Rules 动态渲染**：
+- Install-Mcp 末尾调用 `Sync-AllMcpRules`，根据已启用的 MCP Server 动态生成 `rules/ccq-mcp-*.md` 文件
+- 分类定义在 `core/McpManager.ps1` 的 `$script:McpRulesCategories` 中维护
+- 5 个分类：Search（搜索）、Documentation（文档）、Development（代码检索）、Design（设计）、Automation（自动化）
+- 某分类下所有 MCP 禁用时，对应 rules 文件自动删除
+
 ---
 
 ## CcgWorkflow — CCG 工作流
@@ -341,7 +341,7 @@ Install-ApiKey($state)
 **文件**：`CcgWorkflow.ps1`
 **依赖**：NodeFnm + ClaudeConfig
 
-**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎。
+**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎，并写入 `rules/ccq-ccgworkflow.md`（多模型协作 + 工作流增强策略）。
 
 **安装命令**：
 ```powershell
@@ -353,11 +353,13 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - `~/.claude/agents/ccg/` — Agent 模板
 - `~/.claude/.ccg/` — CCG 配置目录（含 config.toml）
 - `~/.claude/bin/codeagent-wrapper.exe` — 核心二进制
+- `~/.claude/rules/ccq-ccgworkflow.md` — CCG 工作流规则文件
 
 **关键机制**：
 - `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Mcp 步骤的 MCP 配置
 - 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
 - 安装后立即调用 `Refresh-SessionPath`
+- 规则文件更新：更新时会清理遗留文件 `ccq-multimodel.md` / `ccq-tools.md` / `ccq-workflow.md`
 
 ---
 
