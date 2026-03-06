@@ -96,7 +96,7 @@ function Install-ApiKey {
 
         # 一次性清理旧版 ccp 注入（迁移旧用户）
         try {
-            Remove-ManagedBlockFromFile -FilePath $PROFILE `
+            $null = Remove-ManagedBlockFromFile -FilePath $PROFILE `
                 -StartMarker "# >>> Claude Code Provider Switcher >>>" `
                 -EndMarker "# <<< Claude Code Provider Switcher <<<"
             Write-UiInfo "已清理旧版 ccp 命令（供应商管理已迁移到 Manage 脚本）"
