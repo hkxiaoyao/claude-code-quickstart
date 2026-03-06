@@ -1348,8 +1348,7 @@ function Install-Mcp {
                 Write-UiInfo "已读取现有 .claude.json，将按增量方式合并"
             }
             catch {
-                Write-UiWarn "无法解析现有 .claude.json，将创建新配置"
-                $claudeJson = @{}
+                throw "无法解析现有 .claude.json，已停止写入以避免覆盖用户配置: $($_.Exception.Message)"
             }
         }
 
@@ -1400,7 +1399,7 @@ function Install-Mcp {
                 }
             }
             catch {
-                $settings = @{}
+                throw "无法解析现有 settings.json，已停止写入以避免覆盖用户配置: $($_.Exception.Message)"
             }
         }
 
@@ -1414,7 +1413,7 @@ function Install-Mcp {
             $settings["permissions"]["allow"] = @($settings["permissions"]["allow"])
         }
 
-        $mcpPermissions = @("mcp", "read", "write", "bash", "glob", "grep")
+        $mcpPermissions = @("Mcp", "Read", "Write", "Bash", "Glob", "Grep")
         foreach ($permission in $mcpPermissions) {
             if ($settings["permissions"]["allow"] -notcontains $permission) {
                 $settings["permissions"]["allow"] += $permission
@@ -1974,7 +1973,7 @@ function Update-Mcp {
                 if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
                 if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
 
-                $mcpPermissions = @("mcp", "read", "write", "bash", "glob", "grep")
+                $mcpPermissions = @("Mcp", "Read", "Write", "Bash", "Glob", "Grep")
                 $permChanged = $false
                 foreach ($perm in $mcpPermissions) {
                     if ($settings["permissions"]["allow"] -notcontains $perm) {
