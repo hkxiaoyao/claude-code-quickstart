@@ -192,7 +192,7 @@ function Show-UpdateSummary {
         foreach ($item in $upToDate) {
             Write-Host "    $($item.Name)" -ForegroundColor DarkGray -NoNewline
             if ($item.Items -match "fingerprint-match") {
-                Write-Host "  (指纹一致)" -ForegroundColor DarkGray
+                Write-Host "  (内容一致)" -ForegroundColor DarkGray
             } else {
                 Write-Host "  (内容无变更)" -ForegroundColor DarkGray
             }
@@ -335,62 +335,6 @@ function Get-UpdateStatus {
     return $statusList
 }
 
-function Show-UpdateStatus {
-    <#
-    .SYNOPSIS
-    展示组件状态表（统一格式）
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [array]$StatusList
-    )
-
-    Write-Host ""
-    Write-Host "组件状态:" -ForegroundColor Cyan
-    Write-Host ""
-
-    foreach ($entry in $StatusList) {
-        if (-not $entry.IsInstalled) { continue }
-
-        $stepIdDisplay = $entry.StepId.PadRight(15)
-        $stepNameDisplay = $entry.StepName.PadRight(20)
-        $versionDisplay = if ($entry.CurrentVersion) { " ($($entry.CurrentVersion))" } else { "" }
-
-        if ($entry.HasUpdate -eq $true) {
-            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
-            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
-            # 优先使用 StatusHint 进行分级展示
-            if (-not [string]::IsNullOrWhiteSpace($entry.StatusHint)) {
-                Write-Host "[$($entry.StatusHint)]" -ForegroundColor Yellow
-            } else {
-                Write-Host "[有更新]$versionDisplay" -ForegroundColor Yellow -NoNewline
-                Write-Host " -> $($entry.LatestVersion)" -ForegroundColor Cyan
-            }
-        }
-        elseif ($entry.HasUpdate -eq $false) {
-            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
-            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
-            Write-Host "[已是最新]$versionDisplay" -ForegroundColor Green
-        }
-        else {
-            Write-Host "  $stepIdDisplay" -ForegroundColor White -NoNewline
-            Write-Host "$stepNameDisplay" -ForegroundColor Gray -NoNewline
-            Write-Host "[已安装]" -ForegroundColor Green
-        }
-    }
-
-    $updatesCount = @($StatusList | Where-Object { $_.HasUpdate -eq $true }).Count
-    $installedCount = @($StatusList | Where-Object { $_.IsInstalled }).Count
-
-    Write-Host ""
-    if ($updatesCount -gt 0) {
-        Write-Host "  $installedCount 个组件已安装，其中 $updatesCount 个有可用更新" -ForegroundColor Yellow
-    }
-    else {
-        Write-Host "  $installedCount 个组件已安装，所有 npm 组件均为最新版本" -ForegroundColor Green
-    }
-    Write-Host ""
-}
 
 # ─── 交互式步骤选择 ───────────────────────────────────────────────────────────
 
@@ -414,40 +358,40 @@ function Select-UpdateSteps {
     }
 
     $options = @()
+    $hints = @()
     $defaultSelected = @()
 
     for ($i = 0; $i -lt $installedList.Count; $i++) {
         $entry = $installedList[$i]
         $label = "$($entry.StepName)"
+        $hint = $null
 
         if ($entry.HasUpdate -eq $true) {
             # 优先使用 StatusHint 进行分级展示
             if (-not [string]::IsNullOrWhiteSpace($entry.StatusHint)) {
-                $label += " ($($entry.StatusHint))"
+                $hint = @{ Text = "($($entry.StatusHint))"; Color = "Yellow" }
             } elseif ($entry.LatestVersion -and $entry.CurrentVersion) {
-                $label += " ($($entry.CurrentVersion) -> $($entry.LatestVersion))"
+                $hint = @{ Text = "($($entry.CurrentVersion) -> $($entry.LatestVersion))"; Color = "Yellow" }
             } elseif ($entry.LatestVersion) {
-                $label += " (有更新 -> $($entry.LatestVersion))"
+                $hint = @{ Text = "(有更新 -> $($entry.LatestVersion))"; Color = "Yellow" }
             } else {
-                $label += " (模板已变更)"
+                $hint = @{ Text = "(模板已变更)"; Color = "Yellow" }
             }
             $defaultSelected += $i
         }
         elseif ($entry.HasUpdate -eq $false) {
-            $label += if ($entry.CurrentVersion) { " (已是最新 $($entry.CurrentVersion))" } else { " (已是最新)" }
+            $versionText = if ($entry.CurrentVersion) { "(已是最新 $($entry.CurrentVersion))" } else { "(已是最新)" }
+            $hint = @{ Text = $versionText; Color = "DarkGray" }
         }
         else {
-            $label += " (已安装)"
+            $hint = @{ Text = "(已安装)"; Color = "DarkGray" }
             $defaultSelected += $i
         }
         $options += $label
+        $hints += $hint
     }
-
     Write-Host ""
-    Write-Host "选择要更新的组件（空格切换选择，Enter 确认，Esc 取消）:" -ForegroundColor Cyan
-    Write-Host ""
-
-    $selectedIndices = Show-MultiSelectMenu -Title "可更新组件" -Options $options -DefaultSelected $defaultSelected
+    $selectedIndices = Show-MultiSelectMenu -Title "可更新组件" -Options $options -DefaultSelected $defaultSelected -OptionHints $hints
 
     if ($null -eq $selectedIndices -or @($selectedIndices).Count -eq 0) {
         Write-UiInfo "未选择任何步骤，退出更新"
@@ -474,7 +418,6 @@ function Invoke-UpdateAction {
     param([switch]$ListOnly)
 
     $updateStatus = Get-UpdateStatus
-    Show-UpdateStatus -StatusList $updateStatus
 
     if ($ListOnly) {
         $hasUpdates = @($updateStatus | Where-Object { $_.HasUpdate -eq $true }).Count -gt 0
@@ -551,14 +494,14 @@ function Invoke-UpdateAction {
             $sid = $plan[$i].StepId
             if ($fingerprintSkips.ContainsKey($sid)) {
                 Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor DarkGray -NoNewline
-                Write-Host "  [指纹一致, 跳过]" -ForegroundColor DarkGray
+                Write-Host "  [内容无变更, 跳过]" -ForegroundColor DarkGray
             } else {
                 Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor White
             }
         }
         if ($fingerprintSkips.Count -gt 0) {
             Write-Host ""
-            Write-UiInfo "指纹预检: $($fingerprintSkips.Count) 个步骤模板未变更，将跳过"
+            Write-UiInfo "预检: $($fingerprintSkips.Count) 个步骤内容无变更，将跳过"
         }
         Write-Host ""
 
@@ -591,7 +534,7 @@ function Invoke-UpdateAction {
                 Write-UiWarn "没有找到需要备份的文件，跳过快照"
             }
         } else {
-            Write-UiInfo "所有步骤均为指纹命中，跳过备份快照"
+            Write-UiInfo "所有步骤内容无变更，跳过备份快照"
         }
 
         # 创建安装状态
@@ -611,7 +554,7 @@ function Invoke-UpdateAction {
             if ($fingerprintSkips.ContainsKey($stepId)) {
                 Write-Host ""
                 Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor DarkGray
-                Write-UiInfo "模板指纹一致，跳过"
+                Write-UiInfo "内容无变更，跳过"
 
                 $skipResult = [StepResult]::new($stepId, $stepConfig.StepName)
                 $skipResult.Status = [StepStatus]::Success

@@ -612,6 +612,9 @@ function Show-MultiSelectMenu {
     选项数组
     .PARAMETER DefaultSelected
     默认选中的索引数组
+    .PARAMETER OptionHints
+    可选的着色后缀数组，每项为 @{ Text = "..."; Color = "Yellow" }。
+    按索引对应 Options，渲染时追加在选项文本后方。
     .RETURNS
     选中的索引数组
     #>
@@ -622,7 +625,9 @@ function Show-MultiSelectMenu {
         [Parameter(Mandatory = $true)]
         [string[]]$Options,
 
-        [int[]]$DefaultSelected = @()
+        [int[]]$DefaultSelected = @(),
+
+        [hashtable[]]$OptionHints = @()
     )
 
     if ($Options.Count -eq 0) {
@@ -646,7 +651,8 @@ function Show-MultiSelectMenu {
 
         for ($i = 0; $i -lt $Options.Count; $i++) {
             $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
-            Write-Host "  $($i + 1). $checked $($Options[$i])"
+            $hintText = if ($OptionHints.Count -gt $i -and $OptionHints[$i]) { " $($OptionHints[$i].Text)" } else { "" }
+            Write-Host "  $($i + 1). $checked $($Options[$i])$hintText"
         }
 
         Write-Host ""
@@ -681,18 +687,30 @@ function Show-MultiSelectMenu {
         Write-Host "`e[J" -NoNewline
         for ($i = 0; $i -lt $Options.Count; $i++) {
             $checked = if ($selectedItems.ContainsKey($i)) { "[✓]" } else { "[ ]" }
+            $hasHint = $OptionHints.Count -gt $i -and $OptionHints[$i]
 
             if ($i -eq $selectedIndex) {
-                Write-UiSuccess "  ► $checked $($Options[$i])"
+                Write-Host "  ► $checked $($Options[$i])" -ForegroundColor Green -NoNewline
+                if ($hasHint) {
+                    Write-Host " $($OptionHints[$i].Text)" -ForegroundColor $OptionHints[$i].Color
+                } else {
+                    Write-Host ""
+                }
             } else {
-                Write-Host "    $checked $($Options[$i])"
+                Write-Host "    $checked $($Options[$i])" -NoNewline
+                if ($hasHint) {
+                    Write-Host " $($OptionHints[$i].Text)" -ForegroundColor $OptionHints[$i].Color
+                } else {
+                    Write-Host ""
+                }
             }
         }
     }
 
     $totalPhysicalLines = 0
     for ($i = 0; $i -lt $Options.Count; $i++) {
-        $totalPhysicalLines += Get-MenuItemPhysicalLines -Prefix "    [ ] " -OptionText $Options[$i]
+        $hintSuffix = if ($OptionHints.Count -gt $i -and $OptionHints[$i]) { " $($OptionHints[$i].Text)" } else { "" }
+        $totalPhysicalLines += Get-MenuItemPhysicalLines -Prefix "    [ ] " -OptionText "$($Options[$i])$hintSuffix"
     }
 
     # 隐藏光标

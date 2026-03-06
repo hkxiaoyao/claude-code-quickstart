@@ -173,7 +173,7 @@ Main()
   │
   ├── [CLI 模式]（-Action 参数）
   │   ├── -Action Update [-ListUpdates]
-  │   │   ├── Get-UpdateStatus → Show-UpdateStatus
+  │   │   ├── Get-UpdateStatus
   │   │   ├── [if -ListUpdates] 退出
   │   │   └── Invoke-UpdateAction（Mutex + 交互多选 + 执行 + 摘要）
   │   ├── -Action Provider [-ListProviders | -Provider <key>]
