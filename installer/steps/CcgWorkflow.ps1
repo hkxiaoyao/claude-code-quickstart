@@ -85,17 +85,22 @@ function Get-CcgWorkflowFingerprint {
     计算 CcgWorkflow 步骤的组合内容指纹（引擎版本 + 规则模板哈希）
     .DESCRIPTION
     组合指纹确保引擎版本变更或规则模板变更都能触发更新检测。
+    引擎版本统一从 config.toml 读取（与 Get-CcgWorkflowUpdateComponents 保持一致）。
     .RETURNS
     string - 组合指纹字符串，或空字符串（未安装时）
     #>
     $parts = @()
 
-    # 引擎版本分量
-    if (Test-CommandAvailable "codeagent-wrapper") {
-        $parts += "engine:" + (Get-CommandVersion -Command "codeagent-wrapper")
-    } else {
-        $parts += "engine:unknown"
+    # 引擎版本分量（统一从 config.toml 读取，与分量检测保持 single source of truth）
+    $configToml = "$script:ClaudeDir\.ccg\config.toml"
+    $engineVersion = "unknown"
+    if (Test-Path $configToml) {
+        $content = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+        if ($content -match 'version\s*=\s*"([^"]+)"') {
+            $engineVersion = $matches[1]
+        }
     }
+    $parts += "engine:$engineVersion"
 
     # 规则模板分量
     $parts += "rules:" + (Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate)
@@ -149,6 +154,10 @@ function Get-CcgWorkflowUpdateComponents {
     if ($result.LocalVersion -and $result.LatestVersion -and $result.LocalVersion -ne $result.LatestVersion) {
         $result.EngineNeedUpdate = $true
     }
+    elseif (-not $result.LocalVersion -and $result.LatestVersion) {
+        # 已安装但本地版本不可读（config.toml 损坏/缺失）→ 保守触发引擎更新
+        $result.EngineNeedUpdate = $true
+    }
 
     # ── 规则分量：文件内容对比 + 遗留旧文件检查 ──
     $rulesDir = "$script:ClaudeDir\rules"
@@ -183,7 +192,11 @@ function Get-CcgWorkflowUpdateComponents {
         $result.StatusHint = "引擎与规则均需更新"
     } elseif ($result.EngineNeedUpdate) {
         $result.UpdateKind = "engine-only"
-        $result.StatusHint = "引擎版本可更新 ($($result.LocalVersion) -> $($result.LatestVersion))"
+        if (-not $result.LocalVersion) {
+            $result.StatusHint = "引擎版本不可读，建议重新安装"
+        } else {
+            $result.StatusHint = "引擎版本可更新 ($($result.LocalVersion) -> $($result.LatestVersion))"
+        }
     } elseif ($result.RulesNeedUpdate) {
         $result.UpdateKind = "rules-only"
         $result.StatusHint = "规则文件更新"
@@ -646,6 +659,8 @@ function Update-CcgWorkflow {
             if ($ruleWriteResult) {
                 $result.UpdatedItems += "file::rules/ccq-ccgworkflow.md::overwritten"
                 Write-UiSuccess "CCG Workflow 规则文件已更新"
+            } else {
+                throw "CCG Workflow 规则文件写入失败: $ccgRulePath"
             }
         }
 
