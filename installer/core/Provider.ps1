@@ -834,6 +834,14 @@ function Edit-Provider {
         }
     }
 
+    # 在写入 Profile 之前判断是否为当前活跃供应商
+    # （写入后 BaseUrl 可能已变更，Get-ActiveProvider 将无法匹配旧 URL）
+    $wasActive = $false
+    $active = Get-ActiveProvider
+    if ($active -and $active.Key -eq $Key) {
+        $wasActive = $true
+    }
+
     # 原子写入更新后的 Profile
     $effectiveKey = $Key
     if ($pendingNewKey) {
@@ -858,9 +866,8 @@ function Edit-Provider {
         Write-UiSuccess "供应商配置已更新: $($meta["provider"])"
     }
 
-    # 如果修改的是当前活跃供应商 → 自动同步 settings.json
-    $active = Get-ActiveProvider
-    if ($active -and ($active.Key -eq $Key -or $active.Key -eq $effectiveKey)) {
+    # 如果修改前是活跃供应商 → 自动同步 settings.json
+    if ($wasActive) {
         Write-UiInfo "正在同步活跃供应商配置到 settings.json..."
         Switch-Provider -Key $effectiveKey
     }
