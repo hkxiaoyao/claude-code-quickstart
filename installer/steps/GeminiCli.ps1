@@ -65,9 +65,9 @@ function Install-GeminiCli {
         Write-UiInfo "刷新环境变量..."
         Refresh-SessionPath
 
-        # 验证安装
+        # 验证安装（Gemini CLI 首次运行需要初始化，给予更长超时）
         Start-Sleep -Seconds 2
-        $geminiDetails = Test-CommandAvailable -Command "gemini" -ReturnDetails
+        $geminiDetails = Test-CommandAvailable -Command "gemini" -ReturnDetails -TimeoutSeconds 30
         if (-not $geminiDetails.Available) {
             $errorMsg = "安装后 gemini 命令仍不可用"
             if ($geminiDetails.ResolvedPath) {
@@ -111,8 +111,8 @@ function Verify-GeminiCli {
     }
 
     try {
-        # 验证命令可用性
-        if (-not (Test-CommandAvailable -Command "gemini")) {
+        # 验证命令可用性（Gemini CLI 首次运行需要初始化，给予更长超时）
+        if (-not (Test-CommandAvailable -Command "gemini" -TimeoutSeconds 30)) {
             throw "gemini 命令不可用"
         }
 

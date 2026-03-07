@@ -314,9 +314,8 @@ Install-ApiKey($state)
 **contextweaver 安装增强**：针对 Windows 权限问题，添加了 npm 缓存清理和 `--force` 重试机制，解决 EPERM 错误导致的安装失败。
 
 **检测逻辑修复**：
-1. 修复了 Pencil 软件存在时错误跳过 MCP 配置的问题
-2. 修复了配置文件路径错误：MCP Server 配置应写入 `~/.claude.json`，而不是 `settings.json`
-3. 现在只有当 .claude.json 中有实际的 stdio/http MCP Server 配置时才返回 true（但不会跳过安装）
+1. 修复了配置文件路径错误：MCP Server 配置应写入 `~/.claude.json`，而不是 `settings.json`
+2. 现在只有当 .claude.json 中有实际的 stdio/http MCP Server 配置时才返回 true（但不会跳过安装）
 
 **Vault 集成（mcp-lifecycle）**：
 - Install-Mcp Phase 3：凭据收集前读取 `~/.ccq/mcp-meta.json` 检查历史凭据，提示 `[Y/n]` 自动填充

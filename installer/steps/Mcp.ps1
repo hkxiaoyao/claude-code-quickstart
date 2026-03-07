@@ -180,21 +180,6 @@ $script:McpServers = [ordered]@{
         Priority = 8
         Recommended = $false
     }
-    "pencil" = @{
-        Name = "Pencil"
-        Description = "IDE 集成矢量设计工具，安装后自动注册 MCP"
-        McpType = "software"
-        CredentialType = "none"
-        SoftwareInstall = @{
-            DownloadUrl = "https://5ykymftd1soethh5.public.blob.vercel-storage.com/Pencil-win-x64.exe"
-            GuideUrl = "https://pencil.dev/"
-            InstallerType = "exe"
-        }
-        Note = "Pencil 桌面端安装后自动注册 MCP，无需手动配置 settings.json"
-        Category = "Design"
-        Priority = 9
-        Recommended = $false
-    }
     "figma" = @{
         Name = "Figma"
         Description = "Figma 官方设计稿代码生成和变量提取"

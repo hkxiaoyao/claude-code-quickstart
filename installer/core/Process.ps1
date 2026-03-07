@@ -541,6 +541,8 @@ function Test-CommandAvailable {
     要检测的命令名
     .PARAMETER ReturnDetails
     返回详细诊断信息而非布尔值
+    .PARAMETER TimeoutSeconds
+    版本命令执行超时时间（秒），默认 10。首次运行较慢的 CLI 可传更大值。
     .RETURNS
     布尔值（默认）或详细诊断对象（ReturnDetails=true）
     #>
@@ -548,7 +550,9 @@ function Test-CommandAvailable {
         [Parameter(Mandatory = $true)]
         [string]$Command,
 
-        [switch]$ReturnDetails
+        [switch]$ReturnDetails,
+
+        [int]$TimeoutSeconds = 10
     )
 
     $details = @{
@@ -585,7 +589,7 @@ function Test-CommandAvailable {
 
         # 对于外部命令，通过实际执行验证可用性
         try {
-            $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+            $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds $TimeoutSeconds -RetryCount 0
             $details.ExitCode = $result.ExitCode
             $details.Output = $result.Output
             $details.Available = $result.Success
@@ -599,7 +603,7 @@ function Test-CommandAvailable {
         } catch {
             # 尝试 -v 参数
             try {
-                $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+                $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds $TimeoutSeconds -RetryCount 0
                 $details.ExitCode = $result.ExitCode
                 $details.Output = $result.Output
                 $details.Available = $result.Success
@@ -620,7 +624,7 @@ function Test-CommandAvailable {
         $details.ErrorMessage = "Get-Command 失败: $($_.Exception.Message)"
 
         try {
-            $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+            $result = Invoke-ExternalCommand -Command $Command -Arguments @("--version") -SuppressOutput -TimeoutSeconds $TimeoutSeconds -RetryCount 0
             $details.ExitCode = $result.ExitCode
             $details.Output = $result.Output
             $details.Available = $result.Success
@@ -634,7 +638,7 @@ function Test-CommandAvailable {
             }
         } catch {
             try {
-                $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
+                $result = Invoke-ExternalCommand -Command $Command -Arguments @("-v") -SuppressOutput -TimeoutSeconds $TimeoutSeconds -RetryCount 0
                 $details.ExitCode = $result.ExitCode
                 $details.Output = $result.Output
                 $details.Available = $result.Success

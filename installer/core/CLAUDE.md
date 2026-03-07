@@ -68,7 +68,7 @@ $script:DefaultTimeoutSeconds  = 300
 | 函数 | 签名摘要 | 返回 |
 |------|---------|------|
 | `Invoke-ExternalCommand` | `-Command -Arguments [-WorkingDirectory] [-TimeoutSeconds] [-RetryCount] [-SuppressOutput]` | `@{ExitCode; Output; Error}` |
-| `Test-CommandAvailable` | `-Command` | `$true/$false` |
+| `Test-CommandAvailable` | `-Command [-ReturnDetails] [-TimeoutSeconds=10]` | `$true/$false` 或详细诊断对象 |
 | `Get-CommandVersion` | `-Command` | `string` 版本号 |
 | `Refresh-SessionPath` | — | void（刷新当前会话 PATH） |
 | `Invoke-NpmGlobalInstall` | `-PackageName [-Version] [-Force]` | `@{Success; Error; Data}` |
