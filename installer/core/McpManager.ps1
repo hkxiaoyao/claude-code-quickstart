@@ -261,8 +261,8 @@ function Render-McpToolChain {
     }
 
     # 静态行（如 Development 的 Grep/Glob）
-    if ($cat.StaticRows) {
-        foreach ($row in $cat.StaticRows) {
+    if ($cat -is [hashtable] -and $cat.ContainsKey('StaticRows') -and $cat['StaticRows']) {
+        foreach ($row in $cat['StaticRows']) {
             [void]$sb.AppendLine("| $($row.Scenario) | ``$($row.Tool)`` |")
         }
     }
@@ -270,9 +270,9 @@ function Render-McpToolChain {
     [void]$sb.AppendLine("")
 
     # Tips
-    if ($cat.Tips -and $cat.Tips.Count -gt 0) {
+    if ($cat -is [hashtable] -and $cat.ContainsKey('Tips') -and $cat['Tips'].Count -gt 0) {
         [void]$sb.AppendLine("**Tips**:")
-        foreach ($tip in $cat.Tips) {
+        foreach ($tip in $cat['Tips']) {
             [void]$sb.AppendLine("- $tip")
         }
     }
