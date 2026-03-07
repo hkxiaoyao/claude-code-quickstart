@@ -108,6 +108,94 @@ function Test-ProviderKey {
     return (-not [string]::IsNullOrWhiteSpace($Key) -and $Key -match '^[A-Za-z0-9._-]+$')
 }
 
+function New-CustomProviderKey {
+    <#
+    .SYNOPSIS
+    生成自定义供应商 Key：优先名称，其次 URL（host + 可选路径哈希）
+    .PARAMETER Name
+    用户输入的供应商名称（可选）
+    .PARAMETER BaseUrl
+    供应商 Base URL（必填）
+    .RETURNS
+    string — ASCII 安全的 provider key（如 custom-aether / custom-api-example-com-1a2b）
+    #>
+    param(
+        [string]$Name,
+        [Parameter(Mandatory)] [string]$BaseUrl
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        $sanitized = $Name.Trim().ToLower() -replace '[^a-z0-9\-]', '-' -replace '-{2,}', '-' -replace '^-|-$', ''
+        if ($sanitized) { return "custom-$sanitized" }
+    }
+
+    try {
+        $uri = [System.Uri]::new($BaseUrl.TrimEnd('/'))
+        $hostPart = $uri.Host.ToLower() -replace '\.', '-'
+        if ($uri.AbsolutePath -and $uri.AbsolutePath -ne "/") {
+            $pathHash = (Get-StringFingerprint -Text $uri.AbsolutePath).Substring(0, 4)
+            return "custom-${hostPart}-${pathHash}"
+        }
+        return "custom-${hostPart}"
+    } catch {
+        return "custom-manual"
+    }
+}
+
+function Get-NextAvailableKey {
+    <#
+    .SYNOPSIS
+    计算 baseKey 的下一个可用递增 key（如 zhipu → zhipu-2 → zhipu-3）
+    .PARAMETER BaseKey
+    基础 key（如 zhipu / minimax / moonshot）
+    .RETURNS
+    string — 下一个可用 key
+    #>
+    param([Parameter(Mandatory)] [string]$BaseKey)
+
+    $profilesDir = Get-ProviderProfilesDir
+    if (-not (Test-Path $profilesDir)) { return "$BaseKey-2" }
+
+    # HC-13: @() 包裹
+    $files = @(Get-ChildItem $profilesDir -Filter "*.json" -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { return "$BaseKey-2" }
+
+    $pattern = '^' + [regex]::Escape($BaseKey) + '(?:-(\d+))?$'
+    $maxNum = 1  # 基础 key 视为序号 1
+    foreach ($f in $files) {
+        $k = [System.IO.Path]::GetFileNameWithoutExtension($f.Name)
+        $m = [regex]::Match($k, $pattern)
+        if (-not $m.Success) { continue }
+        if ($m.Groups[1].Success) {
+            $n = 0
+            if ([int]::TryParse($m.Groups[1].Value, [ref]$n) -and $n -gt $maxNum) {
+                $maxNum = $n
+            }
+        }
+    }
+    return "$BaseKey-$($maxNum + 1)"
+}
+
+function Find-BuiltinProviderProfiles {
+    <#
+    .SYNOPSIS
+    从 profiles 列表中查找属于指定内置供应商的所有实例
+    .PARAMETER BuiltinKey
+    内置供应商基础 key（zhipu / minimax / moonshot）
+    .PARAMETER Profiles
+    Get-ProviderProfiles 返回的 hashtable 数组
+    .RETURNS
+    hashtable[] — 匹配的 profile 列表
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$BuiltinKey,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [array]$Profiles
+    )
+
+    # 精确匹配 key 或前缀匹配 key-N（仅数字后缀）
+    return @($Profiles | Where-Object { $_.Key -eq $BuiltinKey -or $_.Key -match "^$([regex]::Escape($BuiltinKey))-\d+$" })
+}
+
 # ─── Sync（自动同步）──────────────────────────────────────────────────────────
 
 function Sync-ProviderFromSettings {
@@ -168,19 +256,10 @@ function Sync-ProviderFromSettings {
         }
     }
 
-    # 自定义供应商: 用域名 + 路径哈希作 key（防止同域名不同路径冲突）
+    # 自定义供应商: 统一 key 生成（名称/URL 回退，含路径哈希消歧）
     if ($migrateKey -eq "custom" -and -not [string]::IsNullOrWhiteSpace($baseUrl)) {
-        try {
-            $uri = [System.Uri]::new($baseUrl)
-            $hostPart = $uri.Host -replace '\.', '-'
-            # 路径非空且不只是 "/" 时追加路径哈希消歧
-            if ($uri.AbsolutePath -and $uri.AbsolutePath -ne "/") {
-                $pathHash = (Get-StringFingerprint -Text $uri.AbsolutePath).Substring(0, 4)
-                $migrateKey = "custom-${hostPart}-${pathHash}"
-            } else {
-                $migrateKey = "custom-${hostPart}"
-            }
-        } catch {
+        $migrateKey = New-CustomProviderKey -Name "" -BaseUrl $baseUrl
+        if (-not (Test-ProviderKey -Key $migrateKey)) {
             $migrateKey = "custom-unknown"
         }
     }
@@ -355,11 +434,31 @@ function Add-Provider {
 
     $result = @{ Success = $false; Key = ""; Name = ""; BaseUrl = ""; Activated = $false }
 
+    # HC-13: @() 包裹 — 扫描已有 profiles，为内置供应商菜单标注已配置状态
+    $existingProfiles = @(Get-ProviderProfiles)
+    $builtinKeys = @("zhipu", "minimax", "moonshot")
+    $configuredTags = @{}
+    foreach ($bk in $builtinKeys) {
+        $matched = @(Find-BuiltinProviderProfiles -BuiltinKey $bk -Profiles $existingProfiles)
+        if ($matched.Count -eq 1) {
+            $templateName = $script:BuiltinProviders[$bk].Name
+            if ($matched[0].Name -eq $templateName) {
+                $configuredTags[$bk] = " [已配置]"
+            } else {
+                $tagName = $matched[0].Name
+                if ($tagName.Length -gt 10) { $tagName = $tagName.Substring(0, 10) + "..." }
+                $configuredTags[$bk] = " [已配置: $tagName]"
+            }
+        } elseif ($matched.Count -gt 1) {
+            $configuredTags[$bk] = " [已配置 x$($matched.Count)]"
+        }
+    }
+
     # 构建菜单
     $providerLabels = @(
-        "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型"
-        "MiniMax        - MiniMax API，支持 M2.5 系列"
-        "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列"
+        "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型$($configuredTags['zhipu'])"
+        "MiniMax        - MiniMax API，支持 M2.5 系列$($configuredTags['minimax'])"
+        "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列$($configuredTags['moonshot'])"
         "自定义供应商    - 手动配置 Base URL 和 API Key"
     )
     $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
@@ -403,15 +502,100 @@ function Add-Provider {
         $providerBaseUrl = $customUrl.TrimEnd('/')
         Write-UiSuccess "Base URL 已设置: $providerBaseUrl"
 
-        # 生成 Profile Key
-        try {
-            $uri = [System.Uri]::new($providerBaseUrl)
-            $selectedKey = "custom-$($uri.Host -replace '\.', '-')"
-        } catch {
-            $selectedKey = "custom-manual"
+        # 统一 key 生成：名称优先，回退 URL host + path hash
+        $selectedKey = New-CustomProviderKey -Name $customName -BaseUrl $providerBaseUrl
+        if (-not (Test-ProviderKey -Key $selectedKey)) {
+            Write-UiError "生成的 Provider Key 非法，取消添加"
+            return $result
         }
     } else {
         Write-UiInfo "请前往以下平台获取 API Key: $($template.PlatformUrl)"
+    }
+
+    # 重复检测：内置供应商三选一（新增/覆盖/取消）；自定义供应商二选一（覆盖/取消）
+    $profilesDir = Get-ProviderProfilesDir
+    $existingPath = Join-Path $profilesDir "$selectedKey.json"
+    $isBuiltin = $selectedKey -ne "custom" -and $providerKeys -contains $selectedKey
+
+    if ($isBuiltin) {
+        $builtinExisting = @(Find-BuiltinProviderProfiles -BuiltinKey $selectedKey -Profiles $existingProfiles)
+        if ($builtinExisting.Count -gt 0) {
+            Write-Host ""
+            Write-UiWarn "检测到 $($template.Name) 已配置："
+            foreach ($item in $builtinExisting) {
+                Write-UiInfo "  - $($item.Name) ($($item.BaseUrl))"
+            }
+
+            $actionIdx = Show-SingleSelectMenu -Title "如何处理？" -Options @(
+                "新增（保留现有，创建新配置）"
+                "覆盖现有配置"
+                "取消添加"
+            )
+            switch ($actionIdx) {
+                0 {
+                    # 新增：自动生成递增 key
+                    $selectedKey = Get-NextAvailableKey -BaseKey $selectedKey
+                    $existingPath = Join-Path $profilesDir "$selectedKey.json"
+                    Write-UiInfo "将创建新配置: ~/.claude/providers/$selectedKey.json"
+                    # 允许用户输入自定义显示名称
+                    $newDisplayName = Read-Host "显示名称（可选，直接回车使用默认）"
+                    if (-not [string]::IsNullOrWhiteSpace($newDisplayName)) {
+                        $providerName = $newDisplayName.Trim()
+                    } else {
+                        # 默认名称：追加序号（如 "智谱 GLM (2)"）
+                        $num = 2
+                        $numMatch = [regex]::Match($selectedKey, '-(\d+)$')
+                        if ($numMatch.Success) {
+                            $parsed = 0
+                            if ([int]::TryParse($numMatch.Groups[1].Value, [ref]$parsed)) { $num = $parsed }
+                        }
+                        $providerName = "$providerName ($num)"
+                    }
+                }
+                1 {
+                    # 覆盖：基础 key 存在则覆盖，否则让用户选择实例
+                    if (-not (Test-Path $existingPath)) {
+                        if ($builtinExisting.Count -eq 1) {
+                            $selectedKey = $builtinExisting[0].Key
+                        } else {
+                            $owOptions = @($builtinExisting | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
+                            $owIdx = Show-SingleSelectMenu -Title "选择要覆盖的配置：" -Options $owOptions
+                            if ($owIdx -lt 0 -or $owIdx -ge $builtinExisting.Count) {
+                                Write-UiInfo "已取消"
+                                return $result
+                            }
+                            $selectedKey = $builtinExisting[$owIdx].Key
+                        }
+                        $existingPath = Join-Path $profilesDir "$selectedKey.json"
+                    }
+                }
+                default {
+                    Write-UiInfo "已取消，可通过「修改供应商」更新现有配置"
+                    return $result
+                }
+            }
+        }
+    } elseif (Test-Path $existingPath) {
+        # 自定义供应商：保持二选一（覆盖/取消）
+        try {
+            $existing = Get-Content $existingPath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            $existName = if ($existing["_meta"] -and $existing["_meta"]["provider"]) { $existing["_meta"]["provider"] } else { $selectedKey }
+            $existUrl  = if ($existing["_meta"] -and $existing["_meta"]["baseUrl"])  { $existing["_meta"]["baseUrl"] }  else { "未知" }
+            Write-Host ""
+            Write-UiWarn "检测到同名供应商已存在："
+            Write-UiInfo "  名称: $existName"
+            Write-UiInfo "  Base URL: $existUrl"
+            Write-UiInfo "  文件: ~/.claude/providers/$selectedKey.json"
+        } catch {
+            Write-Host ""
+            Write-UiWarn "检测到供应商 $selectedKey 已存在"
+        }
+
+        $overwriteIdx = Show-SingleSelectMenu -Title "如何处理？" -Options @("覆盖现有配置", "取消添加")
+        if ($overwriteIdx -ne 0) {
+            Write-UiInfo "已取消，可通过「修改供应商」更新现有配置"
+            return $result
+        }
     }
 
     # 安全输入 API Key
@@ -561,6 +745,8 @@ function Edit-Provider {
 
     if ($editChoice -eq -1) { return }
 
+    $pendingNewKey = $null
+
     switch ($editChoice) {
         0 {
             # 修改 API Key
@@ -601,7 +787,21 @@ function Edit-Provider {
                 Write-UiError "名称不能为空，取消修改"
                 return
             }
+            $newName = $newName.Trim()
             $meta["provider"] = $newName
+
+            # 自定义供应商：同步重命名文件（key 从名称重新派生）
+            if ($Key -match '^custom-') {
+                $candidateKey = New-CustomProviderKey -Name $newName -BaseUrl $meta["baseUrl"]
+                if ((Test-ProviderKey -Key $candidateKey) -and $candidateKey -ne $Key) {
+                    $candidatePath = Join-Path $profilesDir "$candidateKey.json"
+                    if (Test-Path $candidatePath) {
+                        Write-UiWarn "目标文件 $candidateKey.json 已存在，仅更新显示名称"
+                    } else {
+                        $pendingNewKey = $candidateKey
+                    }
+                }
+            }
         }
         3 {
             # 全部重新配置 → 备份旧配置，添加新配置，成功后清理旧备份
@@ -635,19 +835,34 @@ function Edit-Provider {
     }
 
     # 原子写入更新后的 Profile
+    $effectiveKey = $Key
+    if ($pendingNewKey) {
+        $meta["key"] = $pendingNewKey
+        $effectiveKey = $pendingNewKey
+    }
     $profile["_meta"] = $meta
     $profile["env"] = $envData
-    $tempPath = "$profilePath.tmp"
-    $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
-    Move-Item $tempPath $profilePath -Force
 
-    Write-UiSuccess "供应商配置已更新: $Key"
+    if ($pendingNewKey) {
+        # 写入新文件 + 删除旧文件（重命名）
+        $newProfilePath = Join-Path $profilesDir "$pendingNewKey.json"
+        $tempPath = "$newProfilePath.tmp"
+        $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+        Move-Item $tempPath $newProfilePath -Force
+        Remove-Item $profilePath -Force
+        Write-UiSuccess "供应商配置已更新: $($meta["provider"]) ($Key → $pendingNewKey)"
+    } else {
+        $tempPath = "$profilePath.tmp"
+        $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+        Move-Item $tempPath $profilePath -Force
+        Write-UiSuccess "供应商配置已更新: $($meta["provider"])"
+    }
 
     # 如果修改的是当前活跃供应商 → 自动同步 settings.json
     $active = Get-ActiveProvider
-    if ($active -and $active.Key -eq $Key) {
+    if ($active -and ($active.Key -eq $Key -or $active.Key -eq $effectiveKey)) {
         Write-UiInfo "正在同步活跃供应商配置到 settings.json..."
-        Switch-Provider -Key $Key
+        Switch-Provider -Key $effectiveKey
     }
 }
 
@@ -715,9 +930,20 @@ function Switch-Provider {
     if ([string]::IsNullOrWhiteSpace($Key)) {
         $active = Get-ActiveProvider
         $options = @()
+        # 检测同名：同名供应商需追加 BaseUrl 消歧
+        $nameCount = @{}
+        foreach ($p in $profiles) {
+            $n = if ([string]::IsNullOrWhiteSpace($p.Name)) { "未知" } else { $p.Name }
+            if ($nameCount.ContainsKey($n)) { $nameCount[$n]++ } else { $nameCount[$n] = 1 }
+        }
         foreach ($p in $profiles) {
             $tag = if ($active -and $active.Key -eq $p.Key) { " [当前]" } else { "" }
-            $options += "$($p.Name) ($($p.Key))$tag"
+            $displayName = if ([string]::IsNullOrWhiteSpace($p.Name)) { "未知" } else { $p.Name }
+            if ($nameCount[$displayName] -gt 1) {
+                $options += "$displayName - $($p.BaseUrl)$tag"
+            } else {
+                $options += "$displayName$tag"
+            }
         }
 
         $selectedIdx = Show-SingleSelectMenu -Title "选择要切换的供应商：" -Options $options
@@ -839,7 +1065,7 @@ function Show-ProviderManageMenu {
                 if ($profiles.Count -eq 0) {
                     Write-UiWarn "没有可修改的供应商"
                 } else {
-                    $editOptions = @($profiles | ForEach-Object { "$($_.Name) ($($_.Key))" })
+                    $editOptions = @($profiles | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
                     $editIdx = Show-SingleSelectMenu -Title "选择要修改的供应商：" -Options $editOptions
                     if ($editIdx -ge 0 -and $editIdx -lt $profiles.Count) {
                         Edit-Provider -Key $profiles[$editIdx].Key
@@ -856,7 +1082,7 @@ function Show-ProviderManageMenu {
                 if ($profiles.Count -eq 0) {
                     Write-UiWarn "没有可删除的供应商"
                 } else {
-                    $delOptions = @($profiles | ForEach-Object { "$($_.Name) ($($_.Key))" })
+                    $delOptions = @($profiles | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
                     $delIdx = Show-SingleSelectMenu -Title "选择要删除的供应商：" -Options $delOptions
                     if ($delIdx -ge 0 -and $delIdx -lt $profiles.Count) {
                         Remove-Provider -Key $profiles[$delIdx].Key
