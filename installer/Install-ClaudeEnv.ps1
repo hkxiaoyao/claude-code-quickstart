@@ -390,6 +390,38 @@ function Invoke-GroupedInstall {
         }
     }
 
+    # 安装成功的指纹管理步骤 → 种子写入清单
+    # 避免首次更新检查误报"模板已变更"（Manage 的指纹预检依赖此清单）
+    try {
+        $fpManagedSteps = @("ClaudeMd", "ClaudeConfig", "CcgWorkflow")
+        $manifest = Read-UpdateManifest
+        $seeded = $false
+
+        foreach ($sid in $orderedStepIds) {
+            if ($sid -notin $fpManagedSteps) { continue }
+            $sr = $State.StepResults[$sid]
+            if (-not $sr -or $sr.Status -ne [StepStatus]::Success) { continue }
+
+            $fnName = "Get-${sid}Fingerprint"
+            if (-not (Get-Command $fnName -ErrorAction SilentlyContinue)) { continue }
+
+            $fp = & $fnName
+            if (-not [string]::IsNullOrWhiteSpace($fp)) {
+                $manifest["steps"][$sid] = @{
+                    fingerprint = $fp
+                    appliedAt   = (Get-Date).ToUniversalTime().ToString("o")
+                }
+                $seeded = $true
+            }
+        }
+
+        if ($seeded) {
+            Write-UpdateManifest -Manifest $manifest
+        }
+    } catch {
+        # 指纹种子写入失败不阻塞安装流程
+    }
+
     return $results
 }
 

@@ -81,7 +81,7 @@ foreach ($stepFile in $stepFiles) {
 | `Get-GroupStatus` | 统计分组内步骤完成状态 |
 | `Get-DependencyClosure` | 计算传递依赖闭包，自动补齐跨组依赖 |
 | `Show-ExecutionPlan` | 显示执行计划（含自动补齐的依赖）并确认 |
-| `Invoke-GroupedInstall` | 依赖闭包 → 确认 → 拓扑排序 → 执行 |
+| `Invoke-GroupedInstall` | 依赖闭包 → 确认 → 拓扑排序 → 执行 → 指纹种子写入 |
 | `Show-AdvancedSelectMenu` | 进阶多选菜单（带状态标签和智能默认勾选） |
 | `Select-TopLevelAction` | 顶层菜单：基础环境 / 进阶扩展 |
 | `Select-AdvancedAction` | 进阶子菜单：一键安装 / 可选安装 |
