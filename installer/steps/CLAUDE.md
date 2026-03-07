@@ -328,7 +328,7 @@ Install-ApiKey($state)
 **MCP Rules 动态渲染**：
 - Install-Mcp 末尾调用 `Sync-AllMcpRules`，根据已启用的 MCP Server 动态生成 `rules/ccq-mcp-*.md` 文件
 - 分类定义在 `core/McpManager.ps1` 的 `$script:McpRulesCategories` 中维护
-- 5 个分类：Search（搜索）、Documentation（文档）、Development（代码检索）、Design（设计）、Automation（自动化）
+- 3 个分类：Search（搜索）、Documentation（文档）、Development（代码检索）
 - 某分类下所有 MCP 禁用时，对应 rules 文件自动删除
 
 ---

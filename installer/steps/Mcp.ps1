@@ -170,7 +170,7 @@ $script:McpServers = [ordered]@{
         Description = "MasterGo 设计稿解析和代码生成 (需团队版)"
         McpType = "stdio"
         Command = "npx"
-        Args = @("-y", "@mastergo/magic-mcp")
+        Args = @("-y", "@mastergo/magic-mcp", "--url=https://mastergo.com")
         CredentialType = "args-token"
         TokenArg = "--token"
         TokenLabel = "MasterGo API Token"
@@ -186,7 +186,6 @@ $script:McpServers = [ordered]@{
         McpType = "software"
         CredentialType = "none"
         SoftwareInstall = @{
-            WingetSearch = "Pencil"
             DownloadUrl = "https://5ykymftd1soethh5.public.blob.vercel-storage.com/Pencil-win-x64.exe"
             GuideUrl = "https://pencil.dev/"
             InstallerType = "exe"

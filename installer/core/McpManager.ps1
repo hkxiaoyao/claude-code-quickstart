@@ -58,10 +58,6 @@ $script:McpRulesCategories = @{
                 Steps    = @( @{ McpId = "exa"; Tool = "mcp__exa__get_code_context_exa" } )
             }
         )
-        Tips = @(
-            "联网搜索优先 exa，不可用时自动回退 tavily"
-            "选择原则：语义理解优先搜索工具，精确匹配用 Grep"
-        )
     }
     "Documentation" = @{
         FileName = "ccq-mcp-docs.md"
@@ -90,8 +86,7 @@ $script:McpRulesCategories = @{
             @{
                 Scenario = "代码语义检索"
                 Steps    = @(
-                    @{ McpId = "ace-tool";      Tool = "mcp__ace-tool__search_context" }
-                    @{ McpId = "contextweaver"; Tool = "mcp__contextweaver__codebase-retrieval" }
+                    @{ McpId = "ace-tool"; Tool = "mcp__ace-tool__search_context" }
                 )
                 Fallback = "Grep + Glob"
             }
@@ -107,41 +102,7 @@ $script:McpRulesCategories = @{
             @{ Scenario = "技术方案规划";     Tool = "EnterPlanMode / Agent + subagent_type=Plan" }
         )
         Tips = @(
-            "语义理解用 ace-tool/contextweaver，精确匹配用 Grep"
-            "使用 ContextWeaver 时，加入 `technical_terms`（精确符号名）可显著提升召回率"
-        )
-    }
-    "Design" = @{
-        FileName = "ccq-mcp-design.md"
-        Title    = "设计工具"
-        Desc     = "设计稿解析和代码生成。"
-        Chains   = @(
-            @{
-                Scenario = "设计稿解析"
-                Steps    = @(
-                    @{ McpId = "mastergo"; Tool = "mcp__mastergo__*（getDsl / getComponentLink / getMeta / getComponentGenerator）" }
-                    @{ McpId = "figma";    Tool = "mcp__figma__*" }
-                )
-            }
-            @{
-                Scenario = "矢量设计"
-                Steps    = @( @{ McpId = "pencil"; Tool = "Pencil 桌面端（自动注册 MCP）" } )
-            }
-        )
-    }
-    "Automation" = @{
-        FileName = "ccq-mcp-automation.md"
-        Title    = "自动化工具"
-        Desc     = "浏览器自动化和调试。"
-        Chains   = @(
-            @{
-                Scenario = "浏览器自动化"
-                Steps    = @( @{ McpId = "playwright"; Tool = "mcp__playwright__browser_*（navigate / click / snapshot）" } )
-            }
-            @{
-                Scenario = "Chrome 调试"
-                Steps    = @( @{ McpId = "chrome-devtools"; Tool = "mcp__chrome-devtools__*" } )
-            }
+            "语义理解用 ace-tool，精确匹配用 Grep"
         )
     }
 }
