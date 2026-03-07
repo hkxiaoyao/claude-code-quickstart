@@ -1,4 +1,4 @@
-﻿# Gemini CLI 安装步骤 - CCQ
+# Gemini CLI 安装步骤 - CCQ
 # 作者: 哈雷酱 (本小姐的专业 CLI 管理！)
 # 功能: Gemini CLI npm 全局安装
 
@@ -12,15 +12,46 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\core\Ui.ps1"
 . "$PSScriptRoot\..\core\Process.ps1"
 
+function Get-GeminiCliVersionFromNpm {
+    <#
+    .SYNOPSIS
+    通过 npm list 获取 Gemini CLI 版本（避免执行 gemini 命令）
+    .DESCRIPTION
+    fnm multishell 环境下 gemini.ps1 wrapper 在子进程中可能挂起，
+    因此不通过执行命令获取版本，而是通过 npm list 查询。
+    .RETURNS
+    版本字符串，未安装时返回空字符串
+    #>
+    try {
+        $npmResult = Invoke-ExternalCommand -Command "npm" `
+            -Arguments @("list", "-g", "@google/gemini-cli", "--depth=0") `
+            -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
+        if ($npmResult.Success -and $npmResult.Output -match '@google/gemini-cli@(\S+)') {
+            return $matches[1]
+        }
+    } catch {
+        # npm list 失败，返回空
+    }
+    return ""
+}
+
 function Test-GeminiCliInstalled {
     <#
     .SYNOPSIS
     检测 Gemini CLI 是否已安装
+    .DESCRIPTION
+    通过 npm list 检测而非执行 gemini 命令，避免 fnm multishell wrapper 挂起。
     .RETURNS
     标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    return Invoke-UnifiedCheck -StepId "GeminiCli" -DisplayName "Gemini CLI" -Command "gemini" -UseCache
+    return Invoke-UnifiedCheck -StepId "GeminiCli" -DisplayName "Gemini CLI" -CustomVerify {
+        $ver = Get-GeminiCliVersionFromNpm
+        if (-not [string]::IsNullOrWhiteSpace($ver)) {
+            return $ver
+        }
+        return $false
+    } -UseCache
 }
 
 function Install-GeminiCli {
@@ -65,22 +96,13 @@ function Install-GeminiCli {
         Write-UiInfo "刷新环境变量..."
         Refresh-SessionPath
 
-        # 验证安装（Gemini CLI 首次运行需要初始化，给予更长超时）
+        # 验证安装（通过 npm list 验证，避免 fnm multishell wrapper 挂起）
         Start-Sleep -Seconds 2
-        $geminiDetails = Test-CommandAvailable -Command "gemini" -ReturnDetails -TimeoutSeconds 30
-        if (-not $geminiDetails.Available) {
-            $errorMsg = "安装后 gemini 命令仍不可用"
-            if ($geminiDetails.ResolvedPath) {
-                $errorMsg += "`n  解析路径: $($geminiDetails.ResolvedPath)"
-            }
-            if ($geminiDetails.ErrorMessage) {
-                $errorMsg += "`n  错误详情: $($geminiDetails.ErrorMessage)"
-            }
-            $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试"
-            throw $errorMsg
+        $version = Get-GeminiCliVersionFromNpm
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "安装后 npm 未检测到 @google/gemini-cli，请重新启动 PowerShell 后重试"
         }
 
-        $version = Get-CommandVersion -Command "gemini"
         Write-UiSuccess "✓ Gemini CLI 安装成功"
         Write-UiInfo "版本: $version"
         Write-UiInfo "命令: gemini --help"
@@ -100,6 +122,8 @@ function Verify-GeminiCli {
     <#
     .SYNOPSIS
     验证 Gemini CLI 安装
+    .DESCRIPTION
+    通过 npm list + Get-Command 验证，不执行 gemini 命令本身。
     .RETURNS
     包含 Success 字段的结果对象
     #>
@@ -111,27 +135,20 @@ function Verify-GeminiCli {
     }
 
     try {
-        # 验证命令可用性（Gemini CLI 首次运行需要初始化，给予更长超时）
-        if (-not (Test-CommandAvailable -Command "gemini" -TimeoutSeconds 30)) {
-            throw "gemini 命令不可用"
-        }
-
-        # 验证版本信息
-        $version = Get-CommandVersion -Command "gemini"
+        # 验证 npm 包已安装
+        $version = Get-GeminiCliVersionFromNpm
         if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "无法获取 gemini 版本信息"
+            throw "npm 未检测到 @google/gemini-cli"
         }
 
-        # 验证帮助信息
-        $helpResult = Invoke-ExternalCommand -Command "gemini" -Arguments @("--help") -SuppressOutput
-        if ($helpResult.ExitCode -ne 0) {
-            throw "gemini --help 执行失败"
-        }
+        # 验证命令可解析（仅检查路径，不执行）
+        $cmdInfo = Get-Command "gemini" -ErrorAction SilentlyContinue
+        $cmdResolved = if ($cmdInfo) { "✓ ($($cmdInfo.Source))" } else { "- (PATH 未就绪，重启 Shell 后可用)" }
 
         Write-UiSuccess "✓ Gemini CLI 验证通过"
-        Write-UiInfo "  - 命令可用性: ✓"
+        Write-UiInfo "  - npm 包状态: ✓"
         Write-UiInfo "  - 版本信息: $version"
-        Write-UiInfo "  - 帮助信息: ✓"
+        Write-UiInfo "  - 命令解析: $cmdResolved"
 
         $result.Success = $true
     }
@@ -161,8 +178,8 @@ function Update-GeminiCli {
     try {
         Write-UiInfo "更新 Gemini CLI..."
 
-        # 获取当前版本
-        $oldVersion = Get-CommandVersion -Command "gemini"
+        # 获取当前版本（通过 npm list，避免执行 gemini 命令）
+        $oldVersion = Get-GeminiCliVersionFromNpm
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
             throw "无法获取当前 Gemini CLI 版本，请确认已安装"
         }
@@ -211,7 +228,7 @@ function Update-GeminiCli {
 
         Refresh-SessionPath
 
-        $newVersion = Get-CommandVersion -Command "gemini"
+        $newVersion = Get-GeminiCliVersionFromNpm
         $result.Data["OldVersion"] = $oldVersion
         $result.Data["NewVersion"] = $newVersion
 

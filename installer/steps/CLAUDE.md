@@ -385,8 +385,10 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
 
 ```powershell
 # 正确调用方式（无 -DisplayName 参数）
-$installOut = Invoke-NpmGlobalInstall -PackageName "gemini-cli"
+$installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
 ```
+
+**fnm multishell 兼容**：fnm 环境下 `gemini` 解析到 `.ps1` wrapper，`Invoke-ExternalCommand` 通过 `pwsh.exe -File` 执行时会挂起。因此所有版本检测和验证均通过 `npm list -g @google/gemini-cli` 完成，不执行 `gemini` 命令本身。私有辅助函数 `Get-GeminiCliVersionFromNpm` 封装了此逻辑。
 
 ---
 
