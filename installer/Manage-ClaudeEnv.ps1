@@ -308,12 +308,13 @@ function Get-UpdateStatus {
                 # 分量检测：引擎版本 + 规则文件独立判定
                 $ccgComponents = Get-CcgWorkflowUpdateComponents -LatestVersion $ccgLatest
                 $entry.LatestVersion = $ccgComponents.LatestVersion
-                $entry.HasUpdate = ($ccgComponents.EngineNeedUpdate -or $ccgComponents.RulesNeedUpdate)
+                $entry.HasUpdate = ($ccgComponents.EngineNeedUpdate -or $ccgComponents.RulesNeedUpdate -or $ccgComponents.EnvNeedUpdate)
                 $entry.StatusHint = $ccgComponents.StatusHint
                 $entry.Data = @{
                     UpdateKind       = $ccgComponents.UpdateKind
                     EngineNeedUpdate = $ccgComponents.EngineNeedUpdate
                     RulesNeedUpdate  = $ccgComponents.RulesNeedUpdate
+                    EnvNeedUpdate    = $ccgComponents.EnvNeedUpdate
                 }
             }
             elseif ($step.StepId -in $script:FingerprintManagedSteps) {

@@ -258,8 +258,6 @@ Install-ApiKey($state)
 
 | 字段 | 默认值 | 写入策略 |
 |------|--------|----------|
-| `BASH_DEFAULT_TIMEOUT_MS` | `600000` | 仅补缺失 |
-| `BASH_MAX_TIMEOUT_MS` | `3600000` | 仅补缺失 |
 | `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | `90` | 仅补缺失 |
 | `CLAUDE_CODE_ATTRIBUTION_HEADER` | `0` | 仅补缺失 |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | 仅补缺失 |
@@ -275,7 +273,7 @@ Install-ApiKey($state)
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
-**ClaudeConfig 不触碰的字段**：`model`（用户自行选择）、`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（CcgWorkflow）
+**ClaudeConfig 不触碰的字段**：`model`（用户自行选择）、`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`/`env.BASH_DEFAULT_TIMEOUT_MS`/`env.BASH_MAX_TIMEOUT_MS`（CcgWorkflow）
 
 > **注意**：statusLine 配置完全由 Ccline 步骤负责，ClaudeConfig 不触碰 statusLine 字段。
 
@@ -359,6 +357,15 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
 - 安装后立即调用 `Refresh-SessionPath`
 - 规则文件更新：更新时会清理遗留文件 `ccq-multimodel.md` / `ccq-tools.md` / `ccq-workflow.md`
+
+**CcgWorkflow 管辖的 env 字段**：
+
+| 字段 | 默认值 | 写入策略 |
+|------|--------|----------|
+| `CODEAGENT_POST_MESSAGE_DELAY` | `1` | Install 补缺失 / Update 声明式对齐 |
+| `CODEX_TIMEOUT` | `7200` | Install 补缺失 / Update 声明式对齐 |
+| `BASH_DEFAULT_TIMEOUT_MS` | `600000` | Install 补缺失 / Update 声明式对齐 |
+| `BASH_MAX_TIMEOUT_MS` | `3600000` | Install 补缺失 / Update 声明式对齐 |
 
 ---
 

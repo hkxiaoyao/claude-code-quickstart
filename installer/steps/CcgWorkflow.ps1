@@ -16,6 +16,14 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$(Get-UserHome)\.claude"
 
+# CcgWorkflow 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
+$script:CcgWorkflowEnvDefaults = @{
+    "CODEAGENT_POST_MESSAGE_DELAY" = "1"
+    "CODEX_TIMEOUT"                = "7200"
+    "BASH_DEFAULT_TIMEOUT_MS"      = "600000"
+    "BASH_MAX_TIMEOUT_MS"          = "3600000"
+}
+
 # CCG 规则文件模板（整合原 ccq-multimodel.md + ccq-workflow.md + ccq-tools.md 流程策略）
 $script:CcgWorkflowRuleTemplate = @'
 # 多模型协作 + 工作流增强（CCG）
@@ -104,6 +112,13 @@ function Get-CcgWorkflowFingerprint {
     # 规则模板分量
     $parts += "rules:" + (Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate)
 
+    # env 默认值分量
+    $envParts = @()
+    foreach ($key in ($script:CcgWorkflowEnvDefaults.Keys | Sort-Object)) {
+        $envParts += "${key}=$($script:CcgWorkflowEnvDefaults[$key])"
+    }
+    $parts += "env:" + ($envParts -join ",")
+
     return Get-StringFingerprint -Text ($parts -join "`n")
 }
 
@@ -126,6 +141,7 @@ function Get-CcgWorkflowUpdateComponents {
     $result = @{
         EngineNeedUpdate = $false
         RulesNeedUpdate  = $false
+        EnvNeedUpdate    = $false
         UpdateKind       = "none"
         StatusHint       = "已是最新"
         LocalVersion     = ""
@@ -185,8 +201,34 @@ function Get-CcgWorkflowUpdateComponents {
         $result.RulesNeedUpdate = $true
     }
 
+    # ── env 分量：settings.json env 键值对比 ──
+    $settingsPath = "$script:ClaudeDir\settings.json"
+    if (Test-Path $settingsPath) {
+        try {
+            $settingsRaw = Get-Content $settingsPath -Raw
+            $settings = $settingsRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+            if ($settings -and $settings.ContainsKey("env")) {
+                foreach ($entry in $script:CcgWorkflowEnvDefaults.GetEnumerator()) {
+                    if (-not $settings["env"].ContainsKey($entry.Key) -or
+                        $settings["env"][$entry.Key] -cne $entry.Value) {
+                        $result.EnvNeedUpdate = $true
+                        break
+                    }
+                }
+            } else {
+                $result.EnvNeedUpdate = $true
+            }
+        } catch {
+            $result.EnvNeedUpdate = $true
+        }
+    } else {
+        $result.EnvNeedUpdate = $true
+    }
+
     # ── 综合判定 ──
-    if ($result.EngineNeedUpdate -and $result.RulesNeedUpdate) {
+    # env 变更归入 rules 更新分支触发 UpdateKind
+    $rulesOrEnvNeedUpdate = $result.RulesNeedUpdate -or $result.EnvNeedUpdate
+    if ($result.EngineNeedUpdate -and $rulesOrEnvNeedUpdate) {
         $result.UpdateKind = "engine+rules"
         $result.StatusHint = "引擎与规则均需更新"
     } elseif ($result.EngineNeedUpdate) {
@@ -196,9 +238,15 @@ function Get-CcgWorkflowUpdateComponents {
         } else {
             $result.StatusHint = "引擎版本可更新 ($($result.LocalVersion) -> $($result.LatestVersion))"
         }
-    } elseif ($result.RulesNeedUpdate) {
+    } elseif ($rulesOrEnvNeedUpdate) {
         $result.UpdateKind = "rules-only"
-        $result.StatusHint = "规则文件更新"
+        if ($result.RulesNeedUpdate -and $result.EnvNeedUpdate) {
+            $result.StatusHint = "规则文件与 env 配置更新"
+        } elseif ($result.EnvNeedUpdate) {
+            $result.StatusHint = "env 配置更新"
+        } else {
+            $result.StatusHint = "规则文件更新"
+        }
     }
 
     return $result
@@ -348,6 +396,45 @@ function Install-CcgWorkflow {
             Write-UiInfo "已写入: rules/ccq-ccgworkflow.md"
         }
 
+        # ── 写入 CCG env 配置到 settings.json ──
+        Write-UiInfo "配置 CCG Workflow 环境变量..."
+        $settingsPath = "$script:ClaudeDir\settings.json"
+        $envSettings = @{}
+
+        if (Test-Path $settingsPath) {
+            try {
+                $existingContent = Get-Content $settingsPath -Raw
+                $envSettings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if (-not $envSettings) { $envSettings = @{} }
+            } catch {
+                Write-UiWarn "无法解析 settings.json，跳过 env 配置（不影响主安装）"
+                $envSettings = $null
+            }
+        }
+
+        if ($null -ne $envSettings) {
+            if (-not $envSettings.ContainsKey("env")) {
+                $envSettings["env"] = @{}
+            }
+
+            $envAdded = 0
+            foreach ($entry in $script:CcgWorkflowEnvDefaults.GetEnumerator()) {
+                if (-not $envSettings["env"].ContainsKey($entry.Key)) {
+                    $envSettings["env"][$entry.Key] = $entry.Value
+                    $envAdded++
+                }
+            }
+
+            if ($envAdded -gt 0) {
+                $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+                $envSettings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+                Move-Item $tempPath $settingsPath -Force
+                Write-UiInfo "已写入 $envAdded 个 CCG 环境变量到 settings.json"
+            } else {
+                Write-UiInfo "CCG 环境变量已存在，跳过写入"
+            }
+        }
+
         # ── MCP 快照（安装后比对）──
         if ($null -ne $mcpSnapshotBefore -and (Test-Path $claudeJsonPath)) {
             $claudeJsonRawAfter = Get-Content $claudeJsonPath -Raw -ErrorAction SilentlyContinue
@@ -467,6 +554,37 @@ function Verify-CcgWorkflow {
             Write-UiWarn "  - PATH 可用性: codeagent-wrapper 不在 PATH 中 (可能需要重启终端) [SKIP]"
         }
 
+        # ── env 配置验证 ──
+        $settingsPath = "$script:ClaudeDir\settings.json"
+        if (Test-Path $settingsPath) {
+            try {
+                $settingsRaw = Get-Content $settingsPath -Raw
+                $settingsObj = $settingsRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
+                if ($settingsObj -and $settingsObj.ContainsKey("env")) {
+                    $missingEnvKeys = @()
+                    foreach ($key in $script:CcgWorkflowEnvDefaults.Keys) {
+                        if (-not $settingsObj["env"].ContainsKey($key) -or
+                            [string]::IsNullOrWhiteSpace([string]$settingsObj["env"][$key])) {
+                            $missingEnvKeys += $key
+                        }
+                    }
+                    if ($missingEnvKeys.Count -eq 0) {
+                        Write-UiInfo "  - CCG 环境变量: $($script:CcgWorkflowEnvDefaults.Count) 项已配置 [PASS]"
+                    } else {
+                        Write-UiInfo "  - CCG 环境变量: 缺少 $($missingEnvKeys -join ', ') [FAIL]"
+                        $allPassed = $false
+                    }
+                } else {
+                    Write-UiInfo "  - CCG 环境变量: settings.json 无 env 节 [FAIL]"
+                    $allPassed = $false
+                }
+            } catch {
+                Write-UiInfo "  - CCG 环境变量: 读取 settings.json 失败 [SKIP]"
+            }
+        } else {
+            Write-UiInfo "  - CCG 环境变量: settings.json 不存在 [SKIP]"
+        }
+
         # ── MCP 保护验证 ──
         # mcpServers 配置在 ~/.claude.json，不在 settings.json
         $claudeJsonPath = "$(Get-UserHome)\.claude.json"
@@ -547,8 +665,8 @@ function Update-CcgWorkflow {
         }
 
         # ── 无更新 → noop ──
-        if (-not $components.EngineNeedUpdate -and -not $components.RulesNeedUpdate) {
-            Write-UiInfo "CCG Workflow 已是最新（引擎与规则均无变更）"
+        if (-not $components.EngineNeedUpdate -and -not $components.RulesNeedUpdate -and -not $components.EnvNeedUpdate) {
+            Write-UiInfo "CCG Workflow 已是最新（引擎/规则/env 均无变更）"
             $result.UpdatedItems = @("noop::CcgWorkflow::no-change")
             $result.Data["NewVersion"] = $oldVersion
             $result.Success = $true
@@ -660,6 +778,49 @@ function Update-CcgWorkflow {
                 Write-UiSuccess "CCG Workflow 规则文件已更新"
             } else {
                 throw "CCG Workflow 规则文件写入失败: $ccgRulePath"
+            }
+        }
+
+        # ── env 对齐分支 ──
+        if ($components.EnvNeedUpdate) {
+            $settingsPath = "$script:ClaudeDir\settings.json"
+            if (Test-Path $settingsPath) {
+                $settingsRaw = Get-Content $settingsPath -Raw
+                $settings = $settingsRaw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if (-not $settings) { throw "settings.json 无法解析" }
+
+                if (-not $settings.ContainsKey("env")) {
+                    $settings["env"] = @{}
+                }
+
+                foreach ($entry in $script:CcgWorkflowEnvDefaults.GetEnumerator()) {
+                    $key = $entry.Key
+                    if (-not $settings["env"].ContainsKey($key)) {
+                        $settings["env"][$key] = $entry.Value
+                        $result.UpdatedItems += "config::env.${key}::added"
+                    } elseif ($settings["env"][$key] -cne $entry.Value) {
+                        $oldVal = $settings["env"][$key]
+                        $settings["env"][$key] = $entry.Value
+                        $result.UpdatedItems += "config::env.${key}::${oldVal}->${entry.Value}"
+                    }
+                }
+
+                # 原子写入
+                $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+                $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+                for ($retry = 0; $retry -lt 3; $retry++) {
+                    try {
+                        Move-Item $tempPath $settingsPath -Force
+                        break
+                    } catch {
+                        if ($retry -eq 2) { throw }
+                        Start-Sleep -Seconds ([math]::Pow(2, $retry))
+                    }
+                }
+
+                Write-UiSuccess "CCG Workflow env 配置已对齐"
+            } else {
+                Write-UiWarn "settings.json 不存在，跳过 env 对齐"
             }
         }
 

@@ -14,8 +14,6 @@ $ErrorActionPreference = 'Stop'
 
 # ClaudeConfig 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
 $script:ClaudeConfigEnvDefaults = @{
-    "BASH_DEFAULT_TIMEOUT_MS"                  = "600000"
-    "BASH_MAX_TIMEOUT_MS"                      = "3600000"
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"          = "90"
     "CLAUDE_CODE_ATTRIBUTION_HEADER"           = "0"
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = "1"
