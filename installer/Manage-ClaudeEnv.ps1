@@ -119,7 +119,7 @@ function Get-StepDesiredFingerprint {
     try {
         return & $fnName
     } catch {
-        Write-UiWarn "指纹计算失败 (${StepId}): $($_.Exception.Message)"
+        Write-UiWarning "指纹计算失败 (${StepId}): $($_.Exception.Message)"
         return ""
     }
 }
@@ -143,7 +143,7 @@ function Show-UpdateSummary {
     $failed = @()
 
     foreach ($stepId in $ExecutedStepIds) {
-        $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+        $stepConfig = Get-StepConfigById -StepId $stepId
         $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
 
         if ($State.StepResults.ContainsKey($stepId)) {
@@ -171,61 +171,61 @@ function Show-UpdateSummary {
     }
 
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
-    Write-Host "  更新结果摘要" -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-UiPrimary "══════════════════════════════════════════"
+    Write-UiPrimary "  更新结果摘要"
+    Write-UiPrimary "══════════════════════════════════════════"
 
     Write-Host ""
     if ($updated.Count -gt 0) {
-        Write-Host "  Updated ($($updated.Count)):" -ForegroundColor Green
+        Write-UiSuccess "  Updated ($($updated.Count)):"
         foreach ($item in $updated) {
-            Write-Host "    $($item.Name)" -ForegroundColor White -NoNewline
-            Write-Host "  $($item.Items)" -ForegroundColor Gray
+            Write-UiInfo "    $($item.Name)" -NoNewline
+            Write-UiDim "  $($item.Items)"
         }
     } else {
-        Write-Host "  Updated (0)" -ForegroundColor Green
+        Write-UiSuccess "  Updated (0)"
     }
 
     if ($upToDate.Count -gt 0) {
         Write-Host ""
-        Write-Host "  Already Up-to-Date ($($upToDate.Count)):" -ForegroundColor DarkGray
+        Write-UiDim "  Already Up-to-Date ($($upToDate.Count)):"
         foreach ($item in $upToDate) {
-            Write-Host "    $($item.Name)" -ForegroundColor DarkGray -NoNewline
+            Write-UiDim "    $($item.Name)" -NoNewline
             if ($item.Items -match "fingerprint-match") {
-                Write-Host "  (内容一致)" -ForegroundColor DarkGray
+                Write-UiDim "  (内容一致)"
             } else {
-                Write-Host "  (内容无变更)" -ForegroundColor DarkGray
+                Write-UiDim "  (内容无变更)"
             }
         }
     }
 
     if ($failed.Count -gt 0) {
         Write-Host ""
-        Write-Host "  Failed ($($failed.Count)):" -ForegroundColor Red
+        Write-UiDanger "  Failed ($($failed.Count)):"
         foreach ($item in $failed) {
-            Write-Host "    $($item.Name)" -ForegroundColor Red -NoNewline
-            Write-Host "  $($item.Detail)" -ForegroundColor DarkRed
+            Write-UiDanger "    $($item.Name)" -NoNewline
+            Write-UiDanger "  $($item.Detail)"
         }
     }
 
     if ($SkippedStepIds.Count -gt 0) {
         Write-Host ""
-        Write-Host "  Skipped ($($SkippedStepIds.Count)):" -ForegroundColor Yellow
+        Write-UiWarning "  Skipped ($($SkippedStepIds.Count)):"
         foreach ($stepId in $SkippedStepIds) {
-            $stepConfig = $script:StepRegistry | Where-Object { $_.StepId -eq $stepId } | Select-Object -First 1
+            $stepConfig = Get-StepConfigById -StepId $stepId
             $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-            Write-Host "    $stepName" -ForegroundColor Yellow -NoNewline
-            Write-Host "  (未安装)" -ForegroundColor DarkYellow
+            Write-UiWarning "    $stepName" -NoNewline
+            Write-UiWarning "  (未安装)"
         }
     }
 
     if ($SnapshotDir -and (Test-Path $SnapshotDir)) {
         Write-Host ""
-        Write-Host "  备份路径: $SnapshotDir" -ForegroundColor DarkGray
+        Write-UiDim "  备份路径: $SnapshotDir"
     }
 
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-UiPrimary "══════════════════════════════════════════"
 }
 
 # ─── 更新状态检测（统一入口，一次性完成）────────────────────────────────────
@@ -250,7 +250,7 @@ function Get-UpdateStatus {
     $updatableSteps = @($registry | Where-Object { $_.UpdateFunction -ne "" })
 
     Write-Host ""
-    Write-Host "正在检测组件状态与远程版本..." -ForegroundColor Gray
+    Write-UiDim "正在检测组件状态与远程版本..."
 
     $outdated = Get-NpmOutdatedGlobal -Force
 
@@ -354,7 +354,7 @@ function Select-UpdateSteps {
     $installedList = @($StatusList | Where-Object { $_.IsInstalled })
 
     if ($installedList.Count -eq 0) {
-        Write-UiWarn "没有已安装的可更新步骤"
+        Write-UiWarning "没有已安装的可更新步骤"
         return @()
     }
 
@@ -423,9 +423,9 @@ function Invoke-UpdateAction {
     if ($ListOnly) {
         $hasUpdates = @($updateStatus | Where-Object { $_.HasUpdate -eq $true }).Count -gt 0
         if ($hasUpdates) {
-            Write-Host "提示: 运行 " -ForegroundColor Gray -NoNewline
-            Write-Host "pwsh -File installer/Manage-ClaudeEnv.ps1 -Action Update" -ForegroundColor Cyan -NoNewline
-            Write-Host " 选择并更新组件" -ForegroundColor Gray
+            Write-UiDim "提示: 运行 " -NoNewline
+            Write-UiPrimary "pwsh -File installer/Manage-ClaudeEnv.ps1 -Action Update" -NoNewline
+            Write-UiDim " 选择并更新组件"
             Write-Host ""
         }
         return 0
@@ -441,7 +441,7 @@ function Invoke-UpdateAction {
 
         if (-not $acquired) {
             Write-Host ""
-            Write-Host "[ERROR] 另一个更新实例正在运行，请等待其完成后再试" -ForegroundColor Red
+            Write-UiDanger "[ERROR] 另一个更新实例正在运行，请等待其完成后再试"
             Write-Host ""
             return -1
         }
@@ -490,14 +490,14 @@ function Invoke-UpdateAction {
 
         # 显示执行计划
         Write-Host ""
-        Write-Host "更新执行计划:" -ForegroundColor Cyan
+        Write-UiPrimary "更新执行计划:"
         for ($i = 0; $i -lt $plan.Count; $i++) {
             $sid = $plan[$i].StepId
             if ($fingerprintSkips.ContainsKey($sid)) {
-                Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor DarkGray -NoNewline
-                Write-Host "  [内容无变更, 跳过]" -ForegroundColor DarkGray
+                Write-UiDim "  $($i + 1). $($plan[$i].StepName) ($sid)" -NoNewline
+                Write-UiDim "  [内容无变更, 跳过]"
             } else {
-                Write-Host "  $($i + 1). $($plan[$i].StepName) ($sid)" -ForegroundColor White
+                Write-UiInfo "  $($i + 1). $($plan[$i].StepName) ($sid)"
             }
         }
         if ($fingerprintSkips.Count -gt 0) {
@@ -532,7 +532,7 @@ function Invoke-UpdateAction {
                 $snapshotDir = New-UpdateSnapshot -FilePaths $existingFiles
                 Write-UiInfo "备份快照已创建: $snapshotDir"
             } else {
-                Write-UiWarn "没有找到需要备份的文件，跳过快照"
+                Write-UiWarning "没有找到需要备份的文件，跳过快照"
             }
         } else {
             Write-UiInfo "所有步骤内容无变更，跳过备份快照"
@@ -554,8 +554,8 @@ function Invoke-UpdateAction {
             # 指纹命中 → noop
             if ($fingerprintSkips.ContainsKey($stepId)) {
                 Write-Host ""
-                Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor DarkGray
-                Write-UiInfo "内容无变更，跳过"
+                Write-UiDim "─── 更新: $($stepConfig.StepName) ───"
+                Write-UiDim "内容无变更，跳过"
 
                 $skipResult = [StepResult]::new($stepId, $stepConfig.StepName)
                 $skipResult.Status = [StepStatus]::Success
@@ -571,7 +571,7 @@ function Invoke-UpdateAction {
             }
 
             Write-Host ""
-            Write-Host "─── 更新: $($stepConfig.StepName) ───" -ForegroundColor Cyan
+            Write-UiPrimary "─── 更新: $($stepConfig.StepName) ───"
 
             $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing "Ask"
 
@@ -607,7 +607,7 @@ function Invoke-UpdateAction {
                         try {
                             Write-UpdateManifest -Manifest $manifest
                         } catch {
-                            Write-UiWarn "清单回写失败: $($_.Exception.Message)"
+                            Write-UiWarning "清单回写失败: $($_.Exception.Message)"
                         }
                     }
                 }
@@ -622,7 +622,7 @@ function Invoke-UpdateAction {
         try {
             Clear-OldUpdateSnapshots -CurrentSnapshotDir $snapshotDir
         } catch {
-            Write-UiWarn "旧快照清理失败: $($_.Exception.Message)"
+            Write-UiWarning "旧快照清理失败: $($_.Exception.Message)"
         }
 
         # 显示结果摘要
@@ -630,7 +630,7 @@ function Invoke-UpdateAction {
             -SkippedStepIds $skippedStepIds -SnapshotDir $snapshotDir
 
         if ($failCount -gt 0) {
-            Write-UiError "有 $failCount 个步骤更新失败"
+            Write-UiDanger "有 $failCount 个步骤更新失败"
         }
 
         return $failCount
@@ -721,7 +721,7 @@ function Main {
 
             if ($choice -eq -1) {
                 Write-Host ""
-                Write-UiInfo "退出 CCQ 管理"
+                Write-UiPrimary "退出 CCQ 管理"
                 break
             }
 
@@ -730,7 +730,7 @@ function Main {
                     # 更新管理（捕获返回值，防止 $failCount 泄漏到控制台）
                     $null = Invoke-UpdateAction
                     Write-Host ""
-                    Write-Host "按任意键返回主菜单..." -ForegroundColor Gray
+                    Write-UiDim "按任意键返回主菜单..."
                     $null = [Console]::ReadKey($true)
                 }
                 1 {
@@ -745,7 +745,7 @@ function Main {
         }
 
     } catch {
-        Write-UiError "CCQ 管理运行中发生严重错误: $($_.Exception.Message)"
+        Write-UiDanger "CCQ 管理运行中发生严重错误: $($_.Exception.Message)"
         Write-Host ""
         Show-ErrorDetails `
             -FriendlyMessage "CCQ 遇到未预期的错误，请查看技术详情" `
@@ -759,11 +759,11 @@ trap {
     Write-Host ""
     if ($_.Exception -is [System.Management.Automation.PipelineStoppedException] -or
         $_.Exception -is [System.OperationCanceledException]) {
-        Write-UiWarn "操作被用户中断 (Ctrl+C)"
+        Write-UiWarning "操作被用户中断 (Ctrl+C)"
     } else {
-        Write-UiError "异常中断: $($_.Exception.Message)"
+        Write-UiDanger "异常中断: $($_.Exception.Message)"
     }
-    Write-UiInfo "已完成的操作将保留，未完成的可重新运行"
+    Write-UiDim "已完成的操作将保留，未完成的可重新运行"
     break
 }
 

@@ -6,9 +6,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
+# 依赖: Ui.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
 # ─── ClaudeConfig 字段归属声明 ──────────────────────────────────────────────────────
 
@@ -101,7 +99,7 @@ function Install-ClaudeConfig {
     }
 
     try {
-        Write-UiInfo "配置 Claude Code 常用设置..."
+        Write-UiPrimary "配置 Claude Code 常用设置..."
 
         $settingsPath = Get-ClaudeSettingsPath
         $settings = @{}
@@ -192,7 +190,7 @@ function Install-ClaudeConfig {
     }
     catch {
         $result.ErrorMessage = "配置 Claude Code 常用配置失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -267,7 +265,7 @@ function Verify-ClaudeConfig {
     }
     catch {
         $result.ErrorMessage = "验证 Claude Code 常用配置失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -392,7 +390,7 @@ function Update-ClaudeConfig {
         # 结果
         if ($updatedItems.Count -eq 0) {
             $result.UpdatedItems = @("noop::ClaudeConfig::no-change")
-            Write-UiInfo "ClaudeConfig 已是最新，无需更新"
+            Write-UiDim "ClaudeConfig 已是最新，无需更新"
         } else {
             $result.UpdatedItems = @($updatedItems)
             Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)"
@@ -402,7 +400,7 @@ function Update-ClaudeConfig {
     }
     catch {
         $result.ErrorMessage = "更新 ClaudeConfig 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

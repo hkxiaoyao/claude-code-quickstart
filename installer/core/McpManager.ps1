@@ -534,12 +534,12 @@ function Sync-AllMcpRules {
         $result.Success = $true
 
         if ($changedFiles.Count -gt 0) {
-            Write-UiInfo "MCP Rules 已同步 ($($changedFiles.Count) 个文件变更)"
+            Write-UiSuccess "MCP Rules 已同步 ($($changedFiles.Count) 个文件变更)"
         }
     }
     catch {
         $result.ErrorMessage = $_.Exception.Message
-        Write-UiWarn "MCP Rules 同步失败: $($result.ErrorMessage)"
+        Write-UiWarning "MCP Rules 同步失败: $($result.ErrorMessage)"
     }
 
     return $result
@@ -606,10 +606,10 @@ function Invoke-McpCorruptionRecovery {
 
     try {
         Move-Item -Path $FilePath -Destination $corruptName -Force
-        Write-UiWarn "Vault 文件损坏，已重命名为 $(Split-Path $corruptName -Leaf)，重新初始化"
+        Write-UiWarning "Vault 文件损坏，已重命名为 $(Split-Path $corruptName -Leaf)，重新初始化"
     }
     catch {
-        Write-UiWarn "Vault 文件损坏且无法重命名: $($_.Exception.Message)"
+        Write-UiWarning "Vault 文件损坏且无法重命名: $($_.Exception.Message)"
     }
 
     # 清理超出上限的 corrupt 备份
@@ -825,42 +825,8 @@ function Get-McpDefinitionHash {
     }
 }
 
-# ─── CJK 显示宽度辅助函数 ───────────────────────────────────────────────────
-
-function Get-StringDisplayWidth {
-    <#
-    .SYNOPSIS
-    计算字符串在终端的显示宽度（CJK 字符占 2 列）
-    #>
-    param([Parameter(Position = 0)][AllowEmptyString()][AllowNull()][string]$Text)
-    if ([string]::IsNullOrEmpty($Text)) { return 0 }
-    $width = 0
-    foreach ($c in $Text.ToCharArray()) {
-        $code = [int]$c
-        if (($code -ge 0x2E80 -and $code -le 0x9FFF) -or
-            ($code -ge 0xF900 -and $code -le 0xFAFF) -or
-            ($code -ge 0xFE30 -and $code -le 0xFE4F) -or
-            ($code -ge 0xFF00 -and $code -le 0xFF60) -or
-            ($code -ge 0xFFE0 -and $code -le 0xFFE6)) {
-            $width += 2
-        } else {
-            $width += 1
-        }
-    }
-    return $width
-}
-
-function Format-DisplayPad {
-    <#
-    .SYNOPSIS
-    按显示宽度右填充字符串（CJK 感知）
-    #>
-    param([Parameter(Position = 0)][AllowEmptyString()][AllowNull()][string]$Text, [Parameter(Position = 1)][int]$Width)
-    if ([string]::IsNullOrEmpty($Text)) { return (' ' * $Width) }
-    $displayWidth = Get-StringDisplayWidth $Text
-    $padding = [Math]::Max(0, $Width - $displayWidth)
-    return "$Text$(' ' * $padding)"
-}
+# ─── CJK 显示宽度辅助函数（已迁移至 Ui.ps1 统一管理） ─────────────────────
+# Get-StringDisplayWidth 和 Format-DisplayPad 由 Ui.ps1 提供（dot-source 加载顺序保证可用）
 
 # ─── 版本工具（从 steps/Mcp.ps1 迁移） ───────────────────────────────────────
 
@@ -938,7 +904,7 @@ function Read-McpCredentialValue {
             }
 
             if ($Required) {
-                Write-UiError "$Label 不能为空，请重新输入"
+                Write-UiDanger "$Label 不能为空，请重新输入"
                 continue
             }
 
@@ -970,7 +936,7 @@ function Install-McpRuntimeDeps {
 
     # 确保 fnm 环境已初始化（前置步骤可能已安装 fnm 但当前会话未加载）
     if ((Test-CommandAvailable -Command "fnm") -and -not (Test-CommandAvailable -Command "node")) {
-        Write-UiInfo "初始化 fnm 环境..."
+        Write-UiPrimary "初始化 fnm 环境..."
         try {
             $fnmEnvOutput = & fnm env --use-on-cd 2>&1 | Out-String
             if ($fnmEnvOutput) {
@@ -978,7 +944,7 @@ function Install-McpRuntimeDeps {
             }
             Refresh-SessionPath
         } catch {
-            Write-UiWarn "fnm 环境初始化失败: $($_.Exception.Message)"
+            Write-UiWarning "fnm 环境初始化失败: $($_.Exception.Message)"
         }
     }
 
@@ -998,7 +964,7 @@ function Install-McpRuntimeDeps {
 
         if (-not (Test-CommandAvailable -Command $command)) {
             $needsInstall = $true
-            Write-UiWarn "$depName 未检测到，准备安装"
+            Write-UiWarning "$depName 未检测到，准备安装"
         }
         elseif ($dep.MinVersion) {
             $installedVersionText = Get-CommandVersion -Command $command
@@ -1007,7 +973,7 @@ function Install-McpRuntimeDeps {
 
             if ($installedVersion -and $minVersion -and $installedVersion -lt $minVersion) {
                 $needsInstall = $true
-                Write-UiWarn "$depName 版本过低: $installedVersionText < $($dep.MinVersion)"
+                Write-UiWarning "$depName 版本过低: $installedVersionText < $($dep.MinVersion)"
             }
         }
 
@@ -1060,12 +1026,12 @@ function Invoke-McpPreInstall {
                     Refresh-SessionPath
                 }
                 catch {
-                    Write-UiWarn "标准安装失败，尝试清理 npm 缓存后重试..."
+                    Write-UiWarning "标准安装失败，尝试清理 npm 缓存后重试..."
 
                     # 清理 npm 缓存
                     $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60 -SuppressOutput
                     if ($cleanResult.Success) {
-                        Write-UiInfo "npm 缓存已清理，重新尝试安装..."
+                        Write-UiPrimary "npm 缓存已清理，重新尝试安装..."
 
                         # 重试安装，使用 --force 参数
                         $retryResult = Invoke-ExternalCommand -Command "npm" -Arguments @("install", "-g", $pre.Package, "--force") -TimeoutSeconds 300
@@ -1085,10 +1051,10 @@ function Invoke-McpPreInstall {
             if ($pre.InitCommand) {
                 $initializedPath = [string]$pre.InitializedPath
                 if (-not [string]::IsNullOrWhiteSpace($initializedPath) -and (Test-Path $initializedPath)) {
-                    Write-UiInfo "$($Server.Name) 已完成初始化，跳过 init"
+                    Write-UiDim "$($Server.Name) 已完成初始化，跳过 init"
                 }
                 else {
-                    Write-UiInfo "执行初始化命令: $($pre.InitCommand)"
+                    Write-UiPrimary "执行初始化命令: $($pre.InitCommand)"
                     $tokens = @($pre.InitCommand -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
                     if ($tokens.Count -eq 0) {
                         throw "初始化命令为空: $($pre.InitCommand)"
@@ -1219,7 +1185,7 @@ function Get-McpCredentials {
 
             if (-not [string]::IsNullOrWhiteSpace($sharedCredentialName) -and $SharedCredentials.ContainsKey($sharedCredentialName)) {
                 $sharedKeyValue = [string]$SharedCredentials[$sharedCredentialName]
-                Write-UiInfo "复用共享凭据: $sharedCredentialName"
+                Write-UiSuccess "复用共享凭据: $sharedCredentialName"
             }
             else {
                 $sharedLabel = if ($envFile.SharedKeyLabel) { [string]$envFile.SharedKeyLabel } else { "共享 API Key" }
@@ -1451,7 +1417,7 @@ function Install-McpSoftware {
             return $result
         }
         catch {
-            Write-UiWarn "$($Server.Name) winget 安装失败，将尝试下载方式: $($_.Exception.Message)"
+            Write-UiWarning "$($Server.Name) winget 安装失败，将尝试下载方式: $($_.Exception.Message)"
         }
     }
 
@@ -1486,11 +1452,11 @@ function Install-McpSoftware {
             return $result
         }
         catch {
-            Write-UiWarn "$($Server.Name) 下载安装失败，将进入引导安装: $($_.Exception.Message)"
+            Write-UiWarning "$($Server.Name) 下载安装失败，将进入引导安装: $($_.Exception.Message)"
         }
     }
 
-    Write-UiInfo "请手动安装 $($Server.Name)"
+    Write-UiPrimary "请手动安装 $($Server.Name)"
     if ($install.GuideUrl) {
         Write-UiInfo "安装指引: $($install.GuideUrl)"
     }
@@ -1667,12 +1633,12 @@ function Show-McpStatusTable {
     )
 
     if ($StatusList.Count -eq 0) {
-        Write-UiInfo "没有 MCP Server"
+        Write-UiDim "没有 MCP Server"
         return
     }
 
     Write-Host ""
-    Write-UiInfo "MCP Server 状态："
+    Write-UiPrimary "MCP Server 状态："
     Write-Host ""
 
     # 列宽定义（按显示宽度，CJK 字符占 2 列）
@@ -1685,20 +1651,20 @@ function Show-McpStatusTable {
         (Format-DisplayPad "类型" $colWidths[2]) + " " +
         (Format-DisplayPad "分类" $colWidths[3]) + " " +
         (Format-DisplayPad "凭据" $colWidths[4])
-    Write-Host $headerLine -ForegroundColor White
+    Write-UiInfo $headerLine
     $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
-    Write-Host ("  " + [string]::new("-", $sepWidth)) -ForegroundColor Gray
+    Write-UiDim ("  " + [string]::new("-", $sepWidth))
 
     foreach ($item in $StatusList) {
         $statusText = "[$($item.Status)]"
         $credText = if ($item.HasCredentials) { "有" } else { "-" }
 
         $color = switch ($item.Status) {
-            "Active"   { "Green" }
-            "Disabled" { "Yellow" }
-            "Missing"  { "Gray" }
-            "Custom"   { "Cyan" }
-            default    { "White" }
+            "Active"   { "Success" }
+            "Disabled" { "Warning" }
+            "Missing"  { "Dim" }
+            "Custom"   { "Primary" }
+            default    { "Info" }
         }
 
         $line = "  " +
@@ -1707,7 +1673,7 @@ function Show-McpStatusTable {
             (Format-DisplayPad "$($item.McpType)" $colWidths[2]) + " " +
             (Format-DisplayPad "$($item.Category)" $colWidths[3]) + " " +
             (Format-DisplayPad $credText $colWidths[4])
-        Write-Host $line -ForegroundColor $color
+        Write-UiOutput $line -Type $color
     }
     Write-Host ""
 }
@@ -1750,7 +1716,7 @@ function Disable-McpServer {
                 # 已禁用，幂等返回
                 return @{ Success = $true; ServerId = $ServerId; Status = "Disabled" }
             }
-            Write-UiWarn "MCP Server '$ServerId' 未在 .claude.json 中找到"
+            Write-UiWarning "MCP Server '$ServerId' 未在 .claude.json 中找到"
             return @{ Success = $false; ServerId = $ServerId; Status = "NotFound" }
         }
 
@@ -1848,7 +1814,7 @@ function Enable-McpServer {
             if ($vaultEntry.ContainsKey("definitionHash") -and
                 $vaultEntry["definitionHash"] -ne "" -and
                 $vaultEntry["definitionHash"] -ne $currentHash) {
-                Write-UiWarn "MCP 定义已变更，使用最新定义恢复"
+                Write-UiWarning "MCP 定义已变更，使用最新定义恢复"
             }
         }
 
@@ -1875,11 +1841,11 @@ function Enable-McpServer {
                 }
             }
             catch {
-                Write-UiWarn "重建 MCP 配置失败: $($_.Exception.Message)"
+                Write-UiWarning "重建 MCP 配置失败: $($_.Exception.Message)"
             }
             # 重建失败或返回 $null 时（如 software 类型），回退到 vault 保存的原始配置
             if (-not $serverConfig -and $vaultEntry.ContainsKey("config") -and $vaultEntry["config"]) {
-                Write-UiInfo "使用 vault 保存的原始配置恢复"
+                Write-UiPrimary "使用 vault 保存的原始配置恢复"
                 $serverConfig = $vaultEntry["config"]
             }
         }
@@ -1889,7 +1855,7 @@ function Enable-McpServer {
         }
 
         if (-not $serverConfig) {
-            Write-UiError "无法恢复 MCP Server '$ServerId'：缺少配置信息"
+            Write-UiDanger "无法恢复 MCP Server '$ServerId'：缺少配置信息"
             return @{ Success = $false; ServerId = $ServerId; Status = "Error" }
         }
 
@@ -1984,7 +1950,7 @@ function Remove-McpServer {
     $serverStatus = $statuses | Where-Object { $_.Id -eq $ServerId } | Select-Object -First 1
 
     if (-not $serverStatus) {
-        Write-UiWarn "MCP Server '$ServerId' 不存在"
+        Write-UiWarning "MCP Server '$ServerId' 不存在"
         return @{ Success = $false; ServerId = $ServerId; Status = "NotFound" }
     }
 
@@ -1998,7 +1964,7 @@ function Remove-McpServer {
                 -Options @("是，清理", "否，取消")
 
             if ($orphanConfirm -ne 0) {
-                Write-UiInfo "已取消清理"
+                Write-UiDim "已取消清理"
                 return @{ Success = $false; ServerId = $ServerId; Status = "Cancelled" }
             }
 
@@ -2010,13 +1976,13 @@ function Remove-McpServer {
                 return @{ Success = $true; ServerId = $ServerId; Status = "Removed" }
             }
         }
-        Write-UiWarn "MCP Server '$ServerId' 未安装"
+        Write-UiWarning "MCP Server '$ServerId' 未安装"
         return @{ Success = $false; ServerId = $ServerId; Status = "Missing" }
     }
 
     # Custom 类型额外确认
     if ($serverStatus.Status -eq "Custom") {
-        Write-UiWarn "此 MCP 非 CCQ 管理，删除后无法通过 CCQ 恢复"
+        Write-UiWarning "此 MCP 非 CCQ 管理，删除后无法通过 CCQ 恢复"
     }
 
     # 确认
@@ -2025,7 +1991,7 @@ function Remove-McpServer {
         -Options @("是，删除", "否，取消")
 
     if ($confirmIndex -ne 0) {
-        Write-UiInfo "已取消删除"
+        Write-UiDim "已取消删除"
         return @{ Success = $false; ServerId = $ServerId; Status = "Cancelled" }
     }
 
@@ -2151,7 +2117,7 @@ function Install-McpSingleServer {
                 }
             }
             catch {
-                Write-UiWarn "vault 读取失败，跳过历史凭据检测: $($_.Exception.Message)"
+                Write-UiWarning "vault 读取失败，跳过历史凭据检测: $($_.Exception.Message)"
             }
 
             # 无历史则走交互式收集
@@ -2178,7 +2144,7 @@ function Install-McpSingleServer {
                 Write-UiSuccess "已写入 $($server.Name) .env 文件: $($envWriteResult.Path)"
             }
             else {
-                Write-UiWarn "$($server.Name) .env 写入失败: $($envWriteResult.ErrorMessage)"
+                Write-UiWarning "$($server.Name) .env 写入失败: $($envWriteResult.ErrorMessage)"
             }
         }
 
@@ -2217,7 +2183,7 @@ function Install-McpSingleServer {
             $settingsJson = $settings | ConvertTo-Json -Depth 10
             $writeOk = Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
             if (-not $writeOk) {
-                Write-UiWarn "settings.json 权限写入失败"
+                Write-UiWarning "settings.json 权限写入失败"
             }
         }
 
@@ -2238,13 +2204,13 @@ function Install-McpSingleServer {
             }
         }
         catch {
-            Write-UiWarn "vault 写入失败（不影响 MCP 配置）: $($_.Exception.Message)"
+            Write-UiWarning "vault 写入失败（不影响 MCP 配置）: $($_.Exception.Message)"
         }
 
         # 5e. Sync-AllMcpRules
         $syncResult = Sync-AllMcpRules
         if (-not $syncResult.Success) {
-            Write-UiWarn "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
+            Write-UiWarning "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
         }
 
         # 凭据清零（安全）
@@ -2254,7 +2220,7 @@ function Install-McpSingleServer {
         return @{ Success = $true; ServerId = $ServerId; Status = "Active" }
     }
     catch {
-        Write-UiError "安装 MCP Server '$ServerId' 失败: $($_.Exception.Message)"
+        Write-UiDanger "安装 MCP Server '$ServerId' 失败: $($_.Exception.Message)"
         return @{ Success = $false; ServerId = $ServerId; Status = "Failed"; ErrorMessage = $_.Exception.Message }
     }
 }
@@ -2294,7 +2260,7 @@ function Invoke-McpToggle {
                 "Missing"  {
                     # Missing = 注册表有定义但不在 .claude.json 也未禁用
                     if (-not $script:McpServers -or -not $script:McpServers.Contains($id)) {
-                        Write-UiWarn "MCP Server '$id' 未在注册表中定义"
+                        Write-UiWarning "MCP Server '$id' 未在注册表中定义"
                         @{ Success = $false; ServerId = $id; Status = "Unknown" }
                         break
                     }
@@ -2327,7 +2293,7 @@ function Invoke-McpToggle {
                         }
                     }
                     catch {
-                        Write-UiWarn "vault 读取失败: $($_.Exception.Message)"
+                        Write-UiWarning "vault 读取失败: $($_.Exception.Message)"
                     }
 
                     $hasVaultHistory = $vaultCredentials -or $vaultEnvFileValues
@@ -2356,7 +2322,7 @@ function Invoke-McpToggle {
                                     Write-UiSuccess "已恢复 $($serverDef.Name) .env 文件: $($envWriteResult.Path)"
                                 }
                                 else {
-                                    Write-UiWarn "$($serverDef.Name) .env 恢复失败: $($envWriteResult.ErrorMessage)"
+                                    Write-UiWarning "$($serverDef.Name) .env 恢复失败: $($envWriteResult.ErrorMessage)"
                                 }
                             }
 
@@ -2401,7 +2367,7 @@ function Invoke-McpToggle {
                                 }
                             }
                             catch {
-                                Write-UiWarn "vault 更新失败: $($_.Exception.Message)"
+                                Write-UiWarning "vault 更新失败: $($_.Exception.Message)"
                             }
 
                             Write-UiSuccess "MCP Server '$id' 已恢复"
@@ -2409,7 +2375,7 @@ function Invoke-McpToggle {
                             # 同步 MCP Rules 文件
                             $syncResult = Sync-AllMcpRules
                             if (-not $syncResult.Success) {
-                                Write-UiWarn "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
+                                Write-UiWarning "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
                             }
 
                             @{ Success = $true; ServerId = $id; Status = "Active" }
@@ -2427,7 +2393,7 @@ function Invoke-McpToggle {
                     }
                 }
                 default {
-                    Write-UiWarn "MCP Server '$id' 状态为 $currentStatus，跳过 toggle"
+                    Write-UiWarning "MCP Server '$id' 状态为 $currentStatus，跳过 toggle"
                     @{ Success = $false; ServerId = $id; Status = $currentStatus }
                 }
             }
@@ -2436,7 +2402,7 @@ function Invoke-McpToggle {
             if ($toggleResult.Success) { $successCount++ } else { $failureCount++ }
         }
         catch {
-            Write-UiError "Toggle '$id' 失败: $($_.Exception.Message)"
+            Write-UiDanger "Toggle '$id' 失败: $($_.Exception.Message)"
             $results += @{ Success = $false; ServerId = $id; Status = "Error" }
             $failureCount++
         }
@@ -2483,8 +2449,8 @@ function Show-McpManageMenu {
         [void]$actionMap.Add("back")
 
         if ($toggleable.Count -eq 0 -and $removable.Count -eq 0) {
-            Write-UiInfo "没有可管理的 MCP Server"
-            Write-Host "按任意键返回..." -ForegroundColor Gray
+            Write-UiDim "没有可管理的 MCP Server"
+            Write-UiDim "按任意键返回..."
             $null = [Console]::ReadKey($true)
             return
         }
@@ -2518,7 +2484,7 @@ function Show-McpManageMenu {
                         Write-UiSuccess "切换完成: $($result.SuccessCount) 成功, $($result.FailureCount) 失败"
                     }
                     else {
-                        Write-UiInfo "未更改任何状态"
+                        Write-UiDim "未更改任何状态"
                     }
                 }
             }
@@ -2535,7 +2501,7 @@ function Show-McpManageMenu {
         }
 
         Write-Host ""
-        Write-Host "按任意键刷新..." -ForegroundColor Gray
+        Write-UiDim "按任意键刷新..."
         $null = [Console]::ReadKey($true)
     }
 }

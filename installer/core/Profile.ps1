@@ -124,10 +124,10 @@ function Initialize-BackupDirectory {
 
         if (-not (Test-Path $script:BackupDirectory)) {
             New-Item -Path $script:BackupDirectory -ItemType Directory -Force | Out-Null
-            Write-Host "✓ 备份目录已创建: $script:BackupDirectory" -ForegroundColor Green
+            Write-UiSuccess "✓ 备份目录已创建: $script:BackupDirectory"
         }
     } catch {
-        Write-Host "警告: 无法创建备份目录: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-UiWarning "警告: 无法创建备份目录: $($_.Exception.Message)"
     }
 }
 
@@ -150,7 +150,7 @@ function Backup-FileWithTimestamp {
     )
 
     if (-not (Test-Path $FilePath)) {
-        Write-Host "文件不存在，无需备份: $FilePath" -ForegroundColor Gray
+        Write-UiDim "文件不存在，无需备份: $FilePath"
         return $null
     }
 
@@ -167,11 +167,11 @@ function Backup-FileWithTimestamp {
         # 创建备份
         Copy-Item -Path $FilePath -Destination $backupPath -Force
 
-        Write-Host "✓ 文件已备份: $backupPath" -ForegroundColor Green
+        Write-UiSuccess "✓ 文件已备份: $backupPath"
         return $backupPath
 
     } catch {
-        Write-Host "警告: 文件备份失败: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-UiWarning "警告: 文件备份失败: $($_.Exception.Message)"
         return $null
     }
 }
@@ -208,7 +208,7 @@ function Get-ManagedBlockContent {
     }
 
     if (-not (Test-Path $FilePath)) {
-        Write-Host "文件不存在: $FilePath" -ForegroundColor Gray
+        Write-UiDim "文件不存在: $FilePath"
         return $result
     }
 
@@ -254,9 +254,9 @@ function Get-ManagedBlockContent {
         }
 
         if ($result.Found) {
-            Write-Host "✓ 找到标记块: 第 $($result.StartLine) - $($result.EndLine) 行" -ForegroundColor Green
+            Write-UiSuccess "✓ 找到标记块: 第 $($result.StartLine) - $($result.EndLine) 行"
         } else {
-            Write-Host "未找到标记块" -ForegroundColor Gray
+            Write-UiDim "未找到标记块"
             # 如果没有找到标记块，所有内容都在 BeforeBlock 中
             $result.BeforeBlock = $lines
         }
@@ -264,7 +264,7 @@ function Get-ManagedBlockContent {
         return $result
 
     } catch {
-        Write-Host "读取文件失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "读取文件失败: $($_.Exception.Message)"
         throw
     }
 }
@@ -308,21 +308,21 @@ function Set-ManagedBlockInFile {
     try {
         # 验证 Content 参数
         if ($null -eq $Content -or $Content.Count -eq 0) {
-            Write-Host "内容为空，无法写入标记块" -ForegroundColor Yellow
+            Write-UiWarning "内容为空，无法写入标记块"
             return $false
         }
 
         # 检查文件是否存在
         if (-not (Test-Path $FilePath)) {
             if ($CreateIfNotExists) {
-                Write-Host "创建新文件: $FilePath" -ForegroundColor Cyan
+                Write-UiPrimary "创建新文件: $FilePath"
                 # 创建目录（如果不存在）
                 $directory = Split-Path $FilePath -Parent
                 if ($directory -and -not (Test-Path $directory)) {
                     New-Item -Path $directory -ItemType Directory -Force | Out-Null
                 }
             } else {
-                Write-Host "文件不存在: $FilePath" -ForegroundColor Red
+                Write-UiDanger "文件不存在: $FilePath"
                 return $false
             }
         } else {
@@ -372,15 +372,15 @@ function Set-ManagedBlockInFile {
         $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
-            Write-Host "✓ 标记块已更新: $FilePath" -ForegroundColor Green
+            Write-UiSuccess "✓ 标记块已更新: $FilePath"
             return $true
         } else {
-            Write-Host "✗ 标记块更新失败: $FilePath" -ForegroundColor Red
+            Write-UiDanger "✗ 标记块更新失败: $FilePath"
             return $false
         }
 
     } catch {
-        Write-Host "设置标记块失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "设置标记块失败: $($_.Exception.Message)"
         return $false
     }
 }
@@ -414,7 +414,7 @@ function Write-FileAtomically {
     try {
         # 验证 Content 参数（允许空数组，因为可能是空文件）
         if ($null -eq $Content) {
-            Write-Host "内容为 null，使用空数组" -ForegroundColor Yellow
+            Write-UiWarning "内容为 null，使用空数组"
             $Content = @()
         }
 
@@ -463,18 +463,18 @@ function Write-FileAtomically {
             throw "文件移动失败"
         }
 
-        Write-Host "✓ 文件原子写入成功: $FilePath" -ForegroundColor Green
+        Write-UiSuccess "✓ 文件原子写入成功: $FilePath"
         return $true
 
     } catch {
-        Write-Host "原子写入失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "原子写入失败: $($_.Exception.Message)"
 
         # 清理临时文件
         if ($tempFile -and (Test-Path $tempFile)) {
             try {
                 Remove-Item $tempFile -Force
             } catch {
-                Write-Host "警告: 无法清理临时文件: $tempFile" -ForegroundColor Yellow
+                Write-UiWarning "警告: 无法清理临时文件: $tempFile"
             }
         }
 
@@ -505,7 +505,7 @@ function Remove-ManagedBlockFromFile {
     )
 
     if (-not (Test-Path $FilePath)) {
-        Write-Host "文件不存在: $FilePath" -ForegroundColor Gray
+        Write-UiDim "文件不存在: $FilePath"
         return $true  # 文件不存在，认为移除成功
     }
 
@@ -517,7 +517,7 @@ function Remove-ManagedBlockFromFile {
         $blockInfo = Get-ManagedBlockContent -FilePath $FilePath -StartMarker $StartMarker -EndMarker $EndMarker
 
         if (-not $blockInfo.Found) {
-            Write-Host "未找到标记块，无需移除" -ForegroundColor Gray
+            Write-UiDim "未找到标记块，无需移除"
             return $true
         }
 
@@ -541,15 +541,15 @@ function Remove-ManagedBlockFromFile {
         $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
-            Write-Host "✓ 标记块已移除: $FilePath" -ForegroundColor Green
+            Write-UiSuccess "✓ 标记块已移除: $FilePath"
             return $true
         } else {
-            Write-Host "✗ 标记块移除失败: $FilePath" -ForegroundColor Red
+            Write-UiDanger "✗ 标记块移除失败: $FilePath"
             return $false
         }
 
     } catch {
-        Write-Host "移除标记块失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "移除标记块失败: $($_.Exception.Message)"
         return $false
     }
 }
@@ -666,7 +666,7 @@ function New-UpdateSnapshot {
                 Timestamp = (Get-Item $filePath).LastWriteTime.ToString("o")
             }
         } catch {
-            Write-Host "警告: 无法备份文件 $filePath : $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-UiWarning "警告: 无法备份文件 $filePath : $($_.Exception.Message)"
         }
     }
 
@@ -674,7 +674,7 @@ function New-UpdateSnapshot {
     $manifestPath = Join-Path $snapshotDir "manifest.json"
     $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath $manifestPath -Encoding UTF8 -Force
 
-    Write-Host "✓ 更新快照已创建: $snapshotDir ($($manifest.Files.Count) 个文件)" -ForegroundColor Green
+    Write-UiSuccess "✓ 更新快照已创建: $snapshotDir ($($manifest.Files.Count) 个文件)"
     return $snapshotDir
 }
 
@@ -749,18 +749,18 @@ function Clear-OldUpdateSnapshots {
                 Remove-Item $dir.FullName -Recurse -Force
                 $deletedCount++
             } catch {
-                Write-Host "警告: 无法删除快照目录: $($dir.Name)" -ForegroundColor Yellow
+                Write-UiWarning "警告: 无法删除快照目录: $($dir.Name)"
             }
         }
 
         if ($deletedCount -gt 0) {
-            Write-Host "✓ 已清理 $deletedCount 个旧更新快照" -ForegroundColor Green
+            Write-UiSuccess "✓ 已清理 $deletedCount 个旧更新快照"
         }
 
         return $deletedCount
 
     } catch {
-        Write-Host "清理更新快照失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "清理更新快照失败: $($_.Exception.Message)"
         return 0
     }
 }
@@ -780,7 +780,7 @@ function Get-BackupFiles {
 
     try {
         if (-not (Test-Path $script:BackupDirectory)) {
-            Write-Host "备份目录不存在" -ForegroundColor Gray
+            Write-UiDim "备份目录不存在"
             return @()
         }
 
@@ -800,7 +800,7 @@ function Get-BackupFiles {
         return $results
 
     } catch {
-        Write-Host "获取备份文件列表失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "获取备份文件列表失败: $($_.Exception.Message)"
         return @()
     }
 }
@@ -848,18 +848,18 @@ function Clear-OldBackups {
                 Remove-Item $file.FullName -Force
                 $deletedCount++
             } catch {
-                Write-Host "警告: 无法删除备份文件: $($file.Name)" -ForegroundColor Yellow
+                Write-UiWarning "警告: 无法删除备份文件: $($file.Name)"
             }
         }
 
         if ($deletedCount -gt 0) {
-            Write-Host "✓ 已清理 $deletedCount 个旧备份文件" -ForegroundColor Green
+            Write-UiSuccess "✓ 已清理 $deletedCount 个旧备份文件"
         }
 
         return $deletedCount
 
     } catch {
-        Write-Host "清理备份文件失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "清理备份文件失败: $($_.Exception.Message)"
         return 0
     }
 }
@@ -913,7 +913,7 @@ function Read-UpdateManifest {
 
         return $obj
     } catch {
-        Write-UiWarn "更新清单读取失败，将重建: $($_.Exception.Message)"
+        Write-UiWarning "更新清单读取失败，将重建: $($_.Exception.Message)"
         return $emptyManifest
     }
 }

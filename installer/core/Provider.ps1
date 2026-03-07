@@ -291,7 +291,7 @@ function Sync-ProviderFromSettings {
     $newProfile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
     Move-Item $tempPath $profilePath -Force
 
-    Write-UiInfo "已从当前配置自动同步供应商 Profile: $migrateKey.json"
+    Write-UiSuccess "已从当前配置自动同步供应商 Profile: $migrateKey.json"
 }
 
 # ─── Read ──────────────────────────────────────────────────────────────────────
@@ -424,15 +424,15 @@ function Show-ProviderStatus {
     # HC-13: @() 包裹
     $profiles = @(Get-ProviderProfiles)
     if ($profiles.Count -eq 0) {
-        Write-UiWarn "未找到任何供应商 Profile"
-        Write-UiInfo "提示: 使用 [添加供应商] 配置新的供应商连接"
+        Write-UiWarning "未找到任何供应商 Profile"
+        Write-UiDim "提示: 使用 [添加供应商] 配置新的供应商连接"
         return
     }
 
     $active = Get-ActiveProvider
 
     Write-Host ""
-    Write-UiInfo "供应商列表："
+    Write-UiPrimary "供应商列表："
     Write-Host ""
 
     # 列宽定义
@@ -444,14 +444,14 @@ function Show-ProviderStatus {
         (Format-DisplayPad "Base URL" $colWidths[1]) + " " +
         (Format-DisplayPad "API Key" $colWidths[2]) + " " +
         (Format-DisplayPad "状态" $colWidths[3])
-    Write-Host $headerLine -ForegroundColor White
+    Write-UiInfo $headerLine
     $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
-    Write-Host ("  " + [string]::new("-", $sepWidth)) -ForegroundColor Gray
+    Write-UiDim ("  " + [string]::new("-", $sepWidth))
 
     foreach ($p in $profiles) {
         $isActive = $active -and $active.Key -eq $p.Key
         $statusText = if ($isActive) { "Active" } else { "Inactive" }
-        $color = if ($isActive) { "Green" } else { "Gray" }
+        $color = if ($isActive) { "Success" } else { "Dim" }
 
         # 截断 BaseUrl 以适应列宽
         $urlDisplay = $p.BaseUrl
@@ -464,7 +464,7 @@ function Show-ProviderStatus {
             (Format-DisplayPad $urlDisplay $colWidths[1]) + " " +
             (Format-DisplayPad (Get-MaskedApiKey $p.AuthToken) $colWidths[2]) + " " +
             (Format-DisplayPad $statusText $colWidths[3])
-        Write-Host $line -ForegroundColor $color
+        Write-UiOutput $line -Type $color
     }
     Write-Host ""
 }
@@ -513,11 +513,11 @@ function Add-Provider {
     )
     $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
 
-    Write-UiInfo "请选择 API 供应商:"
+    Write-UiPrimary "请选择 API 供应商:"
     $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
 
     if ($selectedIndex -lt 0 -or $selectedIndex -ge $providerKeys.Count) {
-        Write-UiWarn "未选择供应商"
+        Write-UiWarning "未选择供应商"
         return $result
     }
 
@@ -539,11 +539,11 @@ function Add-Provider {
         do {
             $customUrl = Read-Host "Base URL（必填，如 https://api.example.com/anthropic）"
             if ([string]::IsNullOrWhiteSpace($customUrl)) {
-                Write-UiError "Base URL 不能为空"
+                Write-UiDanger "Base URL 不能为空"
                 continue
             }
             if ($customUrl -notmatch '^https?://') {
-                Write-UiError "Base URL 必须以 http:// 或 https:// 开头"
+                Write-UiDanger "Base URL 必须以 http:// 或 https:// 开头"
                 continue
             }
             break
@@ -555,7 +555,7 @@ function Add-Provider {
         # 统一 key 生成：名称优先，回退 URL host + path hash
         $selectedKey = New-CustomProviderKey -Name $customName -BaseUrl $providerBaseUrl
         if (-not (Test-ProviderKey -Key $selectedKey)) {
-            Write-UiError "生成的 Provider Key 非法，取消添加"
+            Write-UiDanger "生成的 Provider Key 非法，取消添加"
             return $result
         }
     } else {
@@ -571,7 +571,7 @@ function Add-Provider {
         $builtinExisting = @(Find-BuiltinProviderProfiles -BuiltinKey $selectedKey -Profiles $existingProfiles)
         if ($builtinExisting.Count -gt 0) {
             Write-Host ""
-            Write-UiWarn "检测到 $($template.Name) 已配置："
+            Write-UiWarning "检测到 $($template.Name) 已配置："
             foreach ($item in $builtinExisting) {
                 Write-UiInfo "  - $($item.Name) ($($item.BaseUrl))"
             }
@@ -586,7 +586,7 @@ function Add-Provider {
                     # 新增：自动生成递增 key
                     $selectedKey = Get-NextAvailableKey -BaseKey $selectedKey
                     $existingPath = Join-Path $profilesDir "$selectedKey.json"
-                    Write-UiInfo "将创建新配置: ~/.claude/providers/$selectedKey.json"
+                    Write-UiPrimary "将创建新配置: ~/.claude/providers/$selectedKey.json"
                     # 允许用户输入自定义显示名称
                     $newDisplayName = Read-Host "显示名称（可选，直接回车使用默认）"
                     if (-not [string]::IsNullOrWhiteSpace($newDisplayName)) {
@@ -611,7 +611,7 @@ function Add-Provider {
                             $owOptions = @($builtinExisting | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
                             $owIdx = Show-SingleSelectMenu -Title "选择要覆盖的配置：" -Options $owOptions
                             if ($owIdx -lt 0 -or $owIdx -ge $builtinExisting.Count) {
-                                Write-UiInfo "已取消"
+                                Write-UiDim "已取消"
                                 return $result
                             }
                             $selectedKey = $builtinExisting[$owIdx].Key
@@ -620,7 +620,7 @@ function Add-Provider {
                     }
                 }
                 default {
-                    Write-UiInfo "已取消，可通过「修改供应商」更新现有配置"
+                    Write-UiDim "已取消，可通过「修改供应商」更新现有配置"
                     return $result
                 }
             }
@@ -632,26 +632,26 @@ function Add-Provider {
             $existName = if ($existing["_meta"] -and $existing["_meta"]["provider"]) { $existing["_meta"]["provider"] } else { $selectedKey }
             $existUrl  = if ($existing["_meta"] -and $existing["_meta"]["baseUrl"])  { $existing["_meta"]["baseUrl"] }  else { "未知" }
             Write-Host ""
-            Write-UiWarn "检测到同名供应商已存在："
+            Write-UiWarning "检测到同名供应商已存在："
             Write-UiInfo "  名称: $existName"
             Write-UiInfo "  Base URL: $existUrl"
             Write-UiInfo "  文件: ~/.claude/providers/$selectedKey.json"
         } catch {
             Write-Host ""
-            Write-UiWarn "检测到供应商 $selectedKey 已存在"
+            Write-UiWarning "检测到供应商 $selectedKey 已存在"
         }
 
         $overwriteIdx = Show-SingleSelectMenu -Title "如何处理？" -Options @("覆盖现有配置", "取消添加")
         if ($overwriteIdx -ne 0) {
-            Write-UiInfo "已取消，可通过「修改供应商」更新现有配置"
+            Write-UiDim "已取消，可通过「修改供应商」更新现有配置"
             return $result
         }
     }
 
     # 安全输入 API Key
     Write-Host ""
-    Write-UiInfo "请粘贴 $providerName 的 API Key（输入不会回显）:"
-    Write-UiWarn "注意: API Key 将写入 ~/.claude/settings.json 和 ~/.claude/providers/"
+    Write-UiPrimary "请粘贴 $providerName 的 API Key（输入不会回显）:"
+    Write-UiWarning "注意: API Key 将写入 ~/.claude/settings.json 和 ~/.claude/providers/"
 
     $apiKeyPlain = $null
     try {
@@ -668,11 +668,11 @@ function Add-Provider {
             }
 
             if ([string]::IsNullOrWhiteSpace($apiKeyPlain)) {
-                Write-UiError "API Key 不能为空，请重新输入"
+                Write-UiDanger "API Key 不能为空，请重新输入"
                 continue
             }
             if ($apiKeyPlain.Length -lt 10) {
-                Write-UiError "API Key 长度过短，请检查后重新输入"
+                Write-UiDanger "API Key 长度过短，请检查后重新输入"
                 continue
             }
             break
@@ -680,7 +680,7 @@ function Add-Provider {
 
         # 显示配置摘要
         Write-Host ""
-        Write-UiWarn "即将写入以下配置："
+        Write-UiWarning "即将写入以下配置："
         Write-UiInfo "  供应商: $providerName"
         Write-UiInfo "  Base URL: $providerBaseUrl"
         Write-UiInfo "  Key 摘要: $(Get-MaskedApiKey $apiKeyPlain)"
@@ -688,7 +688,7 @@ function Add-Provider {
 
         $confirmIndex = Show-SingleSelectMenu -Title "确认保存配置？" -Options @("是，保存", "否，取消")
         if ($confirmIndex -ne 0) {
-            Write-UiWarn "已取消"
+            Write-UiWarning "已取消"
             return $result
         }
 
@@ -761,7 +761,7 @@ function Edit-Provider {
     param([Parameter(Mandatory)] [string]$Key)
 
     if (-not (Test-ProviderKey -Key $Key)) {
-        Write-UiError "非法 Provider Key: $Key"
+        Write-UiDanger "非法 Provider Key: $Key"
         return
     }
 
@@ -769,7 +769,7 @@ function Edit-Provider {
     $profilePath = Join-Path $profilesDir "$Key.json"
 
     if (-not (Test-Path $profilePath)) {
-        Write-UiError "供应商 Profile 不存在: $Key"
+        Write-UiDanger "供应商 Profile 不存在: $Key"
         return
     }
 
@@ -779,7 +779,7 @@ function Edit-Provider {
     $meta = $profile["_meta"]
     $envData = $profile["env"]
     Write-Host ""
-    Write-UiInfo "当前配置:"
+    Write-UiPrimary "当前配置:"
     Write-UiInfo "  供应商: $($meta["provider"])"
     Write-UiInfo "  Base URL: $($meta["baseUrl"])"
     Write-UiInfo "  API Key: $(Get-MaskedApiKey $envData["ANTHROPIC_AUTH_TOKEN"])"
@@ -800,7 +800,7 @@ function Edit-Provider {
     switch ($editChoice) {
         0 {
             # 修改 API Key
-            Write-UiInfo "请输入新的 API Key（输入不会回显）:"
+            Write-UiPrimary "请输入新的 API Key（输入不会回显）:"
             $newKeySecure = Read-Host -Prompt "新 API Key" -AsSecureString
             $bstr = [System.IntPtr]::Zero
             try {
@@ -812,7 +812,7 @@ function Edit-Provider {
                 }
             }
             if ([string]::IsNullOrWhiteSpace($newKeyPlain) -or $newKeyPlain.Length -lt 10) {
-                Write-UiError "API Key 无效，取消修改"
+                Write-UiDanger "API Key 无效，取消修改"
                 $newKeyPlain = $null
                 return
             }
@@ -823,7 +823,7 @@ function Edit-Provider {
             # 修改 Base URL
             $newUrl = Read-Host "新 Base URL"
             if ([string]::IsNullOrWhiteSpace($newUrl) -or $newUrl -notmatch '^https?://') {
-                Write-UiError "Base URL 无效，取消修改"
+                Write-UiDanger "Base URL 无效，取消修改"
                 return
             }
             $newUrl = $newUrl.TrimEnd('/')
@@ -834,7 +834,7 @@ function Edit-Provider {
             # 修改名称
             $newName = Read-Host "新供应商名称"
             if ([string]::IsNullOrWhiteSpace($newName)) {
-                Write-UiError "名称不能为空，取消修改"
+                Write-UiDanger "名称不能为空，取消修改"
                 return
             }
             $newName = $newName.Trim()
@@ -846,7 +846,7 @@ function Edit-Provider {
                 if ((Test-ProviderKey -Key $candidateKey) -and $candidateKey -ne $Key) {
                     $candidatePath = Join-Path $profilesDir "$candidateKey.json"
                     if (Test-Path $candidatePath) {
-                        Write-UiWarn "目标文件 $candidateKey.json 已存在，仅更新显示名称"
+                        Write-UiWarning "目标文件 $candidateKey.json 已存在，仅更新显示名称"
                     } else {
                         $pendingNewKey = $candidateKey
                     }
@@ -870,14 +870,14 @@ function Edit-Provider {
                     # Add-Provider 失败或取消 → 恢复旧配置
                     if (Test-Path $backupPath) {
                         Move-Item $backupPath $profilePath -Force
-                        Write-UiWarn "已恢复原有配置"
+                        Write-UiWarning "已恢复原有配置"
                     }
                 }
             } catch {
                 # 异常恢复
                 if (Test-Path $backupPath) {
                     Move-Item $backupPath $profilePath -Force -ErrorAction SilentlyContinue
-                    Write-UiWarn "操作异常，已恢复原有配置"
+                    Write-UiWarning "操作异常，已恢复原有配置"
                 }
             }
             return
@@ -918,7 +918,7 @@ function Edit-Provider {
 
     # 如果修改前是活跃供应商 → 自动同步 settings.json
     if ($wasActive) {
-        Write-UiInfo "正在同步活跃供应商配置到 settings.json..."
+        Write-UiPrimary "正在同步活跃供应商配置到 settings.json..."
         Switch-Provider -Key $effectiveKey
     }
 }
@@ -935,7 +935,7 @@ function Remove-Provider {
     param([Parameter(Mandatory)] [string]$Key)
 
     if (-not (Test-ProviderKey -Key $Key)) {
-        Write-UiError "非法 Provider Key: $Key"
+        Write-UiDanger "非法 Provider Key: $Key"
         return
     }
 
@@ -943,21 +943,21 @@ function Remove-Provider {
     $profilePath = Join-Path $profilesDir "$Key.json"
 
     if (-not (Test-Path $profilePath)) {
-        Write-UiError "供应商 Profile 不存在: $Key"
+        Write-UiDanger "供应商 Profile 不存在: $Key"
         return
     }
 
     # 安全检查: 活跃供应商不能直接删除
     $active = Get-ActiveProvider
     if ($active -and $active.Key -eq $Key) {
-        Write-UiError "无法删除当前活跃的供应商: $($active.Name)"
-        Write-UiWarn "请先切换到其他供应商后再删除"
+        Write-UiDanger "无法删除当前活跃的供应商: $($active.Name)"
+        Write-UiWarning "请先切换到其他供应商后再删除"
         return
     }
 
     $confirmIndex = Show-SingleSelectMenu -Title "确认删除供应商 Profile: $Key？" -Options @("是，删除", "否，取消")
     if ($confirmIndex -ne 0) {
-        Write-UiInfo "已取消"
+        Write-UiDim "已取消"
         return
     }
 
@@ -979,7 +979,7 @@ function Switch-Provider {
     # HC-13: @() 包裹
     $profiles = @(Get-ProviderProfiles)
     if ($profiles.Count -eq 0) {
-        Write-UiWarn "未找到供应商 Profile，请先添加供应商"
+        Write-UiWarning "未找到供应商 Profile，请先添加供应商"
         return
     }
 
@@ -1005,21 +1005,21 @@ function Switch-Provider {
 
         $selectedIdx = Show-SingleSelectMenu -Title "选择要切换的供应商：" -Options $options
         if ($selectedIdx -lt 0 -or $selectedIdx -ge $profiles.Count) {
-            Write-UiInfo "已取消"
+            Write-UiDim "已取消"
             return
         }
         $Key = $profiles[$selectedIdx].Key
     }
 
     if (-not (Test-ProviderKey -Key $Key)) {
-        Write-UiError "非法 Provider Key: $Key"
+        Write-UiDanger "非法 Provider Key: $Key"
         return
     }
 
     # 读取 Profile
     $profilePath = Join-Path (Get-ProviderProfilesDir) "$Key.json"
     if (-not (Test-Path $profilePath)) {
-        Write-UiError "供应商 Profile 不存在: $Key"
+        Write-UiDanger "供应商 Profile 不存在: $Key"
         return
     }
 
@@ -1077,19 +1077,19 @@ function Render-ProviderTable {
         (Format-DisplayPad "Base URL" $colWidths[1]) + " " +
         (Format-DisplayPad "API Key" $colWidths[2]) + " " +
         (Format-DisplayPad "状态" $colWidths[3])
-    Write-Host $headerLine -ForegroundColor White
+    Write-UiInfo $headerLine
 
     $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
-    Write-Host ("  " + [string]::new("-", $sepWidth)) -ForegroundColor Gray
+    Write-UiDim ("  " + [string]::new("-", $sepWidth))
 
     for ($i = 0; $i -lt $Profiles.Count; $i++) {
         $p = $Profiles[$i]
         $isSelected = $i -eq $SelectedIndex
 
         $marker = if ($isSelected) { "►" } else { " " }
-        $color = if ($isSelected) { "Cyan" }
-                 elseif ($p.IsActive) { "Green" }
-                 else { "Gray" }
+        $color = if ($isSelected) { "Primary" }
+                 elseif ($p.IsActive) { "Success" }
+                 else { "Dim" }
 
         # URL 截断
         $urlDisplay = [string]$p.BaseUrl
@@ -1113,7 +1113,7 @@ function Render-ProviderTable {
             (Format-DisplayPad $urlDisplay $colWidths[1]) + " " +
             (Format-DisplayPad ([string]$p.MaskedApiKey) $colWidths[2]) + " " +
             (Format-DisplayPad $statusText $colWidths[3])
-        Write-Host $line -ForegroundColor $color
+        Write-UiOutput $line -Type $color
     }
 }
 
@@ -1126,25 +1126,25 @@ function Render-ActionBar {
 
     Write-Host ""
     if ($HasProviders) {
-        Write-Host -NoNewline " [" -ForegroundColor Gray
-        Write-Host -NoNewline "↑↓" -ForegroundColor White
-        Write-Host -NoNewline "] 移动  [" -ForegroundColor Gray
-        Write-Host -NoNewline "Enter" -ForegroundColor White
-        Write-Host -NoNewline "] 切换活跃  [" -ForegroundColor Gray
-        Write-Host -NoNewline "A" -ForegroundColor White
-        Write-Host -NoNewline "] 添加  [" -ForegroundColor Gray
-        Write-Host -NoNewline "E" -ForegroundColor White
-        Write-Host -NoNewline "] 修改  [" -ForegroundColor Gray
-        Write-Host -NoNewline "D" -ForegroundColor White
-        Write-Host -NoNewline "] 删除  [" -ForegroundColor Gray
-        Write-Host -NoNewline "Esc" -ForegroundColor White
-        Write-Host "] 返回" -ForegroundColor Gray
+        Write-UiDim " [" -NoNewline
+        Write-UiInfo "↑↓" -NoNewline
+        Write-UiDim "] 移动  [" -NoNewline
+        Write-UiInfo "Enter" -NoNewline
+        Write-UiDim "] 切换活跃  [" -NoNewline
+        Write-UiInfo "A" -NoNewline
+        Write-UiDim "] 添加  [" -NoNewline
+        Write-UiInfo "E" -NoNewline
+        Write-UiDim "] 修改  [" -NoNewline
+        Write-UiInfo "D" -NoNewline
+        Write-UiDim "] 删除  [" -NoNewline
+        Write-UiInfo "Esc" -NoNewline
+        Write-UiDim "] 返回"
     } else {
-        Write-Host -NoNewline " [" -ForegroundColor Gray
-        Write-Host -NoNewline "A" -ForegroundColor White
-        Write-Host -NoNewline "] 添加  [" -ForegroundColor Gray
-        Write-Host -NoNewline "Esc" -ForegroundColor White
-        Write-Host "] 返回" -ForegroundColor Gray
+        Write-UiDim " [" -NoNewline
+        Write-UiInfo "A" -NoNewline
+        Write-UiDim "] 添加  [" -NoNewline
+        Write-UiInfo "Esc" -NoNewline
+        Write-UiDim "] 返回"
     }
 }
 
@@ -1160,11 +1160,11 @@ function Show-ProviderDashboardFallback {
         $profiles = @($data.Profiles)
 
         Write-Host ""
-        Write-UiInfo "供应商管理"
+        Write-UiPrimary "供应商管理"
         Write-Host ""
 
         if ($profiles.Count -eq 0) {
-            Write-UiWarn "暂无供应商配置"
+            Write-UiWarning "暂无供应商配置"
             Write-Host ""
             Write-UiInfo "操作: A=添加供应商  Q=返回上级"
         } else {
@@ -1189,7 +1189,7 @@ function Show-ProviderDashboardFallback {
             if ($idx -ge 0 -and $idx -lt $profiles.Count) {
                 Switch-Provider -Key $profiles[$idx].Key
             } else {
-                Write-UiError "编号超出范围"
+                Write-UiDanger "编号超出范围"
             }
             continue
         }
@@ -1198,7 +1198,7 @@ function Show-ProviderDashboardFallback {
             if ($idx -ge 0 -and $idx -lt $profiles.Count) {
                 Edit-Provider -Key $profiles[$idx].Key
             } else {
-                Write-UiError "编号超出范围"
+                Write-UiDanger "编号超出范围"
             }
             continue
         }
@@ -1207,12 +1207,12 @@ function Show-ProviderDashboardFallback {
             if ($idx -ge 0 -and $idx -lt $profiles.Count) {
                 Remove-Provider -Key $profiles[$idx].Key
             } else {
-                Write-UiError "编号超出范围"
+                Write-UiDanger "编号超出范围"
             }
             continue
         }
 
-        Write-UiError "无效输入"
+        Write-UiDanger "无效输入"
     }
 }
 
@@ -1226,7 +1226,7 @@ function Show-ProviderDashboard {
     try {
         Sync-ProviderFromSettings
     } catch {
-        Write-UiWarn "供应商自动同步失败: $($_.Exception.Message)"
+        Write-UiWarning "供应商自动同步失败: $($_.Exception.Message)"
     }
 
     # ANSI 降级（防御性检查，避免 $script:SupportsAnsi 未定义时严格模式报错）
@@ -1259,14 +1259,14 @@ function Show-ProviderDashboard {
             }
 
             # 清屏 + 光标归位
-            Write-Host "`e[2J`e[H" -NoNewline
+            Clear-UiScreen
 
             Show-AsciiBanner "供应商管理"
 
             if (-not $data.HasProviders) {
-                Write-UiWarn "  暂无供应商配置"
+                Write-UiWarning "  暂无供应商配置"
                 Write-Host ""
-                Write-UiInfo "  按 [A] 添加第一个供应商"
+                Write-UiDim "  按 [A] 添加第一个供应商"
             } else {
                 Render-ProviderTable -Profiles $profiles -SelectedIndex $selectedIndex
             }
@@ -1300,7 +1300,17 @@ function Show-ProviderDashboard {
                 }
                 'D' {
                     if ($profiles.Count -gt 0) {
-                        Remove-Provider -Key $profiles[$selectedIndex].Key
+                        $selected = $profiles[$selectedIndex]
+                        if ($selected.IsActive) {
+                            Write-Host ""
+                            Write-UiDanger "无法删除当前活跃的供应商: $($selected.Name)"
+                            Write-UiWarning "请先切换到其他供应商后再删除"
+                            Write-Host ""
+                            Write-UiDim "按任意键继续..."
+                            [Console]::ReadKey($true) | Out-Null
+                        } else {
+                            Remove-Provider -Key $selected.Key
+                        }
                     }
                 }
                 'Escape' {

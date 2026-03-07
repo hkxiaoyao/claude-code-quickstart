@@ -84,7 +84,7 @@ function Test-NodeFnmInstalled {
     }
 
     try {
-        Write-UiInfo "🔍 检查 Node.js 和 fnm 安装状态..."
+        Write-UiPrimary "🔍 检查 Node.js 和 fnm 安装状态..."
 
         # 检查 fnm/node/npm 是否可用（使用 ReturnDetails 获取完整信息）
         $fnmDetails = Test-CommandAvailable -Command "fnm" -ReturnDetails
@@ -128,7 +128,7 @@ function Test-NodeFnmInstalled {
                 # 0x8A150014 (-1978335212) = APPINSTALLER_CLI_ERROR_NO_APPLICATIONS_FOUND
                 # winget 未找到匹配包是正常情况（Node.js 可能通过 fnm/nvm 安装），静默忽略
                 if ($_.Exception.Message -notmatch '-1978335212|8A150014|找不到.*匹配') {
-                    Write-UiWarn "⚠ winget list Node.js 检测失败: $($_.Exception.Message)"
+                    Write-UiWarning "⚠ winget list Node.js 检测失败: $($_.Exception.Message)"
                 }
             }
         }
@@ -222,11 +222,11 @@ function Test-NodeFnmInstalled {
             $result.Data["FnmVersion"] = $fnmVersion
             Write-UiSuccess "✓ fnm 已安装 (版本: $fnmVersion)"
         } else {
-            Write-UiWarn "⚠ fnm 未安装（允许继续使用现有 Node.js 环境）"
+            Write-UiWarning "⚠ fnm 未安装（允许继续使用现有 Node.js 环境）"
         }
 
         if ($nvmDetected) {
-            Write-UiWarn "⚠ 检测到 nvm-windows 环境"
+            Write-UiWarning "⚠ 检测到 nvm-windows 环境"
             if ($nvmHome) {
                 Write-UiInfo "  NVM_HOME: $nvmHome"
             }
@@ -236,7 +236,7 @@ function Test-NodeFnmInstalled {
         }
 
         if ($directNodeDetected) {
-            Write-UiWarn "⚠ 检测到直接安装的 Node.js 环境"
+            Write-UiWarning "⚠ 检测到直接安装的 Node.js 环境"
             Write-UiInfo "  默认路径: $directNodePath"
             if ($wingetNodeInstalled) {
                 Write-UiInfo "  winget 安装记录: OpenJS.NodeJS"
@@ -260,13 +260,13 @@ function Test-NodeFnmInstalled {
                     $nodeVersionSatisfied = $true
                     Write-UiSuccess "✓ Node.js 版本满足要求 (需要: v$script:RequiredNodeVersion+)"
                 } else {
-                    Write-UiWarn "⚠ Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:RequiredNodeVersion+)"
+                    Write-UiWarning "⚠ Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:RequiredNodeVersion+)"
                 }
             } else {
-                Write-UiWarn "⚠ 无法解析 Node.js 版本号: $nodeVersion"
+                Write-UiWarning "⚠ 无法解析 Node.js 版本号: $nodeVersion"
             }
         } else {
-            Write-UiWarn "⚠ Node.js 未安装"
+            Write-UiWarning "⚠ Node.js 未安装"
         }
 
         if ($npmAvailable) {
@@ -277,7 +277,7 @@ function Test-NodeFnmInstalled {
                 Write-UiInfo "  路径: $($npmDetails.ResolvedPath)"
             }
         } else {
-            Write-UiWarn "⚠ npm 未安装"
+            Write-UiWarning "⚠ npm 未安装"
         }
 
         Write-UiInfo "Node 来源判定: $nodeSource"
@@ -292,11 +292,11 @@ function Test-NodeFnmInstalled {
                 Write-UiSuccess "✓ PowerShell Profile 中已配置 fnm 初始化"
             } else {
                 $result.Data["ProfileConfigured"] = $false
-                Write-UiWarn "⚠ PowerShell Profile 中未配置 fnm 初始化"
+                Write-UiWarning "⚠ PowerShell Profile 中未配置 fnm 初始化"
             }
         } else {
             $result.Data["ProfileConfigured"] = $false
-            Write-UiWarn "⚠ PowerShell Profile 文件不存在"
+            Write-UiWarning "⚠ PowerShell Profile 文件不存在"
         }
 
         # 判断是否已满足运行时要求
@@ -320,7 +320,7 @@ function Test-NodeFnmInstalled {
 
     } catch {
         $result.Message = "Node.js 安装状态检查失败: $($_.Exception.Message)"
-        Write-UiWarn "⚠ $($result.Message)"
+        Write-UiWarning "⚠ $($result.Message)"
     }
 
     # 写入缓存
@@ -347,7 +347,7 @@ function Resolve-NpmForBackup {
         return @{ Available = $true; Method = "already-in-path"; ErrorMessage = "" }
     }
 
-    Write-UiWarn "npm 不在当前 PATH 中，尝试定位..."
+    Write-UiWarning "npm 不在当前 PATH 中，尝试定位..."
 
     # 2. 尝试通过 snapshot 中记录的 NpmPath 直接定位
     $npmPath = [string]$EnvSnapshot["NpmPath"]
@@ -365,7 +365,7 @@ function Resolve-NpmForBackup {
     if ([bool]$EnvSnapshot["NvmDetected"]) {
         # 3a. nvm 命令可用 - 尝试 nvm use
         if ([bool]$EnvSnapshot["NvmCommandAvailable"]) {
-            Write-UiInfo "  尝试通过 nvm 激活 Node.js 环境..."
+            Write-UiPrimary "  尝试通过 nvm 激活 Node.js 环境..."
             try {
                 $nvmListResult = Invoke-ExternalCommand -Command "nvm" -Arguments @("list") -SuppressOutput -TimeoutSeconds 15 -RetryCount 0
                 if ($nvmListResult.Success -and $nvmListResult.Output) {
@@ -374,7 +374,7 @@ function Resolve-NpmForBackup {
                     } | Where-Object { $_ }
                     if ($versions) {
                         $targetVersion = $versions | Select-Object -First 1
-                        Write-UiInfo "  执行 nvm use $targetVersion..."
+                        Write-UiPrimary "  执行 nvm use $targetVersion..."
                         $useResult = Invoke-ExternalCommand -Command "nvm" -Arguments @("use", $targetVersion) -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
                         Refresh-SessionPath
                         if (Test-CommandAvailable -Command "npm") {
@@ -384,7 +384,7 @@ function Resolve-NpmForBackup {
                     }
                 }
             } catch {
-                Write-UiWarn "  nvm 激活失败: $($_.Exception.Message)"
+                Write-UiWarning "  nvm 激活失败: $($_.Exception.Message)"
             }
         }
 
@@ -450,11 +450,11 @@ function Backup-NpmGlobalPackages {
     }
 
     try {
-        Write-UiInfo "📦 备份 npm 全局包列表..."
+        Write-UiPrimary "📦 备份 npm 全局包列表..."
 
         # 注意：调用方应在调用前先执行 Resolve-NpmForBackup 确保 npm 可用
         if (-not (Test-CommandAvailable -Command "npm")) {
-            Write-UiWarn "npm 命令不可用（已尝试所有定位策略），跳过全局包备份"
+            Write-UiWarning "npm 命令不可用（已尝试所有定位策略），跳过全局包备份"
             $result.Success = $true
             $result.Packages = @()
             return $result
@@ -466,7 +466,7 @@ function Backup-NpmGlobalPackages {
             if ($npmExitCode -ne 0) {
                 throw "npm list -g 无输出且退出码为 $npmExitCode，无法安全备份全局包"
             }
-            Write-UiWarn "⚠ npm list -g 返回为空，将按无全局包处理"
+            Write-UiWarning "⚠ npm list -g 返回为空，将按无全局包处理"
             $result.Success = $true
             return $result
         }
@@ -478,7 +478,7 @@ function Backup-NpmGlobalPackages {
             throw "npm list -g 输出解析失败，无法安全备份全局包: $($_.Exception.Message)"
         }
         if ($npmExitCode -ne 0) {
-            Write-UiWarn "⚠ npm list -g 退出码为 $npmExitCode，但已成功解析 JSON，继续迁移流程"
+            Write-UiWarning "⚠ npm list -g 退出码为 $npmExitCode，但已成功解析 JSON，继续迁移流程"
         }
         if ($json -and $json.dependencies) {
             foreach ($pkg in $json.dependencies.PSObject.Properties) {
@@ -501,7 +501,7 @@ function Backup-NpmGlobalPackages {
         Write-UiSuccess "✓ npm 全局包备份完成，共 $($result.Packages.Count) 个包"
     } catch {
         $result.ErrorMessage = "备份 npm 全局包失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -560,7 +560,7 @@ function Uninstall-ExistingNode {
 
         # 卸载 nvm-windows
         if ([bool]$EnvSnapshot["NvmDetected"]) {
-            Write-UiWarn "⚠ 开始卸载 nvm-windows..."
+            Write-UiWarning "⚠ 开始卸载 nvm-windows..."
 
             if (Test-CommandAvailable -Command "nvm") {
                 try {
@@ -568,10 +568,10 @@ function Uninstall-ExistingNode {
                     if ($nvmOffResult.Success) {
                         Write-UiSuccess "✓ 已执行 nvm off"
                     } else {
-                        Write-UiWarn "⚠ nvm off 执行失败: $($nvmOffResult.Error)"
+                        Write-UiWarning "⚠ nvm off 执行失败: $($nvmOffResult.Error)"
                     }
                 } catch {
-                    Write-UiWarn "⚠ nvm off 执行异常: $($_.Exception.Message)"
+                    Write-UiWarning "⚠ nvm off 执行异常: $($_.Exception.Message)"
                 }
             }
 
@@ -581,13 +581,13 @@ function Uninstall-ExistingNode {
                     if ($nvmUninstall.Success) {
                         Write-UiSuccess "✓ winget 卸载 nvm-windows 成功"
                     } else {
-                        Write-UiWarn "⚠ winget 卸载 nvm-windows 失败: $($nvmUninstall.Error)"
+                        Write-UiWarning "⚠ winget 卸载 nvm-windows 失败: $($nvmUninstall.Error)"
                     }
                 } catch {
-                    Write-UiWarn "⚠ winget 卸载 nvm-windows 异常: $($_.Exception.Message)"
+                    Write-UiWarning "⚠ winget 卸载 nvm-windows 异常: $($_.Exception.Message)"
                 }
             } else {
-                Write-UiWarn "⚠ winget 不可用，跳过 nvm-windows 自动卸载"
+                Write-UiWarning "⚠ winget 不可用，跳过 nvm-windows 自动卸载"
             }
 
             # 清理 nvm 目录
@@ -605,7 +605,7 @@ function Uninstall-ExistingNode {
                         Remove-Item -Path $folderPath -Recurse -Force -ErrorAction Stop
                         Write-UiSuccess "✓ 已清理目录: $folderPath"
                     } catch {
-                        Write-UiWarn "⚠ 清理目录失败: $folderPath，原因: $($_.Exception.Message)"
+                        Write-UiWarning "⚠ 清理目录失败: $folderPath，原因: $($_.Exception.Message)"
                     }
                 }
             }
@@ -613,7 +613,7 @@ function Uninstall-ExistingNode {
 
         # 卸载直接安装的 Node.js
         if ([bool]$EnvSnapshot["DirectNodeDetected"]) {
-            Write-UiWarn "⚠ 开始卸载直接安装的 Node.js..."
+            Write-UiWarning "⚠ 开始卸载直接安装的 Node.js..."
 
             if (Test-CommandAvailable -Command "winget") {
                 try {
@@ -621,13 +621,13 @@ function Uninstall-ExistingNode {
                     if ($nodeUninstall.Success) {
                         Write-UiSuccess "✓ winget 卸载 Node.js 成功"
                     } else {
-                        Write-UiWarn "⚠ winget 卸载 Node.js 失败: $($nodeUninstall.Error)"
+                        Write-UiWarning "⚠ winget 卸载 Node.js 失败: $($nodeUninstall.Error)"
                     }
                 } catch {
-                    Write-UiWarn "⚠ winget 卸载 Node.js 异常: $($_.Exception.Message)"
+                    Write-UiWarning "⚠ winget 卸载 Node.js 异常: $($_.Exception.Message)"
                 }
             } else {
-                Write-UiWarn "⚠ winget 不可用，尝试注册表卸载"
+                Write-UiWarning "⚠ winget 不可用，尝试注册表卸载"
             }
 
             # 从注册表查找卸载信息
@@ -666,7 +666,7 @@ function Uninstall-ExistingNode {
                         if ($msiResult.Success) {
                             Write-UiSuccess "✓ msiexec 卸载成功: $($item.DisplayName)"
                         } else {
-                            Write-UiWarn "⚠ msiexec 卸载失败: $($item.DisplayName)，$($msiResult.Error)"
+                            Write-UiWarning "⚠ msiexec 卸载失败: $($item.DisplayName)，$($msiResult.Error)"
                         }
                     } elseif ($uninstallString -match '(?i)msiexec(?:\.exe)?\s+.*\{[0-9A-Fa-f\-]{36}\}') {
                         $productCode = [regex]::Match($uninstallString, '\{[0-9A-Fa-f\-]{36}\}').Value
@@ -675,16 +675,16 @@ function Uninstall-ExistingNode {
                             if ($msiResult.Success) {
                                 Write-UiSuccess "✓ msiexec 卸载成功: $($item.DisplayName)"
                             } else {
-                                Write-UiWarn "⚠ msiexec 卸载失败: $($item.DisplayName)，$($msiResult.Error)"
+                                Write-UiWarning "⚠ msiexec 卸载失败: $($item.DisplayName)，$($msiResult.Error)"
                             }
                         } else {
-                            Write-UiWarn "⚠ 无法提取 MSI ProductCode，跳过不安全卸载命令: $($item.DisplayName)"
+                            Write-UiWarning "⚠ 无法提取 MSI ProductCode，跳过不安全卸载命令: $($item.DisplayName)"
                         }
                     } else {
-                        Write-UiWarn "⚠ 跳过非 MSI 卸载命令（避免执行不受控命令）: $($item.DisplayName)"
+                        Write-UiWarning "⚠ 跳过非 MSI 卸载命令（避免执行不受控命令）: $($item.DisplayName)"
                     }
                 } catch {
-                    Write-UiWarn "⚠ 卸载执行异常: $($item.DisplayName)，$($_.Exception.Message)"
+                    Write-UiWarning "⚠ 卸载执行异常: $($item.DisplayName)，$($_.Exception.Message)"
                 }
             }
 
@@ -697,7 +697,7 @@ function Uninstall-ExistingNode {
                         Remove-Item -Path $folderPath -Recurse -Force -ErrorAction Stop
                         Write-UiSuccess "✓ 已清理目录: $folderPath"
                     } catch {
-                        Write-UiWarn "⚠ 清理目录失败: $folderPath，原因: $($_.Exception.Message)"
+                        Write-UiWarning "⚠ 清理目录失败: $folderPath，原因: $($_.Exception.Message)"
                     }
                 }
             }
@@ -776,7 +776,7 @@ function Uninstall-ExistingNode {
         Write-UiSuccess "✓ 冲突工具卸载与 PATH 清理完成"
     } catch {
         $result.ErrorMessage = "卸载冲突环境失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -812,7 +812,7 @@ function Restore-NpmGlobalPackages {
             throw "npm 命令不可用，无法恢复全局包"
         }
 
-        Write-UiInfo "📥 开始恢复 npm 全局包..."
+        Write-UiPrimary "📥 开始恢复 npm 全局包..."
         foreach ($pkg in $Packages) {
             $name = [string]$pkg.Name
             $version = [string]$pkg.Version
@@ -830,11 +830,11 @@ function Restore-NpmGlobalPackages {
                     Write-UiSuccess "✓ 已恢复: $fullName"
                 } else {
                     $result.Failed += @{ Name = $fullName; Error = $installResult.Error }
-                    Write-UiWarn "⚠ 恢复失败: $fullName，$($installResult.Error)"
+                    Write-UiWarning "⚠ 恢复失败: $fullName，$($installResult.Error)"
                 }
             } catch {
                 $result.Failed += @{ Name = $fullName; Error = $_.Exception.Message }
-                Write-UiWarn "⚠ 恢复异常: $fullName，$($_.Exception.Message)"
+                Write-UiWarning "⚠ 恢复异常: $fullName，$($_.Exception.Message)"
             }
         }
 
@@ -844,7 +844,7 @@ function Restore-NpmGlobalPackages {
     } catch {
         $result.Success = $false
         $result.Failed += @{ Name = "全部"; Error = $_.Exception.Message }
-        Write-UiWarn "⚠ npm 全局包恢复过程中断: $($_.Exception.Message)"
+        Write-UiWarning "⚠ npm 全局包恢复过程中断: $($_.Exception.Message)"
     }
 
     return $result
@@ -867,7 +867,7 @@ function Install-NodeFnm {
     }
 
     try {
-        Write-UiInfo "📦 开始安装 fnm 和 Node.js..."
+        Write-UiPrimary "📦 开始安装 fnm 和 Node.js..."
 
         $shouldRestoreGlobalPackages = $false
         $globalPackagesBackup = @()
@@ -886,11 +886,11 @@ function Install-NodeFnm {
         }
 
         if ($conflictType -ne "none") {
-            Write-UiWarn "⚠ 检测到 Node.js 环境冲突: $conflictType"
+            Write-UiWarning "⚠ 检测到 Node.js 环境冲突: $conflictType"
 
             if ($snapshot.Data.ContainsKey("ConflictDetails") -and $snapshot.Data["ConflictDetails"]) {
                 foreach ($detail in @($snapshot.Data["ConflictDetails"])) {
-                    Write-UiWarn "  - $detail"
+                    Write-UiWarning "  - $detail"
                 }
             }
 
@@ -938,8 +938,8 @@ function Install-NodeFnm {
                 if ($npmResolve.Available) {
                     Write-UiInfo "npm 已就绪（方式: $($npmResolve.Method)），开始备份..."
                 } else {
-                    Write-UiWarn "$($npmResolve.ErrorMessage)"
-                    Write-UiWarn "  无法备份 npm 全局包，您可以选择："
+                    Write-UiWarning "$($npmResolve.ErrorMessage)"
+                    Write-UiWarning "  无法备份 npm 全局包，您可以选择："
                     $failChoice = Show-SingleSelectMenu -Title "npm 定位失败，请选择处理方式：" -Options @(
                         "继续迁移（跳过全局包恢复，后续可手动安装）",
                         "中止迁移（保留现有环境不做任何更改）"
@@ -948,7 +948,7 @@ function Install-NodeFnm {
                         $result.Success = $true
                         $result.Message = "用户选择中止迁移，保留现有环境"
                         $result.Data["MigrationMode"] = "AbortedByUser"
-                        Write-UiWarn "已中止迁移，保留现有环境"
+                        Write-UiWarning "已中止迁移，保留现有环境"
                         return $result
                     }
                     $shouldRestoreGlobalPackages = $false
@@ -959,8 +959,8 @@ function Install-NodeFnm {
                 if ($shouldRestoreGlobalPackages) {
                     $backupResult = Backup-NpmGlobalPackages
                     if (-not $backupResult.Success) {
-                        Write-UiWarn "npm 全局包备份失败: $($backupResult.ErrorMessage)"
-                        Write-UiWarn "  将继续迁移但跳过全局包恢复"
+                        Write-UiWarning "npm 全局包备份失败: $($backupResult.ErrorMessage)"
+                        Write-UiWarning "  将继续迁移但跳过全局包恢复"
                         $shouldRestoreGlobalPackages = $false
                         $result.Data["BackupSkipped"] = $true
                         $result.Data["BackupSkipReason"] = $backupResult.ErrorMessage
@@ -987,7 +987,7 @@ function Install-NodeFnm {
         }
 
         # 1. 安装 fnm
-        Write-UiInfo "🔧 安装 fnm (Fast Node Manager)..."
+        Write-UiPrimary "🔧 安装 fnm (Fast Node Manager)..."
 
         if (Test-CommandAvailable -Command "fnm") {
             Write-UiSuccess "✓ fnm 已安装，跳过安装步骤"
@@ -1001,7 +1001,7 @@ function Install-NodeFnm {
                     }
                     Write-UiSuccess "✓ fnm 通过 winget 安装成功"
                 } catch {
-                    Write-UiWarn "⚠ winget 安装失败，尝试手动下载安装..."
+                    Write-UiWarning "⚠ winget 安装失败，尝试手动下载安装..."
 
                     # 手动下载安装 fnm
                     $fnmDir = "$env:LOCALAPPDATA\fnm"
@@ -1013,7 +1013,7 @@ function Install-NodeFnm {
                     $fnmUrl = "https://github.com/Schniz/fnm/releases/latest/download/fnm-windows.zip"
                     $fnmZip = "$env:TEMP\fnm-windows.zip"
 
-                    Write-UiInfo "正在下载 fnm..."
+                    Write-UiPrimary "正在下载 fnm..."
                     try {
                         # 使用统一的下载函数
                         $downloadResult = Invoke-FileDownload -Url $fnmUrl -OutputPath $fnmZip -Description "fnm (Fast Node Manager)"
@@ -1051,7 +1051,7 @@ function Install-NodeFnm {
         Write-UiSuccess "✓ fnm 验证成功 (版本: $fnmVersion)"
 
         # 2. 配置 PowerShell Profile（在安装 Node.js 之前）
-        Write-UiInfo "⚙️ 配置 PowerShell Profile..."
+        Write-UiPrimary "⚙️ 配置 PowerShell Profile..."
 
         $profilePath = $PROFILE
 
@@ -1079,12 +1079,12 @@ function Install-NodeFnm {
             Write-UiSuccess "✓ PowerShell Profile 配置成功"
             $result.Data["ProfileConfigured"] = $true
         } else {
-            Write-UiWarn "⚠ PowerShell Profile 配置失败，但不影响 fnm 使用"
+            Write-UiWarning "⚠ PowerShell Profile 配置失败，但不影响 fnm 使用"
             $result.Data["ProfileConfigured"] = $false
         }
 
         # 3. 重新加载 PowerShell Profile 以刷新当前会话环境
-        Write-UiInfo "🔄 重新加载 PowerShell Profile 以刷新环境..."
+        Write-UiPrimary "🔄 重新加载 PowerShell Profile 以刷新环境..."
 
         try {
             if (Test-Path $PROFILE) {
@@ -1092,17 +1092,17 @@ function Install-NodeFnm {
                 . $PROFILE
                 Write-UiSuccess "✓ PowerShell Profile 已重新加载"
             } else {
-                Write-UiWarn "⚠ PowerShell Profile 文件不存在"
+                Write-UiWarning "⚠ PowerShell Profile 文件不存在"
             }
         } catch {
-            Write-UiWarn "⚠ 重新加载 PowerShell Profile 时出错: $($_.Exception.Message)"
+            Write-UiWarning "⚠ 重新加载 PowerShell Profile 时出错: $($_.Exception.Message)"
         }
 
         # 再次刷新 PATH
         Refresh-SessionPath
 
         # 4. 使用 fnm 安装 Node.js（在 Profile 配置和刷新之后）
-        Write-UiInfo "🟢 使用 fnm 安装 Node.js LTS..."
+        Write-UiPrimary "🟢 使用 fnm 安装 Node.js LTS..."
 
         try {
             # 安装最新 LTS 版本
@@ -1115,38 +1115,38 @@ function Install-NodeFnm {
 
             # 显式注入 fnm 环境变量到当前会话（不依赖 $PROFILE 重载）
             # fnm use 需要 FNM_MULTISHELL_PATH 等变量，必须在调用前确保已设置
-            Write-UiInfo "🔄 初始化 fnm 环境变量..."
+            Write-UiPrimary "🔄 初始化 fnm 环境变量..."
             try {
                 $fnmEnvOutput = & fnm env --use-on-cd 2>&1 | Out-String
                 if ($fnmEnvOutput) {
                     Invoke-Expression $fnmEnvOutput
                     Write-UiSuccess "✓ fnm 环境变量已注入当前会话"
                 } else {
-                    Write-UiWarn "⚠ fnm env 未返回输出，fnm use 可能失败"
+                    Write-UiWarning "⚠ fnm env 未返回输出，fnm use 可能失败"
                 }
             } catch {
-                Write-UiWarn "⚠ fnm env 执行异常: $($_.Exception.Message)"
+                Write-UiWarning "⚠ fnm env 执行异常: $($_.Exception.Message)"
             }
 
             # 使用 LTS 版本
-            Write-UiInfo "正在激活 Node.js LTS 版本..."
+            Write-UiPrimary "正在激活 Node.js LTS 版本..."
 
             # 优先使用 fnm default 设置默认版本（不依赖 MULTISHELL_PATH）
             $defaultResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("default", "lts-latest") -TimeoutSeconds 60
             if ($defaultResult.Success) {
                 Write-UiSuccess "✓ Node.js LTS 已设为默认版本"
             } else {
-                Write-UiWarn "⚠ fnm default 失败，尝试 fnm use..."
+                Write-UiWarning "⚠ fnm default 失败，尝试 fnm use..."
             }
 
             # 再次确认环境变量存在后执行 fnm use
             if (-not $env:FNM_MULTISHELL_PATH) {
-                Write-UiWarn "⚠ FNM_MULTISHELL_PATH 仍未设置，再次尝试注入..."
+                Write-UiWarning "⚠ FNM_MULTISHELL_PATH 仍未设置，再次尝试注入..."
                 try {
                     $fnmEnvRetry = & fnm env --use-on-cd 2>&1 | Out-String
                     if ($fnmEnvRetry) { Invoke-Expression $fnmEnvRetry }
                 } catch {
-                    Write-UiWarn "⚠ fnm env 重试失败: $($_.Exception.Message)"
+                    Write-UiWarning "⚠ fnm env 重试失败: $($_.Exception.Message)"
                 }
             }
 
@@ -1170,7 +1170,7 @@ function Install-NodeFnm {
         Refresh-SessionPath
 
         # 6. 验证 Node.js 和 npm
-        Write-UiInfo "🔍 验证 Node.js 和 npm 安装..."
+        Write-UiPrimary "🔍 验证 Node.js 和 npm 安装..."
 
         # 验证 Node.js
         $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
@@ -1216,16 +1216,16 @@ function Install-NodeFnm {
         }
 
         # 5. 配置 npm 镜像源
-        Write-UiInfo "配置 npm 镜像源..."
+        Write-UiPrimary "配置 npm 镜像源..."
         try {
             $configResult = Invoke-ExternalCommand -Command "npm" -Arguments @("config", "set", "registry", "https://registry.npmmirror.com") -TimeoutSeconds 30
             if ($configResult.ExitCode -eq 0) {
                 Write-UiSuccess "npm 镜像源已设置为 registry.npmmirror.com"
             } else {
-                Write-UiWarn "npm 镜像源配置失败，将使用默认源"
+                Write-UiWarning "npm 镜像源配置失败，将使用默认源"
             }
         } catch {
-            Write-UiWarn "⚠ npm 镜像源配置过程中出现错误: $($_.Exception.Message)"
+            Write-UiWarning "⚠ npm 镜像源配置过程中出现错误: $($_.Exception.Message)"
         }
 
         # 6. 恢复 npm 全局包（仅迁移模式）
@@ -1236,7 +1236,7 @@ function Install-NodeFnm {
             $result.Data["GlobalPackagesRestoreSuccess"] = $restoreResult.Success
 
             if (-not $restoreResult.Success) {
-                Write-UiWarn "⚠ npm 全局包部分恢复失败（详见结果数据）"
+                Write-UiWarning "⚠ npm 全局包部分恢复失败（详见结果数据）"
             } else {
                 Write-UiSuccess "✓ npm 全局包恢复完成"
             }
@@ -1247,11 +1247,11 @@ function Install-NodeFnm {
         $result.Message = "Node.js 运行时安装配置完成"
 
         Write-UiSuccess "✅ NodeFnm 安装完成！"
-        Write-UiInfo "💡 提示: 如果在新的 PowerShell 会话中 node 命令不可用，请重新启动 PowerShell"
+        Write-UiDim "💡 提示: 如果在新的 PowerShell 会话中 node 命令不可用，请重新启动 PowerShell"
 
     } catch {
         $result.ErrorMessage = "fnm 和 Node.js 安装失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -1273,7 +1273,7 @@ function Verify-NodeFnm {
     }
 
     try {
-        Write-UiInfo "✅ 验证 Node.js 运行时..."
+        Write-UiPrimary "✅ 验证 Node.js 运行时..."
 
         $verificationPassed = $true
         $issues = @()
@@ -1283,7 +1283,7 @@ function Verify-NodeFnm {
             $fnmVersion = Get-CommandVersion -Command "fnm"
             Write-UiSuccess "✓ fnm 验证通过 (版本: $fnmVersion)"
         } else {
-            Write-UiWarn "⚠ fnm 未安装或不可用（允许使用 nvm/direct Node 环境）"
+            Write-UiWarning "⚠ fnm 未安装或不可用（允许使用 nvm/direct Node 环境）"
         }
 
         # 验证 Node.js（必须）
@@ -1344,12 +1344,12 @@ function Verify-NodeFnm {
         } else {
             $result.Success = $false
             $result.ErrorMessage = "验证失败: $($issues -join '; ')"
-            Write-UiError "✗ $($result.ErrorMessage)"
+            Write-UiDanger "✗ $($result.ErrorMessage)"
         }
 
     } catch {
         $result.ErrorMessage = "Node.js 运行时验证过程失败: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result

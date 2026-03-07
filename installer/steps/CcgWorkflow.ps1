@@ -8,10 +8,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Process.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
+# 依赖: Ui.ps1, Process.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$(Get-UserHome)\.claude"
@@ -296,7 +293,7 @@ function Install-CcgWorkflow {
     }
 
     try {
-        Write-UiInfo "安装 CCG Workflow (官方初始化方式)..."
+        Write-UiPrimary "安装 CCG Workflow (官方初始化方式)..."
 
         # ── 前置检查 ──
         Refresh-SessionPath
@@ -354,8 +351,8 @@ function Install-CcgWorkflow {
         }
 
         # ── 执行 npx 官方初始化 ──
-        Write-UiInfo "正在通过 npx 获取最新版 CCG Workflow 引擎..."
-        Write-UiInfo "正在执行官方初始化 (此过程涉及远程下载，请稍候)..."
+        Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow 引擎..."
+        Write-UiPrimary "正在执行官方初始化 (此过程涉及远程下载，请稍候)..."
 
         $npxResult = Invoke-ExternalCommand `
             -Command "npx" `
@@ -391,13 +388,13 @@ function Install-CcgWorkflow {
         $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
         $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
         if (-not $ruleWriteResult) {
-            Write-UiWarn "CCG 规则文件写入失败，但不影响主安装"
+            Write-UiWarning "CCG 规则文件写入失败，但不影响主安装"
         } else {
             Write-UiInfo "已写入: rules/ccq-ccgworkflow.md"
         }
 
         # ── 写入 CCG env 配置到 settings.json ──
-        Write-UiInfo "配置 CCG Workflow 环境变量..."
+        Write-UiPrimary "配置 CCG Workflow 环境变量..."
         $settingsPath = "$script:ClaudeDir\settings.json"
         $envSettings = @{}
 
@@ -407,7 +404,7 @@ function Install-CcgWorkflow {
                 $envSettings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
                 if (-not $envSettings) { $envSettings = @{} }
             } catch {
-                Write-UiWarn "无法解析 settings.json，跳过 env 配置（不影响主安装）"
+                Write-UiWarning "无法解析 settings.json，跳过 env 配置（不影响主安装）"
                 $envSettings = $null
             }
         }
@@ -443,21 +440,21 @@ function Install-CcgWorkflow {
                 if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
                     $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                     if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                        Write-UiWarn "检测到 .claude.json 中的 mcpServers 配置在安装过程中被修改，请手动检查"
+                        Write-UiWarning "检测到 .claude.json 中的 mcpServers 配置在安装过程中被修改，请手动检查"
                     }
                 }
             }
         }
 
         # ── 刷新 PATH ──
-        Write-UiInfo "正在刷新环境变量..."
+        Write-UiPrimary "正在刷新环境变量..."
         Refresh-SessionPath
 
         $result.Success = $true
     }
     catch {
         $result.ErrorMessage = $_.Exception.Message
-        Write-UiError "安装 CCG Workflow 失败: $($result.ErrorMessage)"
+        Write-UiDanger "安装 CCG Workflow 失败: $($result.ErrorMessage)"
     }
 
     return $result
@@ -551,7 +548,7 @@ function Verify-CcgWorkflow {
             Write-UiInfo "  - PATH 可用性: codeagent-wrapper 在 PATH 中 [PASS]"
         }
         else {
-            Write-UiWarn "  - PATH 可用性: codeagent-wrapper 不在 PATH 中 (可能需要重启终端) [SKIP]"
+            Write-UiWarning "  - PATH 可用性: codeagent-wrapper 不在 PATH 中 (可能需要重启终端) [SKIP]"
         }
 
         # ── env 配置验证 ──
@@ -618,7 +615,7 @@ function Verify-CcgWorkflow {
     }
     catch {
         $result.ErrorMessage = "验证 CCG Workflow 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -643,7 +640,7 @@ function Update-CcgWorkflow {
     }
 
     try {
-        Write-UiInfo "更新 CCG Workflow..."
+        Write-UiPrimary "更新 CCG Workflow..."
 
         # 前置检查
         Refresh-SessionPath
@@ -691,7 +688,7 @@ function Update-CcgWorkflow {
             }
 
             # 执行 npx ccg-workflow@latest init（--skip-mcp 必须保留）
-            Write-UiInfo "正在通过 npx 获取最新版 CCG Workflow..."
+            Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow..."
             $npxResult = Invoke-ExternalCommand `
                 -Command "npx" `
                 -Arguments @("--yes", "ccg-workflow@latest", "init", "--skip-prompt", "--skip-mcp", "--lang", "zh-CN", "--install-dir", "$script:ClaudeDir") `
@@ -714,7 +711,7 @@ function Update-CcgWorkflow {
                     if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
                         $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                         if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                            Write-UiWarn "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查"
+                            Write-UiWarning "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查"
                         }
                     }
                 }
@@ -765,7 +762,7 @@ function Update-CcgWorkflow {
                         $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
                         Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）"
                     } catch {
-                        Write-UiWarn "无法删除旧文件: $oldFile"
+                        Write-UiWarning "无法删除旧文件: $oldFile"
                     }
                 }
             }
@@ -820,7 +817,7 @@ function Update-CcgWorkflow {
 
                 Write-UiSuccess "CCG Workflow env 配置已对齐"
             } else {
-                Write-UiWarn "settings.json 不存在，跳过 env 对齐"
+                Write-UiWarning "settings.json 不存在，跳过 env 对齐"
             }
         }
 
@@ -828,7 +825,7 @@ function Update-CcgWorkflow {
     }
     catch {
         $result.ErrorMessage = "更新 CCG Workflow 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

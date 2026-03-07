@@ -29,7 +29,7 @@ function Test-PythonInstalled {
     }
 
     try {
-        Write-UiInfo "🔍 检查 Python 安装状态..."
+        Write-UiPrimary "🔍 检查 Python 安装状态..."
 
         # 检查 python 是否可用
         $pythonAvailable = Test-CommandAvailable -Command "python"
@@ -55,15 +55,15 @@ function Test-PythonInstalled {
                         Write-UiSuccess "✓ $result.Message"
                     } else {
                         $result.Message = "Python 版本过低 (当前: $versionText, 需要: $script:MinPythonVersion+)"
-                        Write-UiWarn "⚠ $result.Message"
+                        Write-UiWarning "⚠ $result.Message"
                     }
                 } catch {
-                    Write-UiWarn "⚠ 无法解析 Python 版本号: $versionStr"
+                    Write-UiWarning "⚠ 无法解析 Python 版本号: $versionStr"
                     $result.Version = $versionStr
                 }
             }
         } else {
-            Write-UiWarn "⚠ Python 未安装"
+            Write-UiWarning "⚠ Python 未安装"
             $result.Message = "Python 未安装"
         }
 
@@ -86,7 +86,7 @@ function Test-PythonInstalled {
 
     } catch {
         $result.Message = "Python 状态检查失败: $($_.Exception.Message)"
-        Write-UiWarn "⚠ $($result.Message)"
+        Write-UiWarning "⚠ $($result.Message)"
     }
 
     return $result
@@ -136,7 +136,7 @@ function Install-Python {
         }
 
         # 配置环境变量 (PowerShell Profile)
-        Write-UiInfo "⚙️ 配置 Python UTF-8 增强环境..."
+        Write-UiPrimary "⚙️ 配置 Python UTF-8 增强环境..."
         $profilePath = $PROFILE
         $pythonConfig = @(
             "# Python UTF-8 增强配置",
@@ -148,7 +148,7 @@ function Install-Python {
         if ($success) {
             Write-UiSuccess "✓ Python UTF-8 配置已应用到 PowerShell Profile"
         } else {
-            Write-UiWarn "⚠ Profile 配置写入失败"
+            Write-UiWarning "⚠ Profile 配置写入失败"
         }
 
         $result.Success = $true
@@ -156,7 +156,7 @@ function Install-Python {
 
     } catch {
         $result.ErrorMessage = "Python 安装失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -182,13 +182,13 @@ function Verify-Python {
             $pipVersion = Get-CommandVersion -Command "pip"
             Write-UiSuccess "✓ pip 验证通过: $pipVersion"
         } else {
-            Write-UiWarn "⚠ pip 命令不可用，可能需要手动配置 Python Scripts 目录到 PATH"
+            Write-UiWarning "⚠ pip 命令不可用，可能需要手动配置 Python Scripts 目录到 PATH"
         }
 
         $result.Success = $true
     } catch {
         $result.ErrorMessage = "Python 验证失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

@@ -99,7 +99,7 @@ function Invoke-ExternalCommand {
     for ($attempt = 1; $attempt -le ($RetryCount + 1); $attempt++) {
         try {
             if (-not $SuppressOutput -and $attempt -gt 1) {
-                Write-Host "重试第 $($attempt - 1) 次: $($result.Command)" -ForegroundColor Yellow
+                Write-UiWarning "重试第 $($attempt - 1) 次: $($result.Command)"
             }
 
             # 构建进程启动信息
@@ -184,7 +184,7 @@ function Invoke-ExternalCommand {
                     }
 
                     if ($attempt -le $RetryCount) {
-                        Write-Host $errorMessage -ForegroundColor Yellow
+                        Write-UiWarning $errorMessage
                         Start-Sleep -Seconds (2 * $attempt)
                         continue
                     } else {
@@ -202,7 +202,7 @@ function Invoke-ExternalCommand {
             $result.Error = $_.Exception.Message
 
             if ($attempt -le $RetryCount) {
-                Write-Host "执行失败，准备重试: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-UiWarning "执行失败，准备重试: $($_.Exception.Message)"
                 Start-Sleep -Seconds (2 * $attempt)
                 continue
             } else {
@@ -256,7 +256,7 @@ function Invoke-WingetInstall {
     if ($Silent) { $arguments += "--silent" }
     if ($Force) { $arguments += "--force" }
 
-    Write-Host "正在安装 $PackageName..." -ForegroundColor Cyan
+    Write-UiPrimary "正在安装 $PackageName..."
 
     $maxAttempts = 2
     $timeoutSeconds = 300
@@ -266,7 +266,7 @@ function Invoke-WingetInstall {
             $proc = $null
             try {
                 if ($attempt -gt 1) {
-                    Write-Host "重试第 $($attempt - 1) 次安装: $PackageName" -ForegroundColor Yellow
+                    Write-UiWarning "重试第 $($attempt - 1) 次安装: $PackageName"
                 }
 
                 # 使用 .NET Process 直通模式：不重定向输出，winget 进度条直接写入控制台
@@ -291,7 +291,7 @@ function Invoke-WingetInstall {
                 $exitCode = $proc.ExitCode
 
                 if ($exitCode -eq 0) {
-                    Write-Host "✓ $PackageName 安装成功" -ForegroundColor Green
+                    Write-UiSuccess "✓ $PackageName 安装成功"
 
                     # 刷新 PATH 以确保新安装的命令可用
                     Refresh-SessionPath
@@ -307,7 +307,7 @@ function Invoke-WingetInstall {
                 }
             } catch {
                 if ($attempt -lt $maxAttempts) {
-                    Write-Host "安装失败，准备重试: $($_.Exception.Message)" -ForegroundColor Yellow
+                    Write-UiWarning "安装失败，准备重试: $($_.Exception.Message)"
                     Start-Sleep -Seconds (2 * $attempt)
                     continue
                 }
@@ -317,7 +317,7 @@ function Invoke-WingetInstall {
             }
         }
     } catch {
-        Write-Host "✗ $PackageName 安装失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "✗ $PackageName 安装失败: $($_.Exception.Message)"
         throw
     }
 }
@@ -359,13 +359,13 @@ function Invoke-NpmGlobalInstall {
     $arguments = @("install", "-g", $fullPackageName)
     if ($Force) { $arguments += "--force" }
 
-    Write-Host "正在全局安装 npm 包: $fullPackageName..." -ForegroundColor Cyan
+    Write-UiPrimary "正在全局安装 npm 包: $fullPackageName..."
 
     try {
         $result = Invoke-ExternalCommand -Command "npm" -Arguments $arguments -TimeoutSeconds 300
 
         if ($result.Success) {
-            Write-Host "✓ $fullPackageName 安装成功" -ForegroundColor Green
+            Write-UiSuccess "✓ $fullPackageName 安装成功"
 
             # 刷新 PATH 以确保新安装的命令可用
             Refresh-SessionPath
@@ -381,7 +381,7 @@ function Invoke-NpmGlobalInstall {
             throw "npm 安装失败: $($result.Error)"
         }
     } catch {
-        Write-Host "✗ $fullPackageName 安装失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "✗ $fullPackageName 安装失败: $($_.Exception.Message)"
         throw
     }
 }
@@ -801,14 +801,14 @@ function Refresh-SessionPath {
     param()
 
     try {
-        Write-Host "正在刷新 PATH 环境变量..." -ForegroundColor Cyan
+        Write-UiPrimary "正在刷新 PATH 环境变量..."
 
         # 读取系统级 PATH
         $systemPath = ""
         try {
             $systemPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
         } catch {
-            Write-Host "警告: 无法读取系统级 PATH" -ForegroundColor Yellow
+            Write-UiWarning "警告: 无法读取系统级 PATH"
         }
 
         # 读取用户级 PATH
@@ -816,7 +816,7 @@ function Refresh-SessionPath {
         try {
             $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
         } catch {
-            Write-Host "警告: 无法读取用户级 PATH" -ForegroundColor Yellow
+            Write-UiWarning "警告: 无法读取用户级 PATH"
         }
 
         # 合并 PATH（保留当前进程中的 PATH，避免覆盖 fnm 等工具设置的路径）
@@ -844,7 +844,7 @@ function Refresh-SessionPath {
         # 更新当前会话的 PATH
         $env:PATH = $uniquePath -join ';'
 
-        Write-Host "✓ PATH 环境变量已刷新" -ForegroundColor Green
+        Write-UiSuccess "✓ PATH 环境变量已刷新"
 
         # 快速验证常见命令（仅使用 Get-Command，不实际执行）
         $commonCommands = @("node", "npm", "git", "winget", "pwsh", "claude")
@@ -860,11 +860,11 @@ function Refresh-SessionPath {
         }
 
         if ($availableCommands.Count -gt 0) {
-            Write-Host "可用命令: $($availableCommands -join ', ')" -ForegroundColor Green
+            Write-UiSuccess "可用命令: $($availableCommands -join ', ')"
         }
 
     } catch {
-        Write-Host "警告: PATH 刷新失败: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-UiWarning "警告: PATH 刷新失败: $($_.Exception.Message)"
     }
 }
 
@@ -898,7 +898,7 @@ function Test-InternetConnection {
 
     foreach ($url in $TestUrls) {
         try {
-            Write-Host "测试连接: $url" -ForegroundColor Cyan
+            Write-UiPrimary "测试连接: $url"
 
             $request = [System.Net.WebRequest]::Create($url)
             $request.Timeout = $TimeoutSeconds * 1000
@@ -908,11 +908,11 @@ function Test-InternetConnection {
             $response.Close()
 
             $results.TestedUrls += $url
-            Write-Host "✓ $url 连接成功" -ForegroundColor Green
+            Write-UiSuccess "✓ $url 连接成功"
 
         } catch {
             $results.FailedUrls += $url
-            Write-Host "✗ $url 连接失败: $($_.Exception.Message)" -ForegroundColor Red
+            Write-UiDanger "✗ $url 连接失败: $($_.Exception.Message)"
         }
     }
 
@@ -1369,7 +1369,7 @@ function Complete-UnifiedCheck {
             $versionSuffix = if (-not [string]::IsNullOrWhiteSpace($Result.Version)) { " (版本: $($Result.Version))" } else { "" }
             Write-UiSuccess "✓ $DisplayName 已安装$versionSuffix"
         } else {
-            Write-UiWarn "⚠ $DisplayName [FAIL]: $($Result.Message)"
+            Write-UiWarning "⚠ $DisplayName [FAIL]: $($Result.Message)"
         }
     }
 

@@ -6,11 +6,7 @@
 
 Set-StrictMode -Version Latest
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Process.ps1"
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Admin.ps1"
-. "$PSScriptRoot\..\core\Net.ps1"
+# 依赖: Process.ps1, Ui.ps1, Admin.ps1, Net.ps1（由入口脚本 dot-source 加载）
 
 # 配置
 $script:CcSwitchRepo = "farion1231/cc-switch"
@@ -117,7 +113,7 @@ function Install-CcSwitch {
     #>
     param()
 
-    Write-Host "=== CC-Switch 安装 ===" -ForegroundColor Cyan
+    Write-UiPrimary "=== CC-Switch 安装 ==="
     Write-Host ""
 
     $result = @{
@@ -128,34 +124,34 @@ function Install-CcSwitch {
 
     try {
         # 1. 检查前置条件
-        Write-Host "1. 检查前置条件..." -ForegroundColor Gray
+        Write-UiDim "1. 检查前置条件..."
 
         if (-not (Test-CommandAvailable -Command "claude")) {
             throw "Claude Code 未安装，请先完成 ClaudeCode 步骤"
         }
 
-        Write-Host "✓ 前置条件检查完成" -ForegroundColor Green
+        Write-UiSuccess "✓ 前置条件检查完成"
 
         # 2. 检查 CC-Switch 是否已安装
         Write-Host ""
-        Write-Host "2. 检查 CC-Switch 安装状态..." -ForegroundColor Gray
+        Write-UiDim "2. 检查 CC-Switch 安装状态..."
 
         $ccSwitchTest = Test-CcSwitchInstalled
         if ($ccSwitchTest.IsInstalled) {
-            Write-Host "✓ CC-Switch 已安装，跳过" -ForegroundColor Green
+            Write-UiSuccess "✓ CC-Switch 已安装，跳过"
             $result.Success = $true
             $result.Data["Skipped"] = $true
             return $result
         } else {
             # 未检测到安装，提醒用户检测机制的限制
-            Write-Host "  未检测到 CC-Switch 安装" -ForegroundColor Yellow
+            Write-UiWarning "  未检测到 CC-Switch 安装"
             Write-Host ""
-            Write-Host "  注意: 当前仅支持检测 MSI 安装方式" -ForegroundColor DarkGray
-            Write-Host "  如果您已通过便携版/自定义方式安装，可选择跳过" -ForegroundColor DarkGray
+            Write-UiDim "  注意: 当前仅支持检测 MSI 安装方式"
+            Write-UiDim "  如果您已通过便携版/自定义方式安装，可选择跳过"
             Write-Host ""
             $response = Read-Host "是否继续安装 CC-Switch？[Y/n]"
             if ($response -match "^[Nn]") {
-                Write-Host "跳过 CC-Switch 安装" -ForegroundColor Gray
+                Write-UiDim "跳过 CC-Switch 安装"
                 $result.Success = $true
                 $result.Data["Skipped"] = $true
                 return $result
@@ -164,31 +160,31 @@ function Install-CcSwitch {
 
         # 3. 检查安装权限（非硬性要求，per-user 安装不需要管理员）
         Write-Host ""
-        Write-Host "3. 检查安装权限..." -ForegroundColor Gray
+        Write-UiDim "3. 检查安装权限..."
 
         $isAdmin = Test-IsAdministrator
         if (-not $isAdmin) {
-            Write-Host "  当前非管理员权限，将优先尝试 per-user 安装" -ForegroundColor Gray
+            Write-UiDim "  当前非管理员权限，将优先尝试 per-user 安装"
         } else {
-            Write-Host "✓ 管理员权限确认" -ForegroundColor Green
+            Write-UiSuccess "✓ 管理员权限确认"
         }
 
         # 4. 获取最新版本信息
         Write-Host ""
-        Write-Host "4. 获取 CC-Switch 最新版本信息..." -ForegroundColor Gray
+        Write-UiDim "4. 获取 CC-Switch 最新版本信息..."
 
         $releaseInfo = Get-LatestCcSwitchRelease
         if (-not $releaseInfo) {
             throw "无法获取 CC-Switch 最新版本信息"
         }
 
-        Write-Host "✓ 最新版本: $($releaseInfo.Version)" -ForegroundColor Green
-        Write-Host "  发布时间: $($releaseInfo.PublishedAt)" -ForegroundColor Gray
-        Write-Host "  下载地址: $($releaseInfo.DownloadUrl)" -ForegroundColor Gray
+        Write-UiSuccess "✓ 最新版本: $($releaseInfo.Version)"
+        Write-UiDim "  发布时间: $($releaseInfo.PublishedAt)"
+        Write-UiDim "  下载地址: $($releaseInfo.DownloadUrl)"
 
         # 5. 下载 CC-Switch 安装包
         Write-Host ""
-        Write-Host "5. 下载 CC-Switch 安装包..." -ForegroundColor Gray
+        Write-UiDim "5. 下载 CC-Switch 安装包..."
 
         $installerPath = Download-CcSwitchInstaller -DownloadUrl $releaseInfo.DownloadUrl -Version $releaseInfo.Version
 
@@ -196,25 +192,25 @@ function Install-CcSwitch {
             throw "CC-Switch 安装包下载失败"
         }
 
-        Write-Host "✓ 安装包下载成功: $installerPath" -ForegroundColor Green
+        Write-UiSuccess "✓ 安装包下载成功: $installerPath"
 
         # 6. 验证安装包
         Write-Host ""
-        Write-Host "6. 验证安装包..." -ForegroundColor Gray
+        Write-UiDim "6. 验证安装包..."
 
         $fileInfo = Get-Item $installerPath
-        Write-Host "  文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -ForegroundColor Gray
+        Write-UiDim "  文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
 
         # 检查文件类型
         if ($installerPath -notmatch "\.(msi|exe)$") {
             throw "不支持的安装包格式: $installerPath"
         }
 
-        Write-Host "✓ 安装包验证通过" -ForegroundColor Green
+        Write-UiSuccess "✓ 安装包验证通过"
 
         # 7. 执行静默安装
         Write-Host ""
-        Write-Host "7. 执行 CC-Switch 静默安装..." -ForegroundColor Gray
+        Write-UiDim "7. 执行 CC-Switch 静默安装..."
 
         $installResult = Install-CcSwitchPackage -InstallerPath $installerPath
 
@@ -222,46 +218,46 @@ function Install-CcSwitch {
             throw "CC-Switch 安装失败: $($installResult.ErrorMessage)"
         }
 
-        Write-Host "✓ CC-Switch 安装成功" -ForegroundColor Green
+        Write-UiSuccess "✓ CC-Switch 安装成功"
 
         # 8. 验证安装
         Write-Host ""
-        Write-Host "8. 验证 CC-Switch 安装..." -ForegroundColor Gray
+        Write-UiDim "8. 验证 CC-Switch 安装..."
 
         # 等待安装完成
         Start-Sleep -Seconds 3
 
         $verifyTest = Test-CcSwitchInstalled
         if (-not $verifyTest.IsInstalled) {
-            Write-Host "⚠ CC-Switch 安装验证失败，但安装过程成功" -ForegroundColor Yellow
-            Write-Host "  可能需要重启系统或重新登录才能完全生效" -ForegroundColor Gray
+            Write-UiWarning "⚠ CC-Switch 安装验证失败，但安装过程成功"
+            Write-UiDim "  可能需要重启系统或重新登录才能完全生效"
         } else {
-            Write-Host "✓ CC-Switch 安装验证成功" -ForegroundColor Green
+            Write-UiSuccess "✓ CC-Switch 安装验证成功"
         }
 
         # 9. 清理临时文件
         Write-Host ""
-        Write-Host "9. 清理临时文件..." -ForegroundColor Gray
+        Write-UiDim "9. 清理临时文件..."
 
         try {
             if (Test-Path $script:TempDownloadDir) {
                 Remove-Item $script:TempDownloadDir -Recurse -Force
-                Write-Host "✓ 临时文件清理完成" -ForegroundColor Green
+                Write-UiSuccess "✓ 临时文件清理完成"
             }
         } catch {
-            Write-Host "⚠ 临时文件清理失败，但不影响使用: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-UiWarning "⚠ 临时文件清理失败，但不影响使用: $($_.Exception.Message)"
         }
 
         # 10. 使用提示
         Write-Host ""
-        Write-Host "10. 使用提示..." -ForegroundColor Gray
-        Write-Host "  CC-Switch 已安装完成" -ForegroundColor Cyan
-        Write-Host "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:" -ForegroundColor Gray
-        Write-Host "    - 快速切换 Claude Code 配置" -ForegroundColor Gray
-        Write-Host "    - 项目环境管理" -ForegroundColor Gray
-        Write-Host "    - 工作流程优化" -ForegroundColor Gray
+        Write-UiDim "10. 使用提示..."
+        Write-UiPrimary "  CC-Switch 已安装完成"
+        Write-UiDim "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:"
+        Write-UiDim "    - 快速切换 Claude Code 配置"
+        Write-UiDim "    - 项目环境管理"
+        Write-UiDim "    - 工作流程优化"
         Write-Host ""
-        Write-Host "✓ CC-Switch 安装完成" -ForegroundColor Green
+        Write-UiSuccess "✓ CC-Switch 安装完成"
 
         $result.Success = $true
         $result.Data["Version"] = $releaseInfo.Version
@@ -271,7 +267,7 @@ function Install-CcSwitch {
 
     } catch {
         $result.ErrorMessage = "CC-Switch 安装失败: $($_.Exception.Message)"
-        Write-Host "✗ $($result.ErrorMessage)" -ForegroundColor Red
+        Write-UiDanger "✗ $($result.ErrorMessage)"
 
         # 清理临时文件
         try {
@@ -294,7 +290,7 @@ function Get-LatestCcSwitchRelease {
     param()
 
     try {
-        Write-Host "  正在获取 GitHub Release 信息..." -ForegroundColor Gray
+        Write-UiDim "  正在获取 GitHub Release 信息..."
 
         # 强制使用 TLS 1.2+（GitHub API 要求，防止 PS 5.1 默认 TLS 1.0 导致连接失败）
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
@@ -339,7 +335,7 @@ function Get-LatestCcSwitchRelease {
         }
 
     } catch {
-        Write-Host "  获取版本信息失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "  获取版本信息失败: $($_.Exception.Message)"
         return $null
     }
 }
@@ -388,7 +384,7 @@ function Download-CcSwitchInstaller {
         return $filePath
 
     } catch {
-        Write-Host "  下载失败: $($_.Exception.Message)" -ForegroundColor Red
+        Write-UiDanger "  下载失败: $($_.Exception.Message)"
         return $null
     }
 }
@@ -447,10 +443,10 @@ function Install-CcSwitchPackage {
 
         switch ($fileExtension) {
             ".msi" {
-                Write-Host "  正在执行 MSI 安装..." -ForegroundColor Gray
+                Write-UiDim "  正在执行 MSI 安装..."
 
                 # 策略 1：per-user 安装（不需要管理员权限）
-                Write-Host "  尝试 per-user 安装模式..." -ForegroundColor Gray
+                Write-UiDim "  尝试 per-user 安装模式..."
                 $perUserArgs = @(
                     "/i", "`"$InstallerPath`"",
                     "/qn",
@@ -464,10 +460,10 @@ function Install-CcSwitchPackage {
 
                 if ($perUserResult.Success -or $perUserResult.ExitCode -eq 3010) {
                     $rebootHint = if ($perUserResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
-                    Write-Host "  ✓ MSI per-user 安装完成$rebootHint" -ForegroundColor Green
+                    Write-UiSuccess "  ✓ MSI per-user 安装完成$rebootHint"
                 } else {
                     # 策略 2：全局静默安装（需要管理员）
-                    Write-Host "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..." -ForegroundColor Yellow
+                    Write-UiWarning "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..."
                     $globalArgs = @(
                         "/i", "`"$InstallerPath`"",
                         "/quiet",
@@ -478,11 +474,11 @@ function Install-CcSwitchPackage {
 
                     if ($globalResult.Success -or $globalResult.ExitCode -eq 3010) {
                         $rebootHint = if ($globalResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
-                        Write-Host "  ✓ MSI 全局安装完成$rebootHint" -ForegroundColor Green
+                        Write-UiSuccess "  ✓ MSI 全局安装完成$rebootHint"
                     } else {
                         # 策略 3：GUI 安装降级（让用户手动操作）
-                        Write-Host "  静默安装均失败，启动 GUI 安装..." -ForegroundColor Yellow
-                        Write-Host "  请在弹出的安装向导中手动完成安装" -ForegroundColor Cyan
+                        Write-UiWarning "  静默安装均失败，启动 GUI 安装..."
+                        Write-UiPrimary "  请在弹出的安装向导中手动完成安装"
                         $guiResult = Invoke-ExternalCommand -Command "msiexec" -Arguments @("/i", "`"$InstallerPath`"") -TimeoutSeconds 600
 
                         if (-not $guiResult.Success -and $guiResult.ExitCode -ne 3010) {
@@ -494,7 +490,7 @@ function Install-CcSwitchPackage {
             }
 
             ".exe" {
-                Write-Host "  正在执行 EXE 静默安装..." -ForegroundColor Gray
+                Write-UiDim "  正在执行 EXE 静默安装..."
 
                 # 尝试常见的静默安装参数
                 $silentArgs = @("/S", "/SILENT", "/VERYSILENT", "/quiet", "/q")
@@ -502,11 +498,11 @@ function Install-CcSwitchPackage {
 
                 foreach ($arg in $silentArgs) {
                     try {
-                        Write-Host "    尝试参数: $arg" -ForegroundColor Gray
+                        Write-UiDim "    尝试参数: $arg"
                         $result = Invoke-ExternalCommand -Command $InstallerPath -Arguments @($arg) -TimeoutSeconds 300
 
                         if ($result.Success) {
-                            Write-Host "  ✓ EXE 安装完成 (参数: $arg)" -ForegroundColor Green
+                            Write-UiSuccess "  ✓ EXE 安装完成 (参数: $arg)"
                             $installSuccess = $true
                             break
                         }

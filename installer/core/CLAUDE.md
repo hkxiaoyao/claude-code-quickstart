@@ -11,7 +11,7 @@
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `Ui.ps1` | 648 | TUI 组件：彩色输出、菜单、进度、摘要表格 |
+| `Ui.ps1` | 893 | TUI 组件：语义颜色系统（6 色）、菜单、进度、摘要表格 |
 | `Process.ps1` | 492 | 外部命令执行、PATH 刷新、版本检测、npm/winget 封装 |
 | `Profile.ps1` | 526 | `$PROFILE` 安全编辑：备份、标记块读写、原子写入 |
 | `Admin.ps1` | 137 | 管理员权限检测与自提权 |
@@ -33,20 +33,35 @@
 
 > 所有 UI 函数在 `SupportsAnsi = false` 时自动降级为纯文本 ASCII 模式。
 
-### 主要函数
+### 语义颜色系统（6 色）
 
-| 函数 | 颜色（ANSI 模式） | 用途 |
-|------|-----------------|------|
-| `Write-UiInfo` | 青色 `\e[36m` | 信息、步骤说明 |
-| `Write-UiSuccess` | 亮绿 `\e[92m` | 成功确认 |
-| `Write-UiWarn` | 亮黄 `\e[93m` | 警告、可恢复错误 |
-| `Write-UiError` | 亮红 `\e[91m` | 错误、失败 |
-| `Show-AsciiBanner` | 青色 | 自适应宽度的 `╔═╗` 横幅 |
-| `Show-SingleSelectMenu` | — | 箭头键单选（不支持 ANSI 时数字输入降级） |
-| `Show-MultiSelectMenu` | — | 空格多选菜单（同上降级） |
-| `Show-StepProgress` | 按状态着色 | 状态指示：`[PASS]` / `[FAIL]` / `[SKIP]` |
-| `Show-InstallSummary` | 按状态着色 | 安装结果表格（动态列宽） |
-| `Show-ErrorDetails` | — | 友好信息 + 按 `D` 键展开技术详情（SC-5） |
+| 函数 | 语义角色 | 颜色（ANSI 模式） | 用途 |
+|------|---------|-----------------|------|
+| `Write-UiSuccess` | 成功 | 亮绿 `\e[92m` | 成功确认、完成提示 |
+| `Write-UiPrimary` | 品牌/进行中 | Claude Orange `\e[38;2;217;119;87m` | 标题、横幅、活跃进度 |
+| `Write-UiWarning` | 警告 | 亮黄 `\e[93m` | 警告、可恢复错误 |
+| `Write-UiDanger` | 危险 | 亮红 `\e[91m` | 错误、失败 |
+| `Write-UiInfo` | 信息 | 白色 `\e[97m` | 数据、路径、指令性文本 |
+| `Write-UiDim` | 次要 | 灰色 `\e[90m` | 时间戳、提示、装饰分隔线 |
+
+> **零逃逸约束**：`$script:AnsiColors` 和 `-ForegroundColor` **仅限** `Ui.ps1` 内部使用。外部文件通过 `Write-Ui*` 函数访问颜色。入口脚本在 Ui.ps1 加载前的早期错误处理块（PS 版本检查）例外。
+
+### 通用输出调度器
+
+```powershell
+Write-UiOutput $Message -Type <Primary|Info|Success|Warning|Danger|Dim>
+```
+
+### UI 组件函数
+
+| 函数 | 用途 |
+|------|------|
+| `Show-AsciiBanner` | 自适应宽度的 `╔═╗` 横幅（Primary 色） |
+| `Show-SingleSelectMenu` | 箭头键单选（不支持 ANSI 时数字输入降级） |
+| `Show-MultiSelectMenu` | 空格多选菜单（同上降级） |
+| `Show-StepProgress` | 状态指示：`[PASS]` / `[FAIL]` / `[SKIP]` |
+| `Show-InstallSummary` | 安装结果表格（动态列宽） |
+| `Show-ErrorDetails` | 友好信息 + 按 `D` 键展开技术详情（SC-5） |
 
 **关键约束**：
 - SC-3：状态指示器固定为 `[PASS]` / `[FAIL]` / `[SKIP]`（不用 ✓/✗）

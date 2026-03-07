@@ -93,14 +93,14 @@ function Test-WindowsVersion {
             Write-UiSuccess "✓ Windows 版本检查通过: $($result.VersionString)"
         } else {
             $result.ErrorMessage = "Windows 版本过低，需要 Windows 10 1903 或更高版本"
-            Write-UiError "✗ $($result.ErrorMessage)"
-            Write-UiError "  当前版本: $($result.VersionString)"
-            Write-UiError "  最低要求: Windows 10 1903 (10.0.18362)"
+            Write-UiDanger "✗ $($result.ErrorMessage)"
+            Write-UiDanger "  当前版本: $($result.VersionString)"
+            Write-UiDanger "  最低要求: Windows 10 1903 (10.0.18362)"
         }
 
     } catch {
         $result.ErrorMessage = "无法检测 Windows 版本: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -123,7 +123,7 @@ function Test-WingetAvailability {
     }
 
     try {
-        Write-UiInfo "🔍 检测 winget 可用性..."
+        Write-UiPrimary "🔍 检测 winget 可用性..."
 
         if (Test-CommandAvailable -Command "winget") {
             $version = Get-CommandVersion -Command "winget"
@@ -132,7 +132,7 @@ function Test-WingetAvailability {
             Write-UiSuccess "✓ winget 已可用 (版本: $version)"
         } else {
             $result.InstallationRequired = $true
-            Write-UiWarn "⚠ winget 不可用，需要安装"
+            Write-UiWarning "⚠ winget 不可用，需要安装"
 
             # 检查是否可以通过 Microsoft Store 安装
             try {
@@ -151,7 +151,7 @@ function Test-WingetAvailability {
 
     } catch {
         $result.ErrorMessage = "winget 检测过程中发生错误: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -174,7 +174,7 @@ function Install-WindowsTerminal {
     }
 
     try {
-        Write-UiInfo "🖥️ 检查 Windows Terminal..."
+        Write-UiPrimary "🖥️ 检查 Windows Terminal..."
 
         # 检查是否已安装（兼容不支持 Appx 的系统）
         try {
@@ -195,9 +195,9 @@ function Install-WindowsTerminal {
 
         # 询问用户是否安装
         Write-UiInfo "Windows Terminal 可以提供更好的终端体验，包括："
-        Write-UiInfo "  • 更好的字体渲染和颜色支持"
-        Write-UiInfo "  • 多标签页和分屏功能"
-        Write-UiInfo "  • 更丰富的自定义选项"
+        Write-UiDim "  • 更好的字体渲染和颜色支持"
+        Write-UiDim "  • 多标签页和分屏功能"
+        Write-UiDim "  • 更丰富的自定义选项"
 
         $options = @("安装 Windows Terminal（推荐）", "跳过，使用默认终端")
         $choice = Show-SingleSelectMenu -Title "是否安装 Windows Terminal？" -Options $options
@@ -214,7 +214,7 @@ function Install-WindowsTerminal {
                         throw "winget 安装失败"
                     }
                 } catch {
-                    Write-UiWarn "⚠ 通过 winget 安装失败，尝试其他方法..."
+                    Write-UiWarning "⚠ 通过 winget 安装失败，尝试其他方法..."
 
                     # 尝试通过 Microsoft Store 安装
                     try {
@@ -224,13 +224,13 @@ function Install-WindowsTerminal {
                         $result.Success = $true  # 认为用户会手动安装
                     } catch {
                         $result.ErrorMessage = "无法打开 Microsoft Store: $($_.Exception.Message)"
-                        Write-UiWarn "⚠ $($result.ErrorMessage)"
+                        Write-UiWarning "⚠ $($result.ErrorMessage)"
                         $result.Success = $true  # 不强制要求 Windows Terminal
                     }
                 }
             } else {
                 $result.ErrorMessage = "winget 不可用，无法自动安装 Windows Terminal"
-                Write-UiWarn "⚠ $($result.ErrorMessage)"
+                Write-UiWarning "⚠ $($result.ErrorMessage)"
                 $result.Success = $true  # 不强制要求 Windows Terminal
             }
         } else {
@@ -241,7 +241,7 @@ function Install-WindowsTerminal {
 
     } catch {
         $result.ErrorMessage = "Windows Terminal 安装过程中发生错误: $($_.Exception.Message)"
-        Write-UiWarn "⚠ $($result.ErrorMessage)"
+        Write-UiWarning "⚠ $($result.ErrorMessage)"
         $result.Success = $true  # 不强制要求 Windows Terminal
     }
 
@@ -265,7 +265,7 @@ function Install-PowerShell7 {
     }
 
     try {
-        Write-UiInfo "⚡ 检查 PowerShell 7..."
+        Write-UiPrimary "⚡ 检查 PowerShell 7..."
 
         # 检查是否已安装 PowerShell 7
         if (Test-CommandAvailable -Command "pwsh") {
@@ -288,19 +288,19 @@ function Install-PowerShell7 {
                             Write-UiSuccess "✓ PowerShell 7 已安装 (版本: $version)"
                             return $result
                         } else {
-                            Write-UiWarn "⚠ PowerShell 7 版本过低 (当前: $version, 需要: $($script:RequiredPowerShellVersion))"
+                            Write-UiWarning "⚠ PowerShell 7 版本过低 (当前: $version, 需要: $($script:RequiredPowerShellVersion))"
                         }
                     } catch {
-                        Write-UiWarn "⚠ 无法解析 PowerShell 7 版本号: $version"
+                        Write-UiWarning "⚠ 无法解析 PowerShell 7 版本号: $version"
                     }
                 } else {
-                    Write-UiWarn "⚠ 无法提取 PowerShell 7 版本号: $version"
+                    Write-UiWarning "⚠ 无法提取 PowerShell 7 版本号: $version"
                 }
             } else {
-                Write-UiWarn "⚠ 无法获取 PowerShell 7 版本信息"
+                Write-UiWarning "⚠ 无法获取 PowerShell 7 版本信息"
             }
         } else {
-            Write-UiWarn "⚠ PowerShell 7 未安装"
+            Write-UiWarning "⚠ PowerShell 7 未安装"
         }
 
         Write-UiInfo "PowerShell 7 是运行主安装脚本的必要条件"
@@ -325,28 +325,28 @@ function Install-PowerShell7 {
                 }
             } catch {
                 $result.ErrorMessage = "PowerShell 7 安装失败: $($_.Exception.Message)"
-                Write-UiError "✗ $($result.ErrorMessage)"
+                Write-UiDanger "✗ $($result.ErrorMessage)"
 
                 # 提供手动安装指导
                 Write-UiInfo "请手动安装 PowerShell 7："
-                Write-UiInfo "1. 访问: https://github.com/PowerShell/PowerShell/releases"
-                Write-UiInfo "2. 下载适合您系统的安装包"
-                Write-UiInfo "3. 安装完成后重新运行此脚本"
+                Write-UiDim "1. 访问: https://github.com/PowerShell/PowerShell/releases"
+                Write-UiDim "2. 下载适合您系统的安装包"
+                Write-UiDim "3. 安装完成后重新运行此脚本"
             }
         } else {
             $result.ErrorMessage = "winget 不可用，无法自动安装 PowerShell 7"
-            Write-UiError "✗ $($result.ErrorMessage)"
+            Write-UiDanger "✗ $($result.ErrorMessage)"
 
             # 提供手动安装指导
             Write-UiInfo "请手动安装 PowerShell 7："
-            Write-UiInfo "1. 访问: https://github.com/PowerShell/PowerShell/releases"
-            Write-UiInfo "2. 下载适合您系统的安装包"
-            Write-UiInfo "3. 安装完成后重新运行此脚本"
+            Write-UiDim "1. 访问: https://github.com/PowerShell/PowerShell/releases"
+            Write-UiDim "2. 下载适合您系统的安装包"
+            Write-UiDim "3. 安装完成后重新运行此脚本"
         }
 
     } catch {
         $result.ErrorMessage = "PowerShell 7 安装过程中发生错误: $($_.Exception.Message)"
-        Write-UiError "✗ $($result.ErrorMessage)"
+        Write-UiDanger "✗ $($result.ErrorMessage)"
     }
 
     return $result
@@ -368,13 +368,13 @@ function Show-CompletionMessage {
     Write-UiSuccess "🎉 引导脚本执行完成！"
     Write-Host ""
 
-    Write-UiInfo "📋 完成摘要："
+    Write-UiPrimary "📋 完成摘要："
     Write-UiInfo "  ✓ Windows 版本检查通过"
     Write-UiInfo "  ✓ PowerShell 7 已准备就绪 ($PowerShellVersion)"
     Write-UiInfo "  ✓ 基础环境配置完成"
     Write-Host ""
 
-    Write-UiInfo "🚀 下一步操作："
+    Write-UiPrimary "🚀 下一步操作："
     Write-UiInfo "请在 PowerShell 7 中运行主安装脚本："
     Write-Host ""
     if ($scriptRoot) {
@@ -386,14 +386,14 @@ function Show-CompletionMessage {
     }
     Write-Host ""
 
-    Write-UiInfo "💡 提示："
-    Write-UiInfo "• 如果您使用的是 Windows Terminal，建议在其中运行主安装脚本"
-    Write-UiInfo "• 主安装脚本提供基础环境和进阶扩展两级安装"
-    Write-UiInfo "• 安装过程支持断点续传，遇到问题可以重新运行"
+    Write-UiPrimary "💡 提示："
+    Write-UiDim "• 如果您使用的是 Windows Terminal，建议在其中运行主安装脚本"
+    Write-UiDim "• 主安装脚本提供基础环境和进阶扩展两级安装"
+    Write-UiDim "• 安装过程支持断点续传，遇到问题可以重新运行"
     Write-Host ""
 
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-        Write-UiInfo "按任意键退出..."
+        Write-UiDim "按任意键退出..."
         $null = [Console]::ReadKey($true)
     }
 }
@@ -407,7 +407,7 @@ function Wait-KeyBeforeExit {
 
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
         Write-Host ""
-        Write-Host "按任意键退出..." -ForegroundColor Gray
+        Write-UiDim "按任意键退出..."
         try { $null = [Console]::ReadKey($true) } catch { }
     }
 }
@@ -428,21 +428,21 @@ function Main {
 
         # 检查管理员权限
         # 显式传递 -ScriptPath 避免 $PSCommandPath 在 dot-source 函数中解析为 Admin.ps1
-        Write-UiInfo "🔐 检查权限..."
+        Write-UiPrimary "🔐 检查权限..."
         $privilegeResult = Assert-StepPrivilege -StepName "引导脚本" -RequiresAdmin $true -ScriptPath $script:BootstrapScriptPath
 
         if (-not $privilegeResult) {
-            Write-UiError "✗ 引导脚本需要管理员权限才能安装必要组件"
-            Write-UiError "请以管理员身份运行此脚本"
+            Write-UiDanger "✗ 引导脚本需要管理员权限才能安装必要组件"
+            Write-UiDanger "请以管理员身份运行此脚本"
             Wait-KeyBeforeExit
             exit 1
         }
 
         # 1. Windows 版本检查
-        Write-UiInfo "🖥️ 检查系统兼容性..."
+        Write-UiPrimary "🖥️ 检查系统兼容性..."
         $windowsResult = Test-WindowsVersion
         if (-not $windowsResult.IsSupported) {
-            Write-UiError "✗ 系统不兼容，无法继续安装"
+            Write-UiDanger "✗ 系统不兼容，无法继续安装"
             Wait-KeyBeforeExit
             exit 1
         }
@@ -450,7 +450,7 @@ function Main {
         # 2. winget 可用性检查
         $wingetResult = Test-WingetAvailability
         if (-not $wingetResult.IsAvailable -and $wingetResult.InstallationRequired) {
-            Write-UiWarn "⚠ winget 不可用，某些组件可能需要手动安装"
+            Write-UiWarning "⚠ winget 不可用，某些组件可能需要手动安装"
         }
 
         # 3. 安装 Windows Terminal（可选）
@@ -459,8 +459,8 @@ function Main {
         # 4. 安装 PowerShell 7（必需）
         $ps7Result = Install-PowerShell7
         if (-not $ps7Result.Success) {
-            Write-UiError "✗ PowerShell 7 安装失败，无法继续"
-            Write-UiError "请手动安装 PowerShell 7 后重新运行此脚本"
+            Write-UiDanger "✗ PowerShell 7 安装失败，无法继续"
+            Write-UiDanger "请手动安装 PowerShell 7 后重新运行此脚本"
             Wait-KeyBeforeExit
             exit 1
         }
@@ -469,8 +469,8 @@ function Main {
         Show-CompletionMessage -PowerShellVersion $ps7Result.Version
 
     } catch {
-        Write-UiError "✗ 引导脚本执行失败: $($_.Exception.Message)"
-        Write-UiError "请检查错误信息并重新运行脚本"
+        Write-UiDanger "✗ 引导脚本执行失败: $($_.Exception.Message)"
+        Write-UiDanger "请检查错误信息并重新运行脚本"
         Wait-KeyBeforeExit
         exit 1
     }

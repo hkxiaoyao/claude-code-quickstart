@@ -7,11 +7,7 @@
 # 严格模式
 Set-StrictMode -Version Latest
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
-. "$PSScriptRoot\..\core\Process.ps1"
-. "$PSScriptRoot\..\core\Net.ps1"
+# 依赖: Ui.ps1, Profile.ps1, Process.ps1, Net.ps1（由入口脚本 dot-source 加载）
 
 # 注: $script:DefaultMcpRuntimeDeps 和 $script:McpServers 已迁移到 core/McpManager.ps1
 # 通过 dot-source 共享作用域，$script: 变量在此文件内仍可访问
@@ -110,7 +106,7 @@ function Install-Mcp {
     #>
 
     try {
-        Write-UiInfo "配置 MCP Server..."
+        Write-UiPrimary "配置 MCP Server..."
 
         # 检测已安装的 MCP Server
         $claudeJsonPath = "$(Get-UserHome)\.claude.json"
@@ -126,7 +122,7 @@ function Install-Mcp {
                 }
             }
             catch {
-                Write-UiWarn "读取现有 MCP 配置时出错: $($_.Exception.Message)"
+                Write-UiWarning "读取现有 MCP 配置时出错: $($_.Exception.Message)"
             }
         }
 
@@ -168,7 +164,7 @@ function Install-Mcp {
                 }
             }
 
-            Write-UiInfo "请选择要安装的 MCP Server:"
+            Write-UiPrimary "请选择要安装的 MCP Server:"
             $selectedIndices = Show-MultiSelectMenu -Options $displayOptions -DefaultSelected $defaultSelected -Title "MCP Server 选择"
 
             # $null = 用户按 Esc 取消，优雅退出
@@ -209,7 +205,7 @@ function Install-Mcp {
 
         # 显示安装摘要并确认
         Write-Host ""
-        Write-UiWarn "即将安装以下 MCP Server："
+        Write-UiWarning "即将安装以下 MCP Server："
         foreach ($serverId in $selectedServers) {
             $server = $script:McpServers[$serverId]
             Write-UiInfo "  - $($server.Name): $($server.Description)"
@@ -232,7 +228,7 @@ function Install-Mcp {
         # 使用 Install-McpSingleServer 逐个安装（已迁移到 core/McpManager.ps1）
         foreach ($serverId in $selectedServers) {
             $server = $script:McpServers[$serverId]
-            Write-UiInfo "安装 $($server.Name)..."
+            Write-UiPrimary "安装 $($server.Name)..."
 
             $result = Install-McpSingleServer -ServerId $serverId
             $serverStatus[$serverId] = $result
@@ -242,7 +238,7 @@ function Install-Mcp {
             }
             else {
                 $failureCount++
-                Write-UiWarn "跳过 $($server.Name): $($result.ErrorMessage)"
+                Write-UiWarning "跳过 $($server.Name): $($result.ErrorMessage)"
             }
         }
 
@@ -252,7 +248,7 @@ function Install-Mcp {
 
         # 安装摘要
         Write-Host ""
-        Write-UiInfo "安装摘要:"
+        Write-UiPrimary "安装摘要:"
         Write-UiInfo "  - 选择: $($selectedServers.Count), 成功: $successCount, 失败: $failureCount"
         foreach ($serverId in $selectedServers) {
             $server = $script:McpServers[$serverId]
@@ -264,7 +260,7 @@ function Install-Mcp {
         return $true
     }
     catch {
-        Write-UiError "配置 MCP Server 失败: $($_.Exception.Message)"
+        Write-UiDanger "配置 MCP Server 失败: $($_.Exception.Message)"
         return $false
     }
 }
@@ -298,7 +294,7 @@ function Verify-Mcp {
         foreach ($serverId in $configuredServers) {
             $serverConfig = $claudeJson["mcpServers"][$serverId]
             if (-not $serverConfig) {
-                Write-UiWarn "跳过空配置: $serverId"
+                Write-UiWarning "跳过空配置: $serverId"
                 continue
             }
 
@@ -324,7 +320,7 @@ function Verify-Mcp {
                 }
             }
             else {
-                Write-UiWarn "MCP Server '$serverId' 不是标准 stdio/http 配置，已跳过严格校验"
+                Write-UiWarning "MCP Server '$serverId' 不是标准 stdio/http 配置，已跳过严格校验"
                 continue
             }
 
@@ -352,7 +348,7 @@ function Verify-Mcp {
                             $settings["env"].ContainsKey($apiKeyName) -and
                             -not [string]::IsNullOrWhiteSpace([string]$settings["env"][$apiKeyName])
                         if (-not ($hasServerEnv -or $hasGlobalEnv)) {
-                            Write-UiWarn "MCP Server '$serverId' 缺少 API Key: $apiKeyName"
+                            Write-UiWarning "MCP Server '$serverId' 缺少 API Key: $apiKeyName"
                         }
                     }
                 }
@@ -431,7 +427,7 @@ function Verify-Mcp {
         foreach ($serverId in $configuredServers) {
             $mcpPerm = "mcp__${serverId}"
             if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
-                Write-UiWarn "⚠ 缺少 MCP 权限: $mcpPerm"
+                Write-UiWarning "⚠ 缺少 MCP 权限: $mcpPerm"
             }
         }
 
@@ -454,7 +450,7 @@ function Verify-Mcp {
         return $true
     }
     catch {
-        Write-UiError "验证 MCP Server 配置失败: $($_.Exception.Message)"
+        Write-UiDanger "验证 MCP Server 配置失败: $($_.Exception.Message)"
         return $false
     }
 }
@@ -544,7 +540,7 @@ function Update-Mcp {
             [void]$updatedItems.Add("cache::npx::cleared")
         }
         elseif (-not $cacheResult.Success) {
-            Write-UiWarn "npx 缓存清理失败，继续更新..."
+            Write-UiWarning "npx 缓存清理失败，继续更新..."
             [void]$updatedItems.Add("cache::npx::clear-failed")
         }
 
@@ -555,13 +551,13 @@ function Update-Mcp {
             $pre = [hashtable]$serverDef["PreInstall"]
             if ($pre.Type -ne "npm-global") { continue }
 
-            Write-UiInfo "正在更新 $($pre.Package)..."
+            Write-UiPrimary "正在更新 $($pre.Package)..."
             $installResult = Invoke-NpmGlobalInstall -PackageName $pre.Package -Force
             if ($installResult.Success) {
                 [void]$updatedItems.Add("npm::$($pre.Package)::updated")
             }
             else {
-                Write-UiWarn "更新 $($pre.Package) 失败: $($installResult.Error)"
+                Write-UiWarning "更新 $($pre.Package) 失败: $($installResult.Error)"
             }
         }
 
@@ -618,7 +614,7 @@ function Update-Mcp {
                             $baseArgsChanged = $true
                         } else {
                             # IDEM-1: 凭据型 Server args 数量漂移，记录警告以便排查
-                            Write-UiWarn "MCP '$serverId' args 数量漂移 (期望 $($expectedArgs.Count), 实际 $($currentArgs.Count))，凭据型跳过自动更新"
+                            Write-UiWarning "MCP '$serverId' args 数量漂移 (期望 $($expectedArgs.Count), 实际 $($currentArgs.Count))，凭据型跳过自动更新"
                         }
                     } else {
                         for ($i = 0; $i -lt $expectedArgs.Count; $i++) {
@@ -670,7 +666,7 @@ function Update-Mcp {
                     [void]$updatedItems.Add("config::mcpServers.${serverId}::updated")
                     $configChanged = $true
                 } catch {
-                    Write-UiWarn "更新 MCP Server '$serverId' 失败: $($_.Exception.Message)"
+                    Write-UiWarning "更新 MCP Server '$serverId' 失败: $($_.Exception.Message)"
                 }
             }
         }
@@ -701,7 +697,7 @@ function Update-Mcp {
                     Write-McpMeta $meta
                 }
             } catch {
-                Write-UiWarn "vault definitionHash 同步失败: $($_.Exception.Message)"
+                Write-UiWarning "vault definitionHash 同步失败: $($_.Exception.Message)"
             }
         }
 
@@ -746,7 +742,7 @@ function Update-Mcp {
     }
     catch {
         $result.ErrorMessage = "更新 Mcp 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

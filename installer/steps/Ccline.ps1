@@ -6,10 +6,7 @@
 
 Set-StrictMode -Version Latest
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Process.ps1"
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
+# 依赖: Process.ps1, Ui.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
 # 配置
 $script:CclinePackage = "@cometix/ccline"
@@ -43,7 +40,7 @@ function Install-Ccline {
     #>
     param()
 
-    Write-Host "=== CCometixLine 安装 ===" -ForegroundColor Cyan
+    Write-UiPrimary "=== CCometixLine 安装 ==="
     Write-Host ""
 
     $stepResult = @{
@@ -54,7 +51,7 @@ function Install-Ccline {
 
     try {
         # 1. 检查前置条件
-        Write-Host "1. 检查前置条件..." -ForegroundColor Gray
+        Write-UiDim "1. 检查前置条件..."
 
         # 验证 Claude Code
         $claudeDetails = Test-CommandAvailable -Command "claude" -ReturnDetails
@@ -79,32 +76,32 @@ function Install-Ccline {
             throw $errorMsg
         }
 
-        Write-Host "✓ 前置条件检查完成" -ForegroundColor Green
+        Write-UiSuccess "✓ 前置条件检查完成"
 
         # 2. 检查 CCometixLine 是否已安装
         Write-Host ""
-        Write-Host "2. 检查 CCometixLine 安装状态..." -ForegroundColor Gray
+        Write-UiDim "2. 检查 CCometixLine 安装状态..."
 
         if (Test-CommandAvailable -Command "ccline") {
             $cclineVersion = Get-CommandVersion -Command "ccline"
-            Write-Host "✓ CCometixLine 已安装: $cclineVersion" -ForegroundColor Green
+            Write-UiSuccess "✓ CCometixLine 已安装: $cclineVersion"
 
             # 询问是否重新安装
             $response = Read-Host "CCometixLine 已安装，是否重新安装最新版本？[y/N]"
             if ($response -notmatch "^[Yy]") {
-                Write-Host "跳过 CCometixLine 重新安装" -ForegroundColor Gray
+                Write-UiDim "跳过 CCometixLine 重新安装"
             } else {
                 # 重新安装
-                Write-Host "重新安装 CCometixLine..." -ForegroundColor Yellow
+                Write-UiWarning "重新安装 CCometixLine..."
                 $npmResult = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage -Force
                 if (-not $npmResult.Success) {
                     throw "CCometixLine 重新安装失败"
                 }
-                Write-Host "✓ CCometixLine 重新安装成功" -ForegroundColor Green
+                Write-UiSuccess "✓ CCometixLine 重新安装成功"
             }
         } else {
             # 安装 CCometixLine
-            Write-Host "安装 CCometixLine..." -ForegroundColor Yellow
+            Write-UiWarning "安装 CCometixLine..."
 
             $npmResult = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage
 
@@ -112,12 +109,12 @@ function Install-Ccline {
                 throw "CCometixLine 安装失败"
             }
 
-            Write-Host "✓ CCometixLine 安装成功" -ForegroundColor Green
+            Write-UiSuccess "✓ CCometixLine 安装成功"
         }
 
         # 3. 验证安装
         Write-Host ""
-        Write-Host "3. 验证 CCometixLine 安装..." -ForegroundColor Gray
+        Write-UiDim "3. 验证 CCometixLine 安装..."
 
         # 刷新 PATH 以确保 ccline 命令可用
         Refresh-SessionPath
@@ -127,22 +124,22 @@ function Install-Ccline {
         }
 
         $cclineVersion = Get-CommandVersion -Command "ccline"
-        Write-Host "✓ CCometixLine 验证成功: $cclineVersion" -ForegroundColor Green
+        Write-UiSuccess "✓ CCometixLine 验证成功: $cclineVersion"
 
         # 4. 创建 Claude Code 配置目录
         Write-Host ""
-        Write-Host "4. 准备 Claude Code 配置..." -ForegroundColor Gray
+        Write-UiDim "4. 准备 Claude Code 配置..."
 
         if (-not (Test-Path $script:ClaudeConfigDir)) {
             New-Item -Path $script:ClaudeConfigDir -ItemType Directory -Force | Out-Null
-            Write-Host "✓ Claude Code 配置目录已创建: $script:ClaudeConfigDir" -ForegroundColor Green
+            Write-UiSuccess "✓ Claude Code 配置目录已创建: $script:ClaudeConfigDir"
         } else {
-            Write-Host "✓ Claude Code 配置目录已存在: $script:ClaudeConfigDir" -ForegroundColor Green
+            Write-UiSuccess "✓ Claude Code 配置目录已存在: $script:ClaudeConfigDir"
         }
 
         # 5. 配置状态栏设置
         Write-Host ""
-        Write-Host "5. 配置 Claude Code 状态栏..." -ForegroundColor Gray
+        Write-UiDim "5. 配置 Claude Code 状态栏..."
 
         # 读取现有配置或创建新配置
         $settings = @{}
@@ -154,7 +151,7 @@ function Install-Ccline {
                     if (-not $settings) {
                         throw "配置文件解析结果为空"
                     }
-                    Write-Host "✓ 读取现有配置文件" -ForegroundColor Green
+                    Write-UiSuccess "✓ 读取现有配置文件"
                 }
             } catch {
                 throw "无法解析现有 settings.json，已停止写入以避免覆盖用户配置: $($_.Exception.Message)"
@@ -177,7 +174,7 @@ function Install-Ccline {
                 throw "Write-FileAtomically 返回失败"
             }
 
-            Write-Host "✓ 状态栏配置已写入: $script:ClaudeSettingsFile" -ForegroundColor Green
+            Write-UiSuccess "✓ 状态栏配置已写入: $script:ClaudeSettingsFile"
 
         } catch {
             throw "状态栏配置写入失败: $($_.Exception.Message)"
@@ -185,15 +182,15 @@ function Install-Ccline {
 
         # 6. 测试状态栏功能
         Write-Host ""
-        Write-Host "6. 测试状态栏功能..." -ForegroundColor Gray
+        Write-UiDim "6. 测试状态栏功能..."
 
         try {
             # 测试 ccline 命令
             $testResult = Invoke-ExternalCommand -Command "ccline" -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10
             if ($testResult.Success) {
-                Write-Host "✓ CCometixLine 命令测试成功" -ForegroundColor Green
+                Write-UiSuccess "✓ CCometixLine 命令测试成功"
             } else {
-                Write-Host "⚠ CCometixLine 命令测试失败，但不影响配置" -ForegroundColor Yellow
+                Write-UiWarning "⚠ CCometixLine 命令测试失败，但不影响配置"
             }
 
             # 验证配置文件
@@ -201,18 +198,18 @@ function Install-Ccline {
             if ($verifySettings.statusLine -and
                 $verifySettings.statusLine.type -eq "command" -and
                 $verifySettings.statusLine.command -eq "ccline") {
-                Write-Host "✓ 状态栏配置验证成功" -ForegroundColor Green
+                Write-UiSuccess "✓ 状态栏配置验证成功"
             } else {
                 throw "状态栏配置验证失败"
             }
 
         } catch {
-            Write-Host "⚠ 状态栏功能测试失败: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-UiWarning "⚠ 状态栏功能测试失败: $($_.Exception.Message)"
         }
 
         # 7. 执行 ccline patch
         Write-Host ""
-        Write-Host "7. 执行 CCometixLine patch..." -ForegroundColor Gray
+        Write-UiDim "7. 执行 CCometixLine patch..."
 
         $patchApplied = $false
         $claudeCliPath = $null
@@ -230,40 +227,40 @@ function Install-Ccline {
                 throw "Claude Code cli.js 文件不存在: $claudeCliPath"
             }
 
-            Write-Host "  Claude Code cli.js 路径: $claudeCliPath" -ForegroundColor Gray
+            Write-UiDim "  Claude Code cli.js 路径: $claudeCliPath"
 
             # 执行 ccline --patch（路径含空格时显式加引号，因 Invoke-ExternalCommand 使用 -join ' ' 拼接参数）
             $claudeCliArg = if ($claudeCliPath -match "\s") { "`"$claudeCliPath`"" } else { $claudeCliPath }
             $patchResult = Invoke-ExternalCommand -Command "ccline" -Arguments @("--patch", $claudeCliArg) -TimeoutSeconds 30
             if ($patchResult.Success) {
                 $patchApplied = $true
-                Write-Host "✓ CCometixLine patch 执行成功" -ForegroundColor Green
+                Write-UiSuccess "✓ CCometixLine patch 执行成功"
             } else {
-                Write-Host "⚠ CCometixLine patch 执行失败，但不影响基本功能" -ForegroundColor Yellow
-                Write-Host "  错误信息: $($patchResult.Error)" -ForegroundColor Gray
-                Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
+                Write-UiWarning "⚠ CCometixLine patch 执行失败，但不影响基本功能"
+                Write-UiDim "  错误信息: $($patchResult.Error)"
+                Write-UiDim "  可手动执行: ccline --patch `"$claudeCliPath`""
             }
         } catch {
-            Write-Host "⚠ CCometixLine patch 执行失败: $($_.Exception.Message)" -ForegroundColor Yellow
-            Write-Host "  状态栏功能可能受限，但不影响基本使用" -ForegroundColor Gray
+            Write-UiWarning "⚠ CCometixLine patch 执行失败: $($_.Exception.Message)"
+            Write-UiDim "  状态栏功能可能受限，但不影响基本使用"
             if ($claudeCliPath) {
-                Write-Host "  可手动执行: ccline --patch `"$claudeCliPath`"" -ForegroundColor Gray
+                Write-UiDim "  可手动执行: ccline --patch `"$claudeCliPath`""
             }
         }
 
         # 8. 使用提示
         Write-Host ""
-        Write-Host "8. 使用提示..." -ForegroundColor Gray
-        Write-Host "  CCometixLine 状态栏已配置完成" -ForegroundColor Cyan
-        Write-Host "  状态栏将在 Claude Code 中自动显示自定义信息" -ForegroundColor Gray
+        Write-UiDim "8. 使用提示..."
+        Write-UiPrimary "  CCometixLine 状态栏已配置完成"
+        Write-UiDim "  状态栏将在 Claude Code 中自动显示自定义信息"
         Write-Host ""
-        Write-Host "  基本命令:" -ForegroundColor Gray
-        Write-Host "    ccline --version       # 查看版本" -ForegroundColor Gray
-        Write-Host "    ccline --help          # 查看帮助" -ForegroundColor Gray
-        Write-Host "    ccline --patch <path>  # Patch Claude Code" -ForegroundColor Gray
+        Write-UiDim "  基本命令:"
+        Write-UiDim "    ccline --version       # 查看版本"
+        Write-UiDim "    ccline --help          # 查看帮助"
+        Write-UiDim "    ccline --patch <path>  # Patch Claude Code"
 
         Write-Host ""
-        Write-Host "✓ CCometixLine 安装和配置完成" -ForegroundColor Green
+        Write-UiSuccess "✓ CCometixLine 安装和配置完成"
 
         $resultMessage = if ($patchApplied) {
             "CCometixLine 安装、状态栏配置和 patch 全部成功"
@@ -281,7 +278,7 @@ function Install-Ccline {
 
     } catch {
         $stepResult.ErrorMessage = "CCometixLine 安装和配置失败: $($_.Exception.Message)"
-        Write-Host "✗ $($stepResult.ErrorMessage)" -ForegroundColor Red
+        Write-UiDanger "✗ $($stepResult.ErrorMessage)"
         return $stepResult
     }
 }
@@ -315,7 +312,7 @@ function Update-Ccline {
     }
 
     try {
-        Write-UiInfo "更新 CCometixLine..."
+        Write-UiPrimary "更新 CCometixLine..."
 
         # 获取当前版本
         $oldVersion = ""
@@ -336,7 +333,7 @@ function Update-Ccline {
             Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "CCometixLine 已是最新版本 ($oldVersion)"
+            Write-UiDim "CCometixLine 已是最新版本 ($oldVersion)"
             [void]$updatedItems.Add("noop::Ccline::no-change")
         } else {
             # 执行 npm install -g @latest
@@ -345,7 +342,7 @@ function Update-Ccline {
             for ($attempt = 0; $attempt -lt 3; $attempt++) {
                 if ($attempt -gt 0) {
                     $waitSec = [math]::Pow(2, $attempt)
-                    Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                    Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
                     Start-Sleep -Seconds $waitSec
                 }
                 $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -360,7 +357,7 @@ function Update-Ccline {
 
             if (-not $installSuccess) {
                 # 回退到旧版本
-                Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+                Write-UiWarning "更新失败，尝试回退到 $oldVersion..."
                 Invoke-ExternalCommand -Command "npm" `
                     -Arguments @("install", "-g", "$($script:CclinePackage)@$oldVersion") `
                     -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
@@ -375,7 +372,7 @@ function Update-Ccline {
 
             if ($oldVersion -eq $newVersion) {
                 [void]$updatedItems.Add("noop::Ccline::no-change")
-                Write-UiInfo "CCometixLine 已是最新版本 ($newVersion)"
+                Write-UiDim "CCometixLine 已是最新版本 ($newVersion)"
             } else {
                 [void]$updatedItems.Add("npm::ccline::${oldVersion}->${newVersion}")
                 Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion"
@@ -401,14 +398,14 @@ function Update-Ccline {
                         [void]$updatedItems.Add("patch::ccline::re-patched")
                         Write-UiSuccess "✓ CCometixLine patch 重新应用成功"
                     } else {
-                        Write-UiWarn "CCometixLine patch 重新应用失败，不影响基本功能"
+                        Write-UiWarning "CCometixLine patch 重新应用失败，不影响基本功能"
                     }
                 } else {
-                    Write-UiWarn "Claude Code cli.js 未找到，跳过 patch"
+                    Write-UiWarning "Claude Code cli.js 未找到，跳过 patch"
                 }
             }
         } catch {
-            Write-UiWarn "CCometixLine patch 执行异常: $($_.Exception.Message)"
+            Write-UiWarning "CCometixLine patch 执行异常: $($_.Exception.Message)"
         }
 
         $result.Data["PatchApplied"] = $patchApplied
@@ -417,7 +414,7 @@ function Update-Ccline {
     }
     catch {
         $result.ErrorMessage = "更新 CCometixLine 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

@@ -431,7 +431,7 @@ function Install-<StepId> {
         $result.Success = $true
     } catch {
         $result.ErrorMessage = $_.Exception.Message
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
     return $result
 }

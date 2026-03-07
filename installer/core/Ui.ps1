@@ -88,29 +88,17 @@ function Convert-EmojiToText {
 # 注意：PowerShell 5.1 不支持 `e 转义序列，需要使用 [char]27
 $script:EscapeChar = [char]27
 $script:AnsiColors = @{
-    Reset = "$script:EscapeChar[0m"
-    Bold = "$script:EscapeChar[1m"
+    Reset         = "$script:EscapeChar[0m"
+    Bold          = "$script:EscapeChar[1m"
 
-    # 主色调：Claude 官方橙色（标题、重点）
-    # 使用 24-bit RGB 颜色（Windows Terminal / PS 7+ 支持）
-    Primary = "$script:EscapeChar[38;2;217;119;87m"        # Claude 主色 #D97757
-    BrightPrimary = "$script:EscapeChar[38;2;232;148;106m" # Claude 亮色 #E8946A
-
-    # 成功：亮绿色
-    Green = "$script:EscapeChar[32m"
-    BrightGreen = "$script:EscapeChar[92m"
-
-    # 警告：黄色
-    Yellow = "$script:EscapeChar[33m"
-    BrightYellow = "$script:EscapeChar[93m"
-
-    # 错误：亮红色
-    Red = "$script:EscapeChar[31m"
-    BrightRed = "$script:EscapeChar[91m"
-
-    # 辅助：灰色
-    Gray = "$script:EscapeChar[90m"
-    White = "$script:EscapeChar[97m"
+    # 6 色语义系统
+    Success       = "$script:EscapeChar[92m"                    # BrightGreen
+    Primary       = "$script:EscapeChar[38;2;217;119;87m"       # Claude #D97757
+    BrightPrimary = "$script:EscapeChar[38;2;232;148;106m"      # Claude #E8946A（横幅高亮）
+    Warning       = "$script:EscapeChar[93m"                    # BrightYellow
+    Danger        = "$script:EscapeChar[91m"                    # BrightRed
+    Info          = "$script:EscapeChar[97m"                    # White
+    Dim           = "$script:EscapeChar[90m"                    # Gray
 }
 
 # ─── 输出模式控制 ────────────────────────────────────────────────────────────
@@ -130,12 +118,16 @@ if (-not (Get-Variable -Scope Script -Name CcqOutputMode -ErrorAction SilentlyCo
     $script:CcqOutputMode = [CcqOutputMode]::Normal
 }
 
-function Write-UiInfo {
+# ─── 基础输出函数（DRY：统一 Emoji 转换 + ANSI 着色 + Write-Host）────────
+
+function Write-UiBase {
     <#
     .SYNOPSIS
-    输出信息级别的彩色文本
+    内部基础输出函数，所有 Write-Ui* 函数的统一实现
     .PARAMETER Message
     要输出的消息
+    .PARAMETER ColorCode
+    ANSI 颜色代码
     .PARAMETER NoNewline
     不添加换行符
     #>
@@ -143,118 +135,92 @@ function Write-UiInfo {
         [Parameter(Mandatory = $true)]
         [string]$Message,
 
+        [Parameter(Mandatory = $true)]
+        [string]$ColorCode,
+
         [switch]$NoNewline
     )
 
-    # 转换 Emoji
     $Message = Convert-EmojiToText -Text $Message
 
-    if ($script:SupportsAnsi) {
-        $coloredMessage = "$($script:AnsiColors.Primary)$Message$($script:AnsiColors.Reset)"
+    $output = if ($script:SupportsAnsi) {
+        "$ColorCode$Message$($script:AnsiColors.Reset)"
     } else {
-        $coloredMessage = $Message
+        $Message
     }
 
     if ($NoNewline) {
-        Write-Host $coloredMessage -NoNewline
+        Write-Host $output -NoNewline
     } else {
-        Write-Host $coloredMessage
+        Write-Host $output
     }
 }
 
 function Write-UiSuccess {
     <#
     .SYNOPSIS
-    输出成功级别的彩色文本
-    .PARAMETER Message
-    要输出的消息
-    .PARAMETER NoNewline
-    不添加换行符
+    输出成功级别的彩色文本（亮绿色）
     #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [switch]$NoNewline
-    )
-
-    # 转换 Emoji
-    $Message = Convert-EmojiToText -Text $Message
-
-    if ($script:SupportsAnsi) {
-        $coloredMessage = "$($script:AnsiColors.BrightGreen)$Message$($script:AnsiColors.Reset)"
-    } else {
-        $coloredMessage = $Message
-    }
-
-    if ($NoNewline) {
-        Write-Host $coloredMessage -NoNewline
-    } else {
-        Write-Host $coloredMessage
-    }
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Success -NoNewline:$NoNewline
 }
 
-function Write-UiWarn {
+function Write-UiPrimary {
     <#
     .SYNOPSIS
-    输出警告级别的彩色文本
-    .PARAMETER Message
-    要输出的消息
-    .PARAMETER NoNewline
-    不添加换行符
+    输出主色调文本（Claude 橙色），用于标题、品牌、活跃操作
     #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-
-        [switch]$NoNewline
-    )
-
-    # 转换 Emoji
-    $Message = Convert-EmojiToText -Text $Message
-
-    if ($script:SupportsAnsi) {
-        $coloredMessage = "$($script:AnsiColors.BrightYellow)$Message$($script:AnsiColors.Reset)"
-    } else {
-        $coloredMessage = $Message
-    }
-
-    if ($NoNewline) {
-        Write-Host $coloredMessage -NoNewline
-    } else {
-        Write-Host $coloredMessage
-    }
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Primary -NoNewline:$NoNewline
 }
 
-function Write-UiError {
+function Write-UiWarning {
     <#
     .SYNOPSIS
-    输出错误级别的彩色文本
-    .PARAMETER Message
-    要输出的消息
-    .PARAMETER NoNewline
-    不添加换行符
+    输出警告级别的彩色文本（亮黄色）
     #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Warning -NoNewline:$NoNewline
+}
 
-        [switch]$NoNewline
-    )
+function Write-UiDanger {
+    <#
+    .SYNOPSIS
+    输出错误级别的彩色文本（亮红色）
+    #>
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Danger -NoNewline:$NoNewline
+}
 
-    # 转换 Emoji
-    $Message = Convert-EmojiToText -Text $Message
+function Write-UiInfo {
+    <#
+    .SYNOPSIS
+    输出信息级别的彩色文本（白色），用于数据、路径、指令
+    #>
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Info -NoNewline:$NoNewline
+}
+
+function Write-UiDim {
+    <#
+    .SYNOPSIS
+    输出弱化文本（灰色），用于装饰、元信息
+    #>
+    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
+    Write-UiBase $Message $script:AnsiColors.Dim -NoNewline:$NoNewline
+}
+
+function Clear-UiScreen {
+    <#
+    .SYNOPSIS
+    清屏并将光标归位（统一由 Ui.ps1 管理 ANSI）
+    #>
+    param()
 
     if ($script:SupportsAnsi) {
-        $coloredMessage = "$($script:AnsiColors.BrightRed)$Message$($script:AnsiColors.Reset)"
+        Write-Host "$script:EscapeChar[2J$script:EscapeChar[H" -NoNewline
     } else {
-        $coloredMessage = $Message
-    }
-
-    if ($NoNewline) {
-        Write-Host $coloredMessage -NoNewline
-    } else {
-        Write-Host $coloredMessage
+        Clear-Host
     }
 }
 
@@ -269,7 +235,7 @@ function Write-UiOutput {
     .PARAMETER Level
     输出级别：Essential（必要）, Detail（详细）, Debug（调试）
     .PARAMETER Type
-    输出类型：Info, Success, Warn, Error
+    输出类型：Primary, Info, Success, Warning, Danger, Dim
     .PARAMETER NoNewline
     不添加换行符
     #>
@@ -279,7 +245,7 @@ function Write-UiOutput {
 
         [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential,
 
-        [ValidateSet('Info', 'Success', 'Warn', 'Error')]
+        [ValidateSet('Primary', 'Info', 'Success', 'Warning', 'Danger', 'Dim')]
         [string]$Type = 'Info',
 
         [switch]$NoNewline
@@ -292,10 +258,12 @@ function Write-UiOutput {
     }
 
     switch ($Type) {
+        'Primary' { Write-UiPrimary $Message -NoNewline:$NoNewline }
         'Info'    { Write-UiInfo $Message -NoNewline:$NoNewline }
         'Success' { Write-UiSuccess $Message -NoNewline:$NoNewline }
-        'Warn'    { Write-UiWarn $Message -NoNewline:$NoNewline }
-        'Error'   { Write-UiError $Message -NoNewline:$NoNewline }
+        'Warning' { Write-UiWarning $Message -NoNewline:$NoNewline }
+        'Danger'  { Write-UiDanger $Message -NoNewline:$NoNewline }
+        'Dim'     { Write-UiDim $Message -NoNewline:$NoNewline }
     }
 }
 
@@ -322,35 +290,64 @@ function Get-CcqOutputMode {
 function Get-StringDisplayWidth {
     <#
     .SYNOPSIS
-    计算字符串在终端中的显示宽度（考虑中文字符占2个宽度）
+    计算字符串在终端中的显示宽度（CJK 全角字符占 2 列）
+    .DESCRIPTION
+    合并 CJK 统一汉字、扩展区 A、部首、兼容表意、兼容形式、符号标点、全角 ASCII 等范围。
     .PARAMETER Text
     要计算的字符串
     .RETURNS
-    显示宽度
+    int - 显示宽度
     #>
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Position = 0)]
+        [AllowEmptyString()][AllowNull()]
         [string]$Text
     )
 
+    if ([string]::IsNullOrEmpty($Text)) { return 0 }
+
     $width = 0
     foreach ($char in $Text.ToCharArray()) {
-        # 判断是否为全角字符（中文、日文、韩文等）
         $code = [int][char]$char
-        if (($code -ge 0x4E00 -and $code -le 0x9FFF) -or    # CJK 统一汉字
-            ($code -ge 0x3400 -and $code -le 0x4DBF) -or    # CJK 扩展 A
-            ($code -ge 0x20000 -and $code -le 0x2A6DF) -or  # CJK 扩展 B
-            ($code -ge 0x2A700 -and $code -le 0x2B73F) -or  # CJK 扩展 C
-            ($code -ge 0x2B740 -and $code -le 0x2B81F) -or  # CJK 扩展 D
-            ($code -ge 0x2B820 -and $code -le 0x2CEAF) -or  # CJK 扩展 E
+        if (($code -ge 0x2E80 -and $code -le 0x9FFF) -or    # CJK 部首 + 康熙部首 + 统一汉字
             ($code -ge 0x3000 -and $code -le 0x303F) -or    # CJK 符号和标点
-            ($code -ge 0xFF00 -and $code -le 0xFFEF)) {     # 全角 ASCII
+            ($code -ge 0x3400 -and $code -le 0x4DBF) -or    # CJK 扩展 A
+            ($code -ge 0xF900 -and $code -le 0xFAFF) -or    # CJK 兼容表意文字
+            ($code -ge 0xFE30 -and $code -le 0xFE4F) -or    # CJK 兼容形式
+            ($code -ge 0xFF00 -and $code -le 0xFF60) -or    # 全角 ASCII / 全角标点
+            ($code -ge 0xFFE0 -and $code -le 0xFFE6)) {     # 全角符号
             $width += 2
         } else {
             $width += 1
         }
     }
     return $width
+}
+
+function Format-DisplayPad {
+    <#
+    .SYNOPSIS
+    按显示宽度右填充字符串（CJK 感知），用于对齐表格列
+    .PARAMETER Text
+    要填充的字符串
+    .PARAMETER Width
+    目标显示宽度
+    .RETURNS
+    string - 填充后的字符串
+    #>
+    param(
+        [Parameter(Position = 0)]
+        [AllowEmptyString()][AllowNull()]
+        [string]$Text,
+
+        [Parameter(Position = 1)]
+        [int]$Width
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) { return (' ' * $Width) }
+    $displayWidth = Get-StringDisplayWidth $Text
+    $padding = [Math]::Max(0, $Width - $displayWidth)
+    return "$Text$(' ' * $padding)"
 }
 
 function Show-AsciiBanner {
@@ -428,15 +425,15 @@ function Show-AsciiBanner {
     }
 
     # 输出横幅
-    Write-UiInfo $topBorder
-    Write-UiInfo $emptyLine
+    Write-UiPrimary $topBorder
+    Write-UiPrimary $emptyLine
 
     foreach ($line in $titleLines) {
-        Write-UiInfo $line
+        Write-UiPrimary $line
     }
 
-    Write-UiInfo $emptyLine
-    Write-UiInfo $bottomBorder
+    Write-UiPrimary $emptyLine
+    Write-UiPrimary $bottomBorder
     Write-Host ""
 }
 
@@ -462,13 +459,13 @@ function Show-CcqLogo {
 
     Write-Host ""
     foreach ($line in $logoLines) {
-        Write-UiInfo $line
+        Write-UiPrimary $line
     }
 
     if ($Subtitle) {
         $Subtitle = Convert-EmojiToText -Text $Subtitle
         Write-Host ""
-        Write-UiInfo "  $Subtitle"
+        Write-UiPrimary "  $Subtitle"
     }
     Write-Host ""
 }
@@ -522,7 +519,7 @@ function Show-SingleSelectMenu {
 
     # 如果不支持 ANSI，使用简化版本
     if (-not $script:SupportsAnsi) {
-        Write-UiInfo $Title
+        Write-UiPrimary $Title
         Write-Host ""
 
         for ($i = 0; $i -lt $Options.Count; $i++) {
@@ -536,12 +533,12 @@ function Show-SingleSelectMenu {
             if ([int]::TryParse($input, [ref]$choice) -and $choice -ge 1 -and $choice -le $Options.Count) {
                 return $choice - 1
             }
-            Write-UiError "无效选择，请输入 1 到 $($Options.Count) 之间的数字"
+            Write-UiDanger "无效选择，请输入 1 到 $($Options.Count) 之间的数字"
         } while ($true)
     }
 
     # 支持 ANSI 的交互式菜单
-    Write-UiInfo $Title
+    Write-UiPrimary $Title
     Write-Host ""
 
     function Show-Menu {
@@ -646,7 +643,7 @@ function Show-MultiSelectMenu {
 
     # 如果不支持 ANSI，使用简化版本
     if (-not $script:SupportsAnsi) {
-        Write-UiInfo $Title
+        Write-UiPrimary $Title
         Write-Host ""
 
         for ($i = 0; $i -lt $Options.Count; $i++) {
@@ -678,9 +675,9 @@ function Show-MultiSelectMenu {
     }
 
     # 支持 ANSI 的交互式菜单
-    Write-UiInfo $Title
+    Write-UiPrimary $Title
     Write-Host ""
-    Write-UiInfo "使用 ↑↓ 导航，空格键选择/取消，Enter 确认，Esc 取消"
+    Write-UiDim "使用 ↑↓ 导航，空格键选择/取消，Enter 确认，Esc 取消"
     Write-Host ""
 
     function Show-Menu {
@@ -690,7 +687,7 @@ function Show-MultiSelectMenu {
             $hasHint = $OptionHints.Count -gt $i -and $OptionHints[$i]
 
             if ($i -eq $selectedIndex) {
-                Write-Host "  ► $checked $($Options[$i])" -ForegroundColor Green -NoNewline
+                Write-UiSuccess "  ► $checked $($Options[$i])" -NoNewline
                 if ($hasHint) {
                     Write-Host " $($OptionHints[$i].Text)" -ForegroundColor $OptionHints[$i].Color
                 } else {
@@ -799,9 +796,9 @@ function Show-StepProgress {
     $message = "  $statusIcon $StepName"
 
     switch ($Status) {
-        'Running' { Write-UiInfo $message }
+        'Running' { Write-UiPrimary $message }
         'Success' { Write-UiSuccess $message }
-        'Failed' { Write-UiError $message }
+        'Failed' { Write-UiDanger $message }
     }
 }
 
@@ -818,7 +815,7 @@ function Show-InstallSummary {
     )
 
     if ($Items.Count -eq 0) {
-        Write-UiWarn "没有安装项目"
+        Write-UiWarning "没有安装项目"
         return
     }
 
@@ -836,10 +833,10 @@ function Show-InstallSummary {
     $separator = "+" + ("-" * ($nameWidth + 2)) + "+" + ("-" * ($statusWidth + 2)) + "+" + ("-" * ($versionWidth + 2)) + "+"
 
     # 表头
-    Write-UiInfo $separator
+    Write-UiDim $separator
     $header = "| $("组件".PadRight($nameWidth)) | $("状态".PadRight($statusWidth)) | $("版本".PadRight($versionWidth)) |"
     Write-UiInfo $header
-    Write-UiInfo $separator
+    Write-UiDim $separator
 
     # 数据行
     foreach ($item in $Items) {
@@ -852,13 +849,13 @@ function Show-InstallSummary {
         # 根据状态着色
         switch ($item.Status) {
             { $_ -match "成功|已安装|✓" } { Write-UiSuccess $row }
-            { $_ -match "失败|错误|✗" } { Write-UiError $row }
-            { $_ -match "警告|跳过" } { Write-UiWarn $row }
-            default { Write-Host $row }
+            { $_ -match "失败|错误|✗" } { Write-UiDanger $row }
+            { $_ -match "警告|跳过" } { Write-UiWarning $row }
+            default { Write-UiInfo $row }
         }
     }
 
-    Write-UiInfo $separator
+    Write-UiDim $separator
 }
 
 function Show-ErrorDetails {
@@ -881,22 +878,22 @@ function Show-ErrorDetails {
         [switch]$ShowDetails
     )
 
-    Write-UiError "❌ $FriendlyMessage"
+    Write-UiDanger "❌ $FriendlyMessage"
 
     if ($TechnicalDetails) {
         if ($ShowDetails) {
             Write-Host ""
             Write-UiInfo "技术详情："
-            Write-Host $TechnicalDetails -ForegroundColor Gray
+            Write-UiDim $TechnicalDetails
         } else {
             Write-Host ""
-            Write-UiInfo "按 [D] 键查看技术详情，或其他键跳过..."
+            Write-UiDim "按 [D] 键查看技术详情，或其他键跳过..."
 
             $key = [Console]::ReadKey($true)
             if ($key.KeyChar -eq 'd' -or $key.KeyChar -eq 'D') {
                 Write-Host ""
                 Write-UiInfo "技术详情："
-                Write-Host $TechnicalDetails -ForegroundColor Gray
+                Write-UiDim $TechnicalDetails
             }
         }
     }

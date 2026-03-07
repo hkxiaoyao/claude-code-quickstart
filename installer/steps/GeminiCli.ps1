@@ -8,9 +8,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Process.ps1"
+# 依赖: Ui.ps1, Process.ps1（由入口脚本 dot-source 加载）
 
 function Get-GeminiCliVersionFromNpm {
     <#
@@ -69,7 +67,7 @@ function Install-GeminiCli {
     }
 
     try {
-        Write-UiInfo "安装 Gemini CLI..."
+        Write-UiPrimary "安装 Gemini CLI..."
 
         # 检查 Node.js 是否可用
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
@@ -85,7 +83,7 @@ function Install-GeminiCli {
         }
 
         # 全局安装 Gemini CLI（HC-2: 无 -DisplayName 参数）
-        Write-UiInfo "正在通过 npm 全局安装 Gemini CLI..."
+        Write-UiPrimary "正在通过 npm 全局安装 Gemini CLI..."
         $installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
 
         if (-not $installOut.Success) {
@@ -93,7 +91,7 @@ function Install-GeminiCli {
         }
 
         # 刷新 PATH
-        Write-UiInfo "刷新环境变量..."
+        Write-UiPrimary "刷新环境变量..."
         Refresh-SessionPath
 
         # 验证安装（通过 npm list 验证，避免 fnm multishell wrapper 挂起）
@@ -112,7 +110,7 @@ function Install-GeminiCli {
     }
     catch {
         $result.ErrorMessage = "安装 Gemini CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -154,7 +152,7 @@ function Verify-GeminiCli {
     }
     catch {
         $result.ErrorMessage = "验证 Gemini CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -176,7 +174,7 @@ function Update-GeminiCli {
     }
 
     try {
-        Write-UiInfo "更新 Gemini CLI..."
+        Write-UiPrimary "更新 Gemini CLI..."
 
         # 获取当前版本（通过 npm list，避免执行 gemini 命令）
         $oldVersion = Get-GeminiCliVersionFromNpm
@@ -191,7 +189,7 @@ function Update-GeminiCli {
             Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "Gemini CLI 已是最新版本 ($oldVersion)"
+            Write-UiDim "Gemini CLI 已是最新版本 ($oldVersion)"
             $result.UpdatedItems = @("noop::GeminiCli::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
@@ -205,7 +203,7 @@ function Update-GeminiCli {
         for ($attempt = 0; $attempt -lt 3; $attempt++) {
             if ($attempt -gt 0) {
                 $waitSec = [math]::Pow(2, $attempt)
-                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -219,7 +217,7 @@ function Update-GeminiCli {
         }
 
         if (-not $installSuccess) {
-            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+            Write-UiWarning "更新失败，尝试回退到 $oldVersion..."
             Invoke-ExternalCommand -Command "npm" `
                 -Arguments @("install", "-g", "@google/gemini-cli@$oldVersion") `
                 -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
@@ -234,7 +232,7 @@ function Update-GeminiCli {
 
         if ($oldVersion -eq $newVersion) {
             $result.UpdatedItems = @("noop::GeminiCli::no-change")
-            Write-UiInfo "Gemini CLI 已是最新版本 ($newVersion)"
+            Write-UiDim "Gemini CLI 已是最新版本 ($newVersion)"
         } else {
             $result.UpdatedItems = @("npm::gemini-cli::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ Gemini CLI 已更新: $oldVersion -> $newVersion"
@@ -244,7 +242,7 @@ function Update-GeminiCli {
     }
     catch {
         $result.ErrorMessage = "更新 Gemini CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

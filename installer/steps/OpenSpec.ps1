@@ -8,9 +8,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Process.ps1"
+# 依赖: Ui.ps1, Process.ps1（由入口脚本 dot-source 加载）
 
 function Test-OpenSpecInstalled {
     <#
@@ -38,7 +36,7 @@ function Install-OpenSpec {
     }
 
     try {
-        Write-UiInfo "安装 OpenSpec CLI..."
+        Write-UiPrimary "安装 OpenSpec CLI..."
 
         # 检查 Node.js 是否可用
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
@@ -54,7 +52,7 @@ function Install-OpenSpec {
         }
 
         # 全局安装 OpenSpec CLI
-        Write-UiInfo "正在通过 npm 全局安装 OpenSpec CLI..."
+        Write-UiPrimary "正在通过 npm 全局安装 OpenSpec CLI..."
         $installOut = Invoke-NpmGlobalInstall -PackageName "@fission-ai/openspec"
 
         if (-not $installOut.Success) {
@@ -62,7 +60,7 @@ function Install-OpenSpec {
         }
 
         # 刷新 PATH
-        Write-UiInfo "刷新环境变量..."
+        Write-UiPrimary "刷新环境变量..."
         Refresh-SessionPath
 
         # 验证安装
@@ -90,7 +88,7 @@ function Install-OpenSpec {
     }
     catch {
         $result.ErrorMessage = "安装 OpenSpec CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -137,7 +135,7 @@ function Verify-OpenSpec {
     }
     catch {
         $result.ErrorMessage = "验证 OpenSpec CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -159,7 +157,7 @@ function Update-OpenSpec {
     }
 
     try {
-        Write-UiInfo "更新 OpenSpec CLI..."
+        Write-UiPrimary "更新 OpenSpec CLI..."
 
         # 获取当前版本
         $oldVersion = Get-CommandVersion -Command "openspec"
@@ -174,7 +172,7 @@ function Update-OpenSpec {
             Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "OpenSpec CLI 已是最新版本 ($oldVersion)"
+            Write-UiDim "OpenSpec CLI 已是最新版本 ($oldVersion)"
             $result.UpdatedItems = @("noop::OpenSpec::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
@@ -188,7 +186,7 @@ function Update-OpenSpec {
         for ($attempt = 0; $attempt -lt 3; $attempt++) {
             if ($attempt -gt 0) {
                 $waitSec = [math]::Pow(2, $attempt)
-                Write-UiInfo "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -202,7 +200,7 @@ function Update-OpenSpec {
         }
 
         if (-not $installSuccess) {
-            Write-UiWarn "更新失败，尝试回退到 $oldVersion..."
+            Write-UiWarning "更新失败，尝试回退到 $oldVersion..."
             Invoke-ExternalCommand -Command "npm" `
                 -Arguments @("install", "-g", "@fission-ai/openspec@$oldVersion") `
                 -TimeoutSeconds 300 -SuppressOutput -RetryCount 0 | Out-Null
@@ -217,7 +215,7 @@ function Update-OpenSpec {
 
         if ($oldVersion -eq $newVersion) {
             $result.UpdatedItems = @("noop::OpenSpec::no-change")
-            Write-UiInfo "OpenSpec CLI 已是最新版本 ($newVersion)"
+            Write-UiDim "OpenSpec CLI 已是最新版本 ($newVersion)"
         } else {
             $result.UpdatedItems = @("npm::openspec-cli::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ OpenSpec CLI 已更新: $oldVersion -> $newVersion"
@@ -227,7 +225,7 @@ function Update-OpenSpec {
     }
     catch {
         $result.ErrorMessage = "更新 OpenSpec CLI 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

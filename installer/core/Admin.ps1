@@ -42,18 +42,18 @@ function Invoke-SelfElevated {
     )
 
     if (Test-IsAdministrator) {
-        Write-Host "当前已是管理员，无需提权" -ForegroundColor Gray
+        Write-UiDim "当前已是管理员，无需提权"
         return $true
     }
 
     # 空路径防御：irm|iex 管道场景下 $ScriptPath 为空，无法用 -File 提权
     if (-not $ScriptPath) {
-        Write-Host "✗ 无法提权：脚本路径不可用（管道执行模式不支持自动提权）" -ForegroundColor Red
-        Write-Host "  请以管理员身份重新运行此脚本" -ForegroundColor Yellow
+        Write-UiDanger "✗ 无法提权：脚本路径不可用（管道执行模式不支持自动提权）"
+        Write-UiWarning "  请以管理员身份重新运行此脚本"
         return $false
     }
 
-    Write-Host "此步骤需要管理员权限，正在请求提权..." -ForegroundColor Yellow
+    Write-UiWarning "此步骤需要管理员权限，正在请求提权..."
 
     # 构造传递给提权进程的参数（单字符串拼接，避免 PS 5.1 数组传参引号问题）
     # 注意：不使用 $args 作为变量名（与 PowerShell 自动变量冲突）
@@ -68,14 +68,14 @@ function Invoke-SelfElevated {
 
     try {
         Start-Process $shell -ArgumentList $elevationArgs -Verb RunAs -Wait:$false
-        Write-Host "已启动提权进程，当前窗口将退出" -ForegroundColor Cyan
+        Write-UiPrimary "已启动提权进程，当前窗口将退出"
         exit 0
     } catch {
         # 用户拒绝了 UAC 提示
         if ($_.Exception.Message -match "The operation was canceled by the user|用户取消") {
-            Write-Host "⚠ 用户取消了提权请求" -ForegroundColor Yellow
+            Write-UiWarning "⚠ 用户取消了提权请求"
         } else {
-            Write-Host "✗ 提权失败: $($_.Exception.Message)" -ForegroundColor Red
+            Write-UiDanger "✗ 提权失败: $($_.Exception.Message)"
         }
         return $false
     }
@@ -109,8 +109,8 @@ function Assert-StepPrivilege {
     }
 
     if ($RequiresAdmin) {
-        Write-Host "⚠ 步骤 [$StepName] 需要管理员权限" -ForegroundColor Yellow
-        Write-Host "  是否以管理员身份重新启动？[Y/n] " -NoNewline -ForegroundColor Cyan
+        Write-UiWarning "⚠ 步骤 [$StepName] 需要管理员权限"
+        Write-UiPrimary "  是否以管理员身份重新启动？[Y/n] " -NoNewline
 
         $key = Read-Host
         if ($key -match "^[Yy]?$") {
@@ -118,16 +118,16 @@ function Assert-StepPrivilege {
             $elevated = Invoke-SelfElevated -ScriptPath $ScriptPath
             # Invoke-SelfElevated 成功时已 exit 0；走到这里说明提权失败
             if (-not $elevated) {
-                Write-Host "✗ 无法获取管理员权限，步骤 [$StepName] 已跳过" -ForegroundColor Red
+                Write-UiDanger "✗ 无法获取管理员权限，步骤 [$StepName] 已跳过"
                 return $false
             }
         } else {
-            Write-Host "⚠ 用户跳过步骤 [$StepName]（需要管理员权限）" -ForegroundColor Yellow
+            Write-UiWarning "⚠ 用户跳过步骤 [$StepName]（需要管理员权限）"
             return $false
         }
     } else {
         # 软性建议：给出提示但允许继续
-        Write-Host "ℹ 步骤 [$StepName] 建议以管理员身份运行以获得最佳效果" -ForegroundColor Gray
+        Write-UiDim "ℹ 步骤 [$StepName] 建议以管理员身份运行以获得最佳效果"
         return $true
     }
 

@@ -7,9 +7,7 @@
 # 严格模式
 Set-StrictMode -Version Latest
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
+# 依赖: Ui.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
 # ============================================================
 # 模板定义
@@ -150,7 +148,7 @@ function Install-ClaudeMd {
     $result = @{ Success = $false; ErrorMessage = ""; Data = @{} }
 
     try {
-        Write-UiInfo "配置用户级 CLAUDE.md..."
+        Write-UiPrimary "配置用户级 CLAUDE.md..."
 
         $claudeMdPath = Get-ClaudeMdPath
 
@@ -161,7 +159,7 @@ function Install-ClaudeMd {
             Write-UiInfo "已创建目录: $claudeMdDir"
         }
 
-        Write-UiInfo "写入 CLAUDE.md 配置..."
+        Write-UiPrimary "写入 CLAUDE.md 配置..."
         $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
 
         if (-not $writeResult) {
@@ -183,7 +181,7 @@ function Install-ClaudeMd {
     }
     catch {
         $result.ErrorMessage = $_.Exception.Message
-        Write-UiError "配置 CLAUDE.md 失败: $($result.ErrorMessage)"
+        Write-UiDanger "配置 CLAUDE.md 失败: $($result.ErrorMessage)"
     }
 
     return $result
@@ -243,7 +241,7 @@ function Verify-ClaudeMd {
     }
     catch {
         $result.ErrorMessage = $_.Exception.Message
-        Write-UiError "验证 CLAUDE.md 配置失败: $($result.ErrorMessage)"
+        Write-UiDanger "验证 CLAUDE.md 配置失败: $($result.ErrorMessage)"
     }
 
     return $result
@@ -298,7 +296,7 @@ function Update-ClaudeMd {
         # 结果
         if ($updatedItems.Count -eq 0) {
             $result.UpdatedItems = @("noop::ClaudeMd::no-change")
-            Write-UiInfo "ClaudeMd 已是最新，无需更新"
+            Write-UiDim "ClaudeMd 已是最新，无需更新"
         } else {
             $result.UpdatedItems = @($updatedItems)
             Write-UiSuccess "ClaudeMd 已更新 ($($updatedItems.Count) 项变更)"
@@ -308,7 +306,7 @@ function Update-ClaudeMd {
     }
     catch {
         $result.ErrorMessage = "更新 ClaudeMd 失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

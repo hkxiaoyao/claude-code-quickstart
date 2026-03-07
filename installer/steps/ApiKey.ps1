@@ -8,10 +8,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# 导入依赖模块
-. "$PSScriptRoot\..\core\Ui.ps1"
-. "$PSScriptRoot\..\core\Profile.ps1"
-. "$PSScriptRoot\..\core\Provider.ps1"
+# 依赖: Ui.ps1, Profile.ps1, Provider.ps1（由入口脚本 dot-source 加载）
 
 function Test-ApiKeyInstalled {
     <#
@@ -56,7 +53,7 @@ function Install-ApiKey {
     }
 
     try {
-        Write-UiInfo "配置第三方 AI 供应商..."
+        Write-UiPrimary "配置第三方 AI 供应商..."
 
         # 委托 Provider.ps1 的共用添加函数（安装模式: 强制激活）
         $addResult = Add-Provider -Activate
@@ -91,7 +88,7 @@ function Install-ApiKey {
 
             Write-UiSuccess "~/.claude.json 配置已更新（hasCompletedOnboarding: true）"
         } catch {
-            Write-UiWarn "更新 ~/.claude.json 失败: $($_.Exception.Message)"
+            Write-UiWarning "更新 ~/.claude.json 失败: $($_.Exception.Message)"
         }
 
         # 一次性清理旧版 ccp 注入（迁移旧用户）
@@ -108,7 +105,7 @@ function Install-ApiKey {
     }
     catch {
         $result.ErrorMessage = "配置供应商失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result
@@ -160,7 +157,7 @@ function Verify-ApiKey {
                 }
             }
             if ($missingModels.Count -gt 0) {
-                Write-UiWarn "模型映射不完整，缺少: $($missingModels -join ', ')"
+                Write-UiWarning "模型映射不完整，缺少: $($missingModels -join ', ')"
             }
         }
 
@@ -169,7 +166,7 @@ function Verify-ApiKey {
         foreach ($envVar in $sensitiveEnvVars) {
             $envValue = [Environment]::GetEnvironmentVariable($envVar, "User")
             if (-not [string]::IsNullOrWhiteSpace($envValue)) {
-                Write-UiWarn "检测到用户级环境变量 $envVar，建议清理（API Key 应仅存于 settings.json）"
+                Write-UiWarning "检测到用户级环境变量 $envVar，建议清理（API Key 应仅存于 settings.json）"
             }
         }
 
@@ -178,7 +175,7 @@ function Verify-ApiKey {
     }
     catch {
         $result.ErrorMessage = "验证供应商配置失败: $($_.Exception.Message)"
-        Write-UiError $result.ErrorMessage
+        Write-UiDanger $result.ErrorMessage
     }
 
     return $result

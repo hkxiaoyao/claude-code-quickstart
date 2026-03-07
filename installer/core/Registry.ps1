@@ -6,16 +6,26 @@
 
 Set-StrictMode -Version Latest
 
+# ─── 注册表缓存（消除重复计算，一次构建多处复用） ──────────────────────────
+$script:_registryCache = $null
+$script:_registryIndex = $null
+
 function Get-StepRegistry {
     <#
     .SYNOPSIS
     返回步骤注册表数组（含 Order 字段用于拓扑排序 tie-break）
+    .DESCRIPTION
+    内部使用缓存，首次调用构建数组，后续调用直接返回缓存副本。
     .RETURNS
     hashtable[] - 每条记录包含步骤的完整元数据
     #>
     param()
 
-    return @(
+    if ($null -ne $script:_registryCache) {
+        return $script:_registryCache
+    }
+
+    $script:_registryCache = @(
         @{
             StepId          = "NodeFnm"
             StepName        = "Node.js (fnm)"
@@ -212,6 +222,39 @@ function Get-StepRegistry {
             Group           = "Advanced"
         }
     )
+
+    # 构建 StepId → StepConfig 索引（O(1) 查找）
+    $script:_registryIndex = @{}
+    foreach ($step in $script:_registryCache) {
+        $script:_registryIndex[$step.StepId] = $step
+    }
+
+    return $script:_registryCache
+}
+
+function Get-StepConfigById {
+    <#
+    .SYNOPSIS
+    按 StepId 查找步骤配置（O(1) 索引查找，替代 Where-Object 管道过滤）
+    .PARAMETER StepId
+    步骤唯一标识
+    .RETURNS
+    hashtable - 步骤配置，未找到返回 $null
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$StepId
+    )
+
+    # 确保索引已构建
+    if ($null -eq $script:_registryIndex) {
+        $null = Get-StepRegistry
+    }
+
+    if ($script:_registryIndex.ContainsKey($StepId)) {
+        return $script:_registryIndex[$StepId]
+    }
+    return $null
 }
 
 function Get-StepGroups {
