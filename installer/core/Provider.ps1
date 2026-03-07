@@ -365,6 +365,56 @@ function Get-ActiveProvider {
     return $null
 }
 
+# ─── Dashboard Data ────────────────────────────────────────────────────────────
+
+function Get-ProviderDisplayData {
+    <#
+    .SYNOPSIS
+    聚合供应商展示数据（合并 Profiles + ActiveKey，避免 Dashboard 循环中重复调用）
+    .RETURNS
+    @{ Profiles = hashtable[]; ActiveKey = string; HasProviders = bool }
+    #>
+
+    # HC-13: @() 包裹
+    $profiles = @(Get-ProviderProfiles)
+
+    # 内联 active key 查找（避免 Get-ActiveProvider 重复扫描 providers 目录）
+    $settings = Read-SettingsJson
+    $activeKey = ""
+    $baseUrl = ""
+    if ($settings.ContainsKey("env") -and $settings["env"] -and $settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
+        $baseUrl = [string]$settings["env"]["ANTHROPIC_BASE_URL"]
+    }
+    if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
+        foreach ($p in $profiles) {
+            if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and $baseUrl -like "$($p.BaseUrl)*") {
+                $activeKey = [string]$p.Key
+                break
+            }
+        }
+    }
+
+    # HC-13: @() 包裹
+    $displayProfiles = @($profiles | ForEach-Object {
+        $isActive = (-not [string]::IsNullOrWhiteSpace($activeKey)) -and ($_.Key -eq $activeKey)
+        @{
+            Key          = $_.Key
+            Name         = $_.Name
+            BaseUrl      = $_.BaseUrl
+            AuthToken    = $_.AuthToken
+            ProfilePath  = $_.ProfilePath
+            IsActive     = $isActive
+            MaskedApiKey = Get-MaskedApiKey $_.AuthToken
+        }
+    })
+
+    return @{
+        Profiles     = $displayProfiles
+        ActiveKey    = $activeKey
+        HasProviders = ($displayProfiles.Count -gt 0)
+    }
+}
+
 function Show-ProviderStatus {
     <#
     .SYNOPSIS
@@ -1007,100 +1057,268 @@ function Switch-Provider {
     Write-UiSuccess "已切换到: $providerName"
 }
 
-# ─── 交互菜单 ──────────────────────────────────────────────────────────────────
+# ─── Dashboard ─────────────────────────────────────────────────────────────────
 
-function Show-ProviderManageMenu {
+function Render-ProviderTable {
     <#
     .SYNOPSIS
-    供应商管理主菜单（while 循环，Esc 返回上级）
+    渲染供应商 Power Table（表头 + 数据行，含选中标记和颜色区分）
+    #>
+    param(
+        [Parameter(Mandatory)] [array]$Profiles,
+        [int]$SelectedIndex = 0
+    )
+
+    $colWidths = @(15, 35, 15, 10)
+
+    # 表头
+    $headerLine = "  " +
+        (Format-DisplayPad "供应商" $colWidths[0]) + " " +
+        (Format-DisplayPad "Base URL" $colWidths[1]) + " " +
+        (Format-DisplayPad "API Key" $colWidths[2]) + " " +
+        (Format-DisplayPad "状态" $colWidths[3])
+    Write-Host $headerLine -ForegroundColor White
+
+    $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
+    Write-Host ("  " + [string]::new("-", $sepWidth)) -ForegroundColor Gray
+
+    for ($i = 0; $i -lt $Profiles.Count; $i++) {
+        $p = $Profiles[$i]
+        $isSelected = $i -eq $SelectedIndex
+
+        $marker = if ($isSelected) { "►" } else { " " }
+        $color = if ($isSelected) { "Cyan" }
+                 elseif ($p.IsActive) { "Green" }
+                 else { "Gray" }
+
+        # URL 截断
+        $urlDisplay = [string]$p.BaseUrl
+        if ($urlDisplay.Length -gt $colWidths[1]) {
+            $urlDisplay = $urlDisplay.Substring(0, $colWidths[1] - 3) + "..."
+        }
+
+        # Name 截断（CJK 感知）
+        $nameDisplay = [string]$p.Name
+        if ((Get-StringDisplayWidth $nameDisplay) -gt $colWidths[0]) {
+            while ((Get-StringDisplayWidth ($nameDisplay + "...")) -gt $colWidths[0] -and $nameDisplay.Length -gt 0) {
+                $nameDisplay = $nameDisplay.Substring(0, $nameDisplay.Length - 1)
+            }
+            $nameDisplay = $nameDisplay + "..."
+        }
+
+        $statusText = if ($p.IsActive) { "Active" } else { "Inactive" }
+
+        $line = "$marker " +
+            (Format-DisplayPad $nameDisplay $colWidths[0]) + " " +
+            (Format-DisplayPad $urlDisplay $colWidths[1]) + " " +
+            (Format-DisplayPad ([string]$p.MaskedApiKey) $colWidths[2]) + " " +
+            (Format-DisplayPad $statusText $colWidths[3])
+        Write-Host $line -ForegroundColor $color
+    }
+}
+
+function Render-ActionBar {
+    <#
+    .SYNOPSIS
+    渲染底部热键提示栏（热键高亮显示）
+    #>
+    param([bool]$HasProviders)
+
+    Write-Host ""
+    if ($HasProviders) {
+        Write-Host -NoNewline " [" -ForegroundColor Gray
+        Write-Host -NoNewline "↑↓" -ForegroundColor White
+        Write-Host -NoNewline "] 移动  [" -ForegroundColor Gray
+        Write-Host -NoNewline "Enter" -ForegroundColor White
+        Write-Host -NoNewline "] 切换活跃  [" -ForegroundColor Gray
+        Write-Host -NoNewline "A" -ForegroundColor White
+        Write-Host -NoNewline "] 添加  [" -ForegroundColor Gray
+        Write-Host -NoNewline "E" -ForegroundColor White
+        Write-Host -NoNewline "] 修改  [" -ForegroundColor Gray
+        Write-Host -NoNewline "D" -ForegroundColor White
+        Write-Host -NoNewline "] 删除  [" -ForegroundColor Gray
+        Write-Host -NoNewline "Esc" -ForegroundColor White
+        Write-Host "] 返回" -ForegroundColor Gray
+    } else {
+        Write-Host -NoNewline " [" -ForegroundColor Gray
+        Write-Host -NoNewline "A" -ForegroundColor White
+        Write-Host -NoNewline "] 添加  [" -ForegroundColor Gray
+        Write-Host -NoNewline "Esc" -ForegroundColor White
+        Write-Host "] 返回" -ForegroundColor Gray
+    }
+}
+
+function Show-ProviderDashboardFallback {
+    <#
+    .SYNOPSIS
+    供应商 Dashboard 降级模式（非 ANSI 终端：数字输入）
+    #>
+
+    while ($true) {
+        $data = Get-ProviderDisplayData
+        # HC-13: @() 包裹
+        $profiles = @($data.Profiles)
+
+        Write-Host ""
+        Write-UiInfo "供应商管理"
+        Write-Host ""
+
+        if ($profiles.Count -eq 0) {
+            Write-UiWarn "暂无供应商配置"
+            Write-Host ""
+            Write-UiInfo "操作: A=添加供应商  Q=返回上级"
+        } else {
+            for ($i = 0; $i -lt $profiles.Count; $i++) {
+                $p = $profiles[$i]
+                $statusTag = if ($p.IsActive) { "Active" } else { "Inactive" }
+                Write-Host ("  [{0}] {1} - {2} ({3})" -f ($i + 1), $p.Name, $p.BaseUrl, $statusTag)
+            }
+            Write-Host ""
+            Write-UiInfo "操作: [编号]=切换活跃  A=添加  E<编号>=修改  D<编号>=删除  Q=返回"
+        }
+
+        $userInput = Read-Host "请输入"
+        if ([string]::IsNullOrWhiteSpace($userInput)) { continue }
+        $userInput = $userInput.Trim()
+
+        if ($userInput -match '^[Qq]$') { return }
+        if ($userInput -match '^[Aa]$') { Add-Provider; continue }
+
+        if ($userInput -match '^\d+$') {
+            $idx = [int]$userInput - 1
+            if ($idx -ge 0 -and $idx -lt $profiles.Count) {
+                Switch-Provider -Key $profiles[$idx].Key
+            } else {
+                Write-UiError "编号超出范围"
+            }
+            continue
+        }
+        if ($userInput -match '^[Ee]\s*(\d+)$') {
+            $idx = [int]$Matches[1] - 1
+            if ($idx -ge 0 -and $idx -lt $profiles.Count) {
+                Edit-Provider -Key $profiles[$idx].Key
+            } else {
+                Write-UiError "编号超出范围"
+            }
+            continue
+        }
+        if ($userInput -match '^[Dd]\s*(\d+)$') {
+            $idx = [int]$Matches[1] - 1
+            if ($idx -ge 0 -and $idx -lt $profiles.Count) {
+                Remove-Provider -Key $profiles[$idx].Key
+            } else {
+                Write-UiError "编号超出范围"
+            }
+            continue
+        }
+
+        Write-UiError "无效输入"
+    }
+}
+
+function Show-ProviderDashboard {
+    <#
+    .SYNOPSIS
+    供应商管理 Dashboard（单屏 Power Table，替代三级菜单）
     入口处自动调用 Sync-ProviderFromSettings
     #>
 
-    # 进入供应商管理时自动同步
     try {
         Sync-ProviderFromSettings
     } catch {
         Write-UiWarn "供应商自动同步失败: $($_.Exception.Message)"
     }
 
-    while ($true) {
-        # Header: 显示当前活跃供应商
-        $active = Get-ActiveProvider
-        Write-Host ""
-        if ($active) {
-            Write-UiInfo "当前活跃: $($active.Name) ($($active.BaseUrl))"
-        } else {
-            Write-UiWarn "当前无活跃供应商"
-        }
-
-        $options = @(
-            "查看供应商列表  - 显示所有已配置的供应商状态"
-            "切换供应商      - 切换当前活跃的 AI 供应商"
-            "添加供应商      - 配置新的 AI 供应商连接"
-            "修改供应商      - 修改已有供应商的 Key/URL"
-            "删除供应商      - 删除已配置的供应商"
-        )
-        $choice = Show-SingleSelectMenu -Title "供应商管理" -Options $options -DefaultIndex 0
-
-        if ($choice -eq -1) { return }
-
-        switch ($choice) {
-            0 {
-                # 查看供应商列表
-                Show-ProviderStatus
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            1 {
-                # 切换供应商
-                Switch-Provider
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            2 {
-                # 添加供应商
-                Add-Provider
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            3 {
-                # 修改供应商 → 先选择 Profile
-                # HC-13: @() 包裹
-                $profiles = @(Get-ProviderProfiles)
-                if ($profiles.Count -eq 0) {
-                    Write-UiWarn "没有可修改的供应商"
-                } else {
-                    $editOptions = @($profiles | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
-                    $editIdx = Show-SingleSelectMenu -Title "选择要修改的供应商：" -Options $editOptions
-                    if ($editIdx -ge 0 -and $editIdx -lt $profiles.Count) {
-                        Edit-Provider -Key $profiles[$editIdx].Key
-                    }
-                }
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            4 {
-                # 删除供应商 → 先选择 Profile
-                # HC-13: @() 包裹
-                $profiles = @(Get-ProviderProfiles)
-                if ($profiles.Count -eq 0) {
-                    Write-UiWarn "没有可删除的供应商"
-                } else {
-                    $delOptions = @($profiles | ForEach-Object { "$($_.Name) - $($_.BaseUrl)" })
-                    $delIdx = Show-SingleSelectMenu -Title "选择要删除的供应商：" -Options $delOptions
-                    if ($delIdx -ge 0 -and $delIdx -lt $profiles.Count) {
-                        Remove-Provider -Key $profiles[$delIdx].Key
-                    }
-                }
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-        }
+    # ANSI 降级（防御性检查，避免 $script:SupportsAnsi 未定义时严格模式报错）
+    $supportsAnsi = $false
+    if (Get-Variable -Scope Script -Name SupportsAnsi -ErrorAction SilentlyContinue) {
+        $supportsAnsi = [bool]$script:SupportsAnsi
     }
+    if (-not $supportsAnsi) {
+        Show-ProviderDashboardFallback
+        return
+    }
+
+    $selectedIndex = 0
+
+    try { [Console]::CursorVisible = $false } catch { }
+    try {
+        while ($true) {
+            $data = Get-ProviderDisplayData
+            # 嵌套菜单可能恢复光标可见，每帧确保隐藏
+            try { [Console]::CursorVisible = $false } catch { }
+            # HC-13: @() 包裹
+            $profiles = @($data.Profiles)
+
+            # Clamp selectedIndex
+            if ($profiles.Count -eq 0) {
+                $selectedIndex = 0
+            } else {
+                if ($selectedIndex -ge $profiles.Count) { $selectedIndex = $profiles.Count - 1 }
+                if ($selectedIndex -lt 0) { $selectedIndex = 0 }
+            }
+
+            # 清屏 + 光标归位
+            Write-Host "`e[2J`e[H" -NoNewline
+
+            Show-AsciiBanner "供应商管理"
+
+            if (-not $data.HasProviders) {
+                Write-UiWarn "  暂无供应商配置"
+                Write-Host ""
+                Write-UiInfo "  按 [A] 添加第一个供应商"
+            } else {
+                Render-ProviderTable -Profiles $profiles -SelectedIndex $selectedIndex
+            }
+
+            Render-ActionBar -HasProviders $data.HasProviders
+
+            $key = [Console]::ReadKey($true)
+            switch ($key.Key) {
+                'UpArrow' {
+                    if ($profiles.Count -gt 0) {
+                        $selectedIndex = ($selectedIndex - 1 + $profiles.Count) % $profiles.Count
+                    }
+                }
+                'DownArrow' {
+                    if ($profiles.Count -gt 0) {
+                        $selectedIndex = ($selectedIndex + 1) % $profiles.Count
+                    }
+                }
+                'Enter' {
+                    if ($profiles.Count -gt 0) {
+                        Switch-Provider -Key $profiles[$selectedIndex].Key
+                    }
+                }
+                'A' {
+                    Add-Provider
+                }
+                'E' {
+                    if ($profiles.Count -gt 0) {
+                        Edit-Provider -Key $profiles[$selectedIndex].Key
+                    }
+                }
+                'D' {
+                    if ($profiles.Count -gt 0) {
+                        Remove-Provider -Key $profiles[$selectedIndex].Key
+                    }
+                }
+                'Escape' {
+                    return
+                }
+            }
+        }
+    } finally {
+        try { [Console]::CursorVisible = $true } catch { }
+    }
+}
+
+function Show-ProviderManageMenu {
+    <#
+    .SYNOPSIS
+    供应商管理兼容入口（过渡期，委托到 Dashboard）
+    #>
+    Show-ProviderDashboard
 }
 
 # 注意：此脚本通过 dot-source 加载，不需要 Export-ModuleMember

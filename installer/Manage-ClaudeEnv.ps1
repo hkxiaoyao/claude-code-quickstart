@@ -704,7 +704,7 @@ function Main {
                     }
                     else {
                         # 交互式供应商管理
-                        Show-ProviderManageMenu
+                        Show-ProviderDashboard
                     }
                 }
                 "Mcp" {
@@ -735,7 +735,7 @@ function Main {
                 }
                 1 {
                     # 供应商管理
-                    Show-ProviderManageMenu
+                    Show-ProviderDashboard
                 }
                 2 {
                     # MCP 管理
