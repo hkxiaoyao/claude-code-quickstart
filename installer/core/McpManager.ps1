@@ -494,10 +494,10 @@ function Read-McpMeta {
         return Invoke-McpCorruptionRecovery -FilePath $metaPath
     }
 
-    # Schema 校验：schemaVersion 必须是正整数
+    # Schema 校验：schemaVersion 必须是正整数（ConvertFrom-Json 可能返回 [int] 或 [long]）
     if (-not $meta -or
         -not $meta.ContainsKey("schemaVersion") -or
-        $meta["schemaVersion"] -isnot [int] -or
+        ($meta["schemaVersion"] -isnot [int] -and $meta["schemaVersion"] -isnot [long]) -or
         $meta["schemaVersion"] -lt 1) {
         return Invoke-McpCorruptionRecovery -FilePath $metaPath
     }
