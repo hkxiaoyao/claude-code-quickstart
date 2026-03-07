@@ -250,10 +250,8 @@ function Render-McpToolChain {
         }
 
         # 添加 Fallback（如果有且前面的工具都不可用）
-        if ($tools.Count -eq 0 -and $chain.Fallback) {
-            [void]$tools.Add("$($chain.Fallback)（兜底）")
-        } elseif ($chain.Fallback -and $tools.Count -gt 0) {
-            [void]$tools.Add("$($chain.Fallback)（兜底）")
+        if ($chain -is [hashtable] -and $chain.ContainsKey('Fallback') -and $chain['Fallback']) {
+            [void]$tools.Add("$($chain['Fallback'])（兜底）")
         }
 
         if ($tools.Count -gt 0) {

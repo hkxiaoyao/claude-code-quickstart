@@ -1476,7 +1476,7 @@ function Install-Mcp {
         try {
             $successfulServerIds = @($activeServers | Where-Object { $serverStatus[$_].State -ne "失败" })
             if ($successfulServerIds.Count -gt 0) {
-                Invoke-WithMcpLock {
+                $null = Invoke-WithMcpLock {
                     $meta = Read-McpMeta
                     foreach ($sid in $successfulServerIds) {
                         $cred = @{}
@@ -1851,7 +1851,7 @@ function Update-Mcp {
         }
 
         # R-09: Mutex 保护配置文件读-改-写（防止与 Disable/Enable/Remove 并发冲突）
-        Invoke-WithMcpLock {
+        $null = Invoke-WithMcpLock {
 
         $claudeJson = Get-Content -Path $claudeJsonPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
         if (-not $claudeJson) { $claudeJson = @{} }
