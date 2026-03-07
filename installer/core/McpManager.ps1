@@ -911,10 +911,11 @@ function Disable-McpServer {
         if (Test-Path $settingsPath) {
             $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
             if ($settings -and $settings.ContainsKey("permissions") -and $settings["permissions"].ContainsKey("allow")) {
-                $escapedId = [regex]::Escape($ServerId)
-                $pattern = "^mcp__${escapedId}__"
-                $removedPermissions = @($settings["permissions"]["allow"] | Where-Object { $_ -cmatch $pattern })
-                $settings["permissions"]["allow"] = @($settings["permissions"]["allow"] | Where-Object { $_ -cnotmatch $pattern })
+                $mcpPerm = "mcp__${ServerId}"
+                if ($settings["permissions"]["allow"] -ccontains $mcpPerm) {
+                    $removedPermissions = @($mcpPerm)
+                }
+                $settings["permissions"]["allow"] = @($settings["permissions"]["allow"] | Where-Object { $_ -cne $mcpPerm })
                 # 原子写入 settings.json
                 $settingsJson = $settings | ConvertTo-Json -Depth 10
                 $null = Write-FileAtomically -FilePath $settingsPath -Content $settingsJson
@@ -1065,9 +1066,10 @@ function Enable-McpServer {
                         }
                     }
                 } else {
-                    # 无保存的权限记录，确保基础 Mcp 权限存在
-                    if ($settings["permissions"]["allow"] -notcontains "Mcp") {
-                        $settings["permissions"]["allow"] += "Mcp"
+                    # 无保存的权限记录，确保 Server 级权限存在
+                    $mcpPerm = "mcp__${ServerId}"
+                    if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+                        $settings["permissions"]["allow"] += $mcpPerm
                         $permChanged = $true
                     }
                 }
@@ -1179,9 +1181,8 @@ function Remove-McpServer {
                 $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
                 if ($settings -and $settings.ContainsKey("permissions") -and
                     $settings["permissions"].ContainsKey("allow")) {
-                    $escapedId = [regex]::Escape($ServerId)
-                    $pattern = "^mcp__${escapedId}__"
-                    $settings["permissions"]["allow"] = @($settings["permissions"]["allow"] | Where-Object { $_ -cnotmatch $pattern })
+                    $mcpPerm = "mcp__${ServerId}"
+                    $settings["permissions"]["allow"] = @($settings["permissions"]["allow"] | Where-Object { $_ -cne $mcpPerm })
                     $settingsJson = $settings | ConvertTo-Json -Depth 10
                     $null = Write-FileAtomically -FilePath $settingsPath -Content $settingsJson
                 }

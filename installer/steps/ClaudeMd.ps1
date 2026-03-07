@@ -17,7 +17,7 @@ Set-StrictMode -Version Latest
 
 # CLAUDE.md 主文件模板（~80 行，确保在 token 截断限制内完整可见）
 $script:ClaudeMdTemplate = @'
-# Claude Code 增强配置 (CCG Enhanced)
+# Claude Code 增强配置
 
 ## 一、核心原则
 

@@ -1413,10 +1413,12 @@ function Install-Mcp {
             $settings["permissions"]["allow"] = @($settings["permissions"]["allow"])
         }
 
-        $mcpPermissions = @("Read", "Write", "Bash", "Glob", "Grep")
-        foreach ($permission in $mcpPermissions) {
-            if ($settings["permissions"]["allow"] -notcontains $permission) {
-                $settings["permissions"]["allow"] += $permission
+        # 为每个成功安装的 MCP Server 写入 mcp__<serverId> 权限（Server 级前缀匹配）
+        foreach ($serverId in @($activeServers)) {
+            if ($serverStatus[$serverId].State -eq "失败") { continue }
+            $mcpPerm = "mcp__${serverId}"
+            if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+                $settings["permissions"]["allow"] += $mcpPerm
             }
         }
 
@@ -1682,10 +1684,11 @@ function Verify-Mcp {
             -not $settings["permissions"]["allow"]) {
             throw "缺少权限配置"
         }
-        $requiredPermissions = @("Read", "Write")
-        foreach ($permission in $requiredPermissions) {
-            if ($settings["permissions"]["allow"] -notcontains $permission) {
-                Write-UiWarn "⚠ 缺少权限: $permission"
+        # 检查已安装的 MCP Server 是否有对应的 mcp__ 权限
+        foreach ($serverId in $configuredServers) {
+            $mcpPerm = "mcp__${serverId}"
+            if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+                Write-UiWarn "⚠ 缺少 MCP 权限: $mcpPerm"
             }
         }
 
@@ -1975,12 +1978,13 @@ function Update-Mcp {
                 if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
                 if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
 
-                $mcpPermissions = @("Read", "Write", "Bash", "Glob", "Grep")
+                # 为已安装的 MCP Server 补齐 mcp__<serverId> 权限（存量自愈）
                 $permChanged = $false
-                foreach ($perm in $mcpPermissions) {
-                    if ($settings["permissions"]["allow"] -notcontains $perm) {
-                        $settings["permissions"]["allow"] += $perm
-                        [void]$updatedItems.Add("config::permissions.allow.${perm}::added")
+                foreach ($serverId in @($claudeJson["mcpServers"].Keys)) {
+                    $mcpPerm = "mcp__${serverId}"
+                    if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+                        $settings["permissions"]["allow"] += $mcpPerm
+                        [void]$updatedItems.Add("config::permissions.allow.${mcpPerm}::added")
                         $permChanged = $true
                     }
                 }
