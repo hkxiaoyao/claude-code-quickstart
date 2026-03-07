@@ -137,10 +137,7 @@ function Install-ClaudeConfig {
             $settings["language"] = "简体中文"
         }
 
-        # 模型设置（仅缺失时填充）
-        if (-not $settings.ContainsKey("model") -or [string]::IsNullOrWhiteSpace([string]$settings["model"])) {
-            $settings["model"] = "sonnet"
-        }
+        # 模型设置：不自动填充，由用户自行选择
 
         # 权限配置：保留用户已有项，补齐基础权限，保留 deny
         if (-not $settings.ContainsKey("permissions") -or -not $settings["permissions"]) {
@@ -371,14 +368,10 @@ function Update-ClaudeConfig {
         }
         $settings["permissions"]["allow"] = @($allowList)
 
-        # language / model / attribution：仅补缺失
+        # language / attribution：仅补缺失（model 不自动填充，由用户自行选择）
         if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
             $settings["language"] = "简体中文"
             [void]$updatedItems.Add("config::language::added")
-        }
-        if (-not $settings.ContainsKey("model") -or [string]::IsNullOrWhiteSpace([string]$settings["model"])) {
-            $settings["model"] = "sonnet"
-            [void]$updatedItems.Add("config::model::added")
         }
         if (-not $settings.ContainsKey("attribution") -or -not $settings["attribution"]) {
             $settings["attribution"] = @{ "commit" = ""; "pr" = "" }

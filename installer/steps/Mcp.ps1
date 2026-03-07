@@ -1413,28 +1413,16 @@ function Install-Mcp {
             $settings["permissions"]["allow"] = @($settings["permissions"]["allow"])
         }
 
-        $mcpPermissions = @("Mcp", "Read", "Write", "Bash", "Glob", "Grep")
+        $mcpPermissions = @("Read", "Write", "Bash", "Glob", "Grep")
         foreach ($permission in $mcpPermissions) {
             if ($settings["permissions"]["allow"] -notcontains $permission) {
                 $settings["permissions"]["allow"] += $permission
             }
         }
 
-        foreach ($serverId in @($activeServers)) {
-            $server = $script:McpServers[$serverId]
-            if ($server.CredentialType -eq "single-key" -and $settingsCredentials.ContainsKey($serverId)) {
-                $apiKeyName = [string]$server.ApiKeyName
-                if ($settingsCredentials[$serverId].ContainsKey($apiKeyName)) {
-                    if (-not $settings.ContainsKey("env")) {
-                        $settings["env"] = @{}
-                    }
-                    $settings["env"][$apiKeyName] = [string]$settingsCredentials[$serverId][$apiKeyName]
-                }
-            }
-        }
-
-        # 写入 ~/.claude/settings.json（权限和 env）— 原子写入
-        Write-UiInfo "写入 settings.json 配置（权限和环境变量）..."
+        # 写入 ~/.claude/settings.json（权限）— 原子写入
+        # 注意：MCP 凭据已由 New-McpSettingsEntry 写入 .claude.json 的 server env，不写入 settings.json
+        Write-UiInfo "写入 settings.json 配置（权限）..."
         $settingsJson = $settings | ConvertTo-Json -Depth 10
         $writeOk = Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
         if (-not $writeOk) {
@@ -1987,7 +1975,7 @@ function Update-Mcp {
                 if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
                 if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
 
-                $mcpPermissions = @("Mcp", "Read", "Write", "Bash", "Glob", "Grep")
+                $mcpPermissions = @("Read", "Write", "Bash", "Glob", "Grep")
                 $permChanged = $false
                 foreach ($perm in $mcpPermissions) {
                     if ($settings["permissions"]["allow"] -notcontains $perm) {

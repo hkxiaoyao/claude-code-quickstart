@@ -272,11 +272,10 @@ Install-ApiKey($state)
 | 字段 | 默认值 | 写入策略 |
 |------|--------|----------|
 | `language` | `简体中文` | 仅补缺失 |
-| `model` | `sonnet` | 仅补缺失 |
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
-**ClaudeConfig 不触碰的字段**：`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（CcgWorkflow）
+**ClaudeConfig 不触碰的字段**：`model`（用户自行选择）、`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`modelMapping`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`（CcgWorkflow）
 
 > **注意**：statusLine 配置完全由 Ccline 步骤负责，ClaudeConfig 不触碰 statusLine 字段。
 
