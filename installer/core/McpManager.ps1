@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 . "$PSScriptRoot\Ui.ps1"
 . "$PSScriptRoot\Process.ps1"
 . "$PSScriptRoot\Profile.ps1"
+. "$PSScriptRoot\Net.ps1"
 
 # ─── 常量 ─────────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,200 @@ $script:McpRulesCategories = @{
         Tips = @(
             "语义理解用 ace-tool，精确匹配用 Grep"
         )
+    }
+}
+
+# ─── MCP 注册模板（从 steps/Mcp.ps1 迁移） ───────────────────────────────────
+
+# 默认运行时依赖
+$script:DefaultMcpRuntimeDeps = @(
+    @{
+        Name = "Node.js LTS"
+        Command = "node"
+        MinVersion = "20.0.0"
+        WingetId = "OpenJS.NodeJS.LTS"
+        ManualUrl = "https://nodejs.org/"
+    }
+    @{
+        Name = "npm"
+        Command = "npm"
+        MinVersion = "10.0.0"
+        WingetId = "OpenJS.NodeJS.LTS"
+        ManualUrl = "https://nodejs.org/"
+    }
+)
+
+# MCP Server 配置定义
+$script:McpServers = [ordered]@{
+    "context7" = @{
+        Name = "Context7"
+        Description = "库文档和代码示例检索，支持最新的开发框架文档"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "@upstash/context7-mcp")
+        CredentialType = "none"
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Documentation"
+        Priority = 1
+        Recommended = $true
+    }
+    "deepwiki" = @{
+        Name = "DeepWiki"
+        Description = "GitHub 仓库 AI 文档生成和问答"
+        McpType = "http"
+        Url = "https://mcp.deepwiki.com/mcp"
+        CredentialType = "none"
+        Category = "Documentation"
+        Priority = 2
+        Recommended = $true
+    }
+    "tavily" = @{
+        Name = "Tavily"
+        Description = "AI 驱动的实时网络搜索、抓取和研究"
+        McpType = "http"
+        UrlTemplate = "https://mcp.tavily.com/mcp/?tavilyApiKey={TAVILY_API_KEY}"
+        CredentialType = "url-embedded"
+        Credentials = @(
+            @{
+                Name = "TAVILY_API_KEY"
+                Label = "Tavily API Key"
+                Secret = $true
+                Required = $true
+                Url = "https://app.tavily.com/home"
+            }
+        )
+        Category = "Search"
+        Priority = 3
+        Recommended = $false
+    }
+    # TODO: ContextWeaver 需要 Python 环境，待 Python 安装步骤实现后启用
+    # "contextweaver" = @{
+    #     Name = "ContextWeaver"
+    #     Description = "语义代码检索引擎，基于 Tree-sitter 和向量搜索"
+    #     McpType = "stdio"
+    #     Command = "contextweaver"
+    #     Args = @("mcp")
+    #     CredentialType = "env-file"
+    #     RuntimeDeps = $script:DefaultMcpRuntimeDeps
+    #     PreInstall = @{
+    #         Type = "npm-global"
+    #         Package = "@hsingjui/contextweaver"
+    #         CommandCheck = "contextweaver"
+    #         InitCommand = "contextweaver init"
+    #         InitializedPath = "$env:USERPROFILE\.contextweaver"
+    #     }
+    #     EnvFile = @{
+    #         Path = "$env:USERPROFILE\.contextweaver\.env"
+    #         DefaultProvider = "SiliconFlow"
+    #         ProviderUrl = "https://cloud.siliconflow.cn/account/ak"
+    #         SharedCredentialName = "SILICONFLOW_API_KEY"
+    #         SharedKeyLabel = "SiliconFlow API Key (Embedding + Rerank 共用)"
+    #         SharedKeyFields = @("EMBEDDINGS_API_KEY", "RERANK_API_KEY")
+    #         Fields = @(
+    #             @{ Key = "EMBEDDINGS_API_KEY"; Required = $true; Secret = $true }
+    #             @{ Key = "EMBEDDINGS_BASE_URL"; Default = "https://api.siliconflow.cn/v1/embeddings" }
+    #             @{ Key = "EMBEDDINGS_MODEL"; Default = "BAAI/bge-m3" }
+    #             @{ Key = "EMBEDDINGS_DIMENSIONS"; Default = "1024" }
+    #             @{ Key = "RERANK_API_KEY"; Required = $true; Secret = $true }
+    #             @{ Key = "RERANK_BASE_URL"; Default = "https://api.siliconflow.cn/v1/rerank" }
+    #             @{ Key = "RERANK_MODEL"; Default = "BAAI/bge-reranker-v2-m3" }
+    #             @{ Key = "RERANK_TOP_N"; Default = "20" }
+    #         )
+    #     }
+    #     Category = "Development"
+    #     Priority = 4
+    #     Recommended = $true
+    # }
+    "playwright" = @{
+        Name = "Playwright"
+        Description = "Microsoft 官方网页自动化，基于可访问性树交互"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "@playwright/mcp@latest")
+        CredentialType = "none"
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Automation"
+        Priority = 5
+        Recommended = $true
+    }
+    "exa" = @{
+        Name = "Exa Search"
+        Description = "AI 原生高质量网络搜索和内容提取"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "exa-mcp-server")
+        CredentialType = "single-key"
+        ApiKeyName = "EXA_API_KEY"
+        ApiKeyUrl = "https://dashboard.exa.ai/api-keys"
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Search"
+        Priority = 6
+        Recommended = $true
+    }
+    "ace-tool" = @{
+        Name = "ACE Tool"
+        Description = "代码上下文检索、语义搜索和 AI Prompt 增强"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "ace-tool@latest")
+        CredentialType = "args-multi"
+        ArgsCredentials = @(
+            @{
+                ArgName = "--base-url"
+                Label = "ACE Backend URL"
+                Secret = $false
+                Required = $true
+                Url = "https://github.com/eastxiaodong/ace-tool"
+            }
+            @{
+                ArgName = "--token"
+                Label = "ACE Token"
+                Secret = $true
+                Required = $true
+            }
+        )
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Development"
+        Priority = 7
+        Recommended = $false
+    }
+    "mastergo" = @{
+        Name = "MasterGo"
+        Description = "MasterGo 设计稿解析和代码生成 (需团队版)"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "@mastergo/magic-mcp", "--url=https://mastergo.com")
+        CredentialType = "args-token"
+        TokenArg = "--token"
+        TokenLabel = "MasterGo API Token"
+        TokenUrl = "https://mastergo.com/help/MG/MCP"
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Design"
+        Priority = 8
+        Recommended = $false
+    }
+    "figma" = @{
+        Name = "Figma"
+        Description = "Figma 官方设计稿代码生成和变量提取"
+        McpType = "http"
+        Url = "https://mcp.figma.com/mcp"
+        CredentialType = "none"
+        Note = "首次使用时会弹出 OAuth 认证流程，无需手动配置 API Key"
+        Category = "Design"
+        Priority = 10
+        Recommended = $false
+    }
+    "chrome-devtools" = @{
+        Name = "Chrome DevTools"
+        Description = "Chrome 浏览器自动化控制、网络监控和性能分析"
+        McpType = "stdio"
+        Command = "npx"
+        Args = @("-y", "chrome-devtools-mcp@latest")
+        CredentialType = "none"
+        RuntimeDeps = $script:DefaultMcpRuntimeDeps
+        Category = "Automation"
+        Priority = 11
+        Recommended = $false
     }
 }
 
@@ -667,6 +862,715 @@ function Format-DisplayPad {
     return "$Text$(' ' * $padding)"
 }
 
+# ─── 版本工具（从 steps/Mcp.ps1 迁移） ───────────────────────────────────────
+
+function ConvertTo-NormalizedVersion {
+    param([string]$VersionText)
+
+    if ([string]::IsNullOrWhiteSpace($VersionText)) {
+        return $null
+    }
+
+    $match = [regex]::Match($VersionText, '\d+(\.\d+){0,3}')
+    if (-not $match.Success) {
+        return $null
+    }
+
+    $parts = @($match.Value.Split('.'))
+    while ($parts.Count -lt 4) {
+        $parts += "0"
+    }
+
+    try {
+        return [version]::new([int]$parts[0], [int]$parts[1], [int]$parts[2], [int]$parts[3])
+    }
+    catch {
+        return $null
+    }
+}
+
+# ─── 凭据输入（从 steps/Mcp.ps1 迁移） ───────────────────────────────────────
+
+function Read-McpCredentialValue {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+        [bool]$Secret = $true,
+        [bool]$Required = $true,
+        [string]$DefaultValue = "",
+        [string]$Hint = ""
+    )
+
+    do {
+        if (-not [string]::IsNullOrWhiteSpace($Hint)) {
+            Write-UiInfo $Hint
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($DefaultValue)) {
+            Write-UiInfo "请输入 $Label（直接回车使用默认值）:"
+        }
+        else {
+            Write-UiInfo "请输入 ${Label}:"
+        }
+
+        if ($Secret) {
+            $secureValue = Read-Host -Prompt $Label -AsSecureString
+            $ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+            try {
+                $value = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($ptr)
+            }
+            finally {
+                [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+            }
+        }
+        else {
+            $value = Read-Host -Prompt $Label
+        }
+
+        if ($null -eq $value) {
+            $value = ""
+        }
+
+        $value = $value.Trim()
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            if (-not [string]::IsNullOrWhiteSpace($DefaultValue)) {
+                return $DefaultValue
+            }
+
+            if ($Required) {
+                Write-UiError "$Label 不能为空，请重新输入"
+                continue
+            }
+
+            return ""
+        }
+
+        return $value
+    } while ($true)
+}
+
+# ─── Claude Settings 路径（从 steps/Mcp.ps1 迁移） ───────────────────────────
+
+function Get-ClaudeSettingsPath {
+    <#
+    .SYNOPSIS
+    获取 Claude Code settings.json 路径（HC-12: ~/.claude/settings.json）
+    #>
+
+    return "$(Get-UserHome)\.claude\settings.json"
+}
+
+# ─── 安装管道子函数（从 steps/Mcp.ps1 迁移） ─────────────────────────────────
+
+function Install-McpRuntimeDeps {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server
+    )
+
+    # 确保 fnm 环境已初始化（前置步骤可能已安装 fnm 但当前会话未加载）
+    if ((Test-CommandAvailable -Command "fnm") -and -not (Test-CommandAvailable -Command "node")) {
+        Write-UiInfo "初始化 fnm 环境..."
+        try {
+            $fnmEnvOutput = & fnm env --use-on-cd 2>&1 | Out-String
+            if ($fnmEnvOutput) {
+                Invoke-Expression $fnmEnvOutput
+            }
+            Refresh-SessionPath
+        } catch {
+            Write-UiWarn "fnm 环境初始化失败: $($_.Exception.Message)"
+        }
+    }
+
+    $deps = @()
+    if ($Server.ContainsKey("RuntimeDeps") -and $Server["RuntimeDeps"]) {
+        $deps = @($Server["RuntimeDeps"])
+    }
+    if ($deps.Count -eq 0) {
+        return @{ Success = $true; Installed = @() }
+    }
+
+    $installedDeps = @()
+    foreach ($dep in $deps) {
+        $depName = if ($dep.Name) { $dep.Name } else { $dep.Command }
+        $command = [string]$dep.Command
+        $needsInstall = $false
+
+        if (-not (Test-CommandAvailable -Command $command)) {
+            $needsInstall = $true
+            Write-UiWarn "$depName 未检测到，准备安装"
+        }
+        elseif ($dep.MinVersion) {
+            $installedVersionText = Get-CommandVersion -Command $command
+            $installedVersion = ConvertTo-NormalizedVersion -VersionText $installedVersionText
+            $minVersion = ConvertTo-NormalizedVersion -VersionText ([string]$dep.MinVersion)
+
+            if ($installedVersion -and $minVersion -and $installedVersion -lt $minVersion) {
+                $needsInstall = $true
+                Write-UiWarn "$depName 版本过低: $installedVersionText < $($dep.MinVersion)"
+            }
+        }
+
+        if ($needsInstall) {
+            if (-not $dep.WingetId) {
+                $manualHint = if ($dep.ManualUrl) { "，请手动安装: $($dep.ManualUrl)" } else { "" }
+                throw "依赖 $depName 缺少自动安装配置$manualHint"
+            }
+
+            if (-not (Test-CommandAvailable -Command "winget")) {
+                $manualHint = if ($dep.ManualUrl) { "`n  手动安装: $($dep.ManualUrl)" } else { "" }
+                throw "winget 不可用，无法自动安装依赖 $depName。请先运行「基础环境」安装，或手动安装后重试。$manualHint"
+            }
+
+            Invoke-WingetInstall -PackageId $dep.WingetId -PackageName $depName -AcceptLicense -Silent | Out-Null
+            Refresh-SessionPath
+
+            if (-not (Test-CommandAvailable -Command $command)) {
+                throw "依赖 $depName 安装后仍不可用"
+            }
+
+            $installedDeps += $depName
+        }
+    }
+
+    return @{ Success = $true; Installed = $installedDeps }
+}
+
+function Invoke-McpPreInstall {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServerId,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server
+    )
+
+    if (-not $Server.ContainsKey("PreInstall") -or -not $Server["PreInstall"]) {
+        return @{ Success = $true; Message = "无需预安装" }
+    }
+
+    $pre = [hashtable]$Server["PreInstall"]
+    switch ($pre.Type) {
+        "npm-global" {
+            $commandCheck = if ($pre.CommandCheck) { [string]$pre.CommandCheck } else { [string]$Server.Command }
+            if (-not (Test-CommandAvailable -Command $commandCheck)) {
+                Write-UiInfo "预安装 $($Server.Name): npm 全局安装 $($pre.Package)"
+
+                try {
+                    Invoke-NpmGlobalInstall -PackageName $pre.Package | Out-Null
+                    Refresh-SessionPath
+                }
+                catch {
+                    Write-UiWarn "标准安装失败，尝试清理 npm 缓存后重试..."
+
+                    # 清理 npm 缓存
+                    $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60 -SuppressOutput
+                    if ($cleanResult.Success) {
+                        Write-UiInfo "npm 缓存已清理，重新尝试安装..."
+
+                        # 重试安装，使用 --force 参数
+                        $retryResult = Invoke-ExternalCommand -Command "npm" -Arguments @("install", "-g", $pre.Package, "--force") -TimeoutSeconds 300
+                        if (-not $retryResult.Success) {
+                            throw "重试安装失败: $($retryResult.Error)"
+                        }
+
+                        Refresh-SessionPath
+                        Write-UiSuccess "✓ $($pre.Package) 重试安装成功"
+                    }
+                    else {
+                        throw "npm 缓存清理失败: $($cleanResult.Error)"
+                    }
+                }
+            }
+
+            if ($pre.InitCommand) {
+                $initializedPath = [string]$pre.InitializedPath
+                if (-not [string]::IsNullOrWhiteSpace($initializedPath) -and (Test-Path $initializedPath)) {
+                    Write-UiInfo "$($Server.Name) 已完成初始化，跳过 init"
+                }
+                else {
+                    Write-UiInfo "执行初始化命令: $($pre.InitCommand)"
+                    $tokens = @($pre.InitCommand -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+                    if ($tokens.Count -eq 0) {
+                        throw "初始化命令为空: $($pre.InitCommand)"
+                    }
+
+                    $command = $tokens[0]
+                    $arguments = @()
+                    if ($tokens.Count -gt 1) {
+                        $arguments = @($tokens[1..($tokens.Count - 1)])
+                    }
+
+                    $initResult = Invoke-ExternalCommand -Command $command -Arguments $arguments -TimeoutSeconds 180
+                    if (-not $initResult.Success) {
+                        throw "初始化命令执行失败: $($pre.InitCommand)"
+                    }
+                }
+            }
+
+            return @{ Success = $true; Message = "预安装完成" }
+        }
+        default {
+            throw "不支持的预安装类型: $($pre.Type)"
+        }
+    }
+}
+
+function Get-McpCredentials {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServerId,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$SharedCredentials
+    )
+
+    $result = @{
+        Success = $true
+        Values = @{}
+        EnvFileValues = @{}
+        Shared = @{}
+        Skipped = $false
+    }
+
+    $credentialType = if ($Server.CredentialType) { [string]$Server.CredentialType } else { "none" }
+    switch ($credentialType) {
+        "none" {
+            return $result
+        }
+        "single-key" {
+            $apiKeyName = [string]$Server.ApiKeyName
+            $apiKeyValue = Read-McpCredentialValue -Label $apiKeyName -Secret $true -Required $true
+            $result.Values[$apiKeyName] = $apiKeyValue
+        }
+        "url-embedded" {
+            foreach ($credential in @($Server.Credentials)) {
+                $value = Read-McpCredentialValue `
+                    -Label ([string]$credential.Label) `
+                    -Secret ([bool]$credential.Secret) `
+                    -Required ([bool]$credential.Required)
+
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    $result.Values[[string]$credential.Name] = $value
+                }
+            }
+        }
+        "multi-field" {
+            foreach ($field in @($Server.Credentials)) {
+                $fieldName = [string]$field.Name
+                if ([string]::IsNullOrWhiteSpace($fieldName)) {
+                    continue
+                }
+
+                $sharedFrom = if ($field.ContainsKey("SharedFrom")) { [string]$field.SharedFrom } else { "" }
+                if (-not [string]::IsNullOrWhiteSpace($sharedFrom) -and $SharedCredentials.ContainsKey($sharedFrom)) {
+                    $result.Values[$fieldName] = [string]$SharedCredentials[$sharedFrom]
+                    continue
+                }
+
+                $defaultValue = if ($field.ContainsKey("Default")) { [string]$field.Default } else { "" }
+                $required = if ($field.ContainsKey("Required")) { [bool]$field.Required } else { $false }
+                $secret = if ($field.ContainsKey("Secret")) { [bool]$field.Secret } else { $false }
+                $fieldLabel = if ($field.ContainsKey("Label") -and $field.Label) { [string]$field.Label } else { $fieldName }
+
+                $value = Read-McpCredentialValue `
+                    -Label $fieldLabel `
+                    -Secret $secret `
+                    -Required $required `
+                    -DefaultValue $defaultValue
+
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    $result.Values[$fieldName] = $value
+                    if ($field.ContainsKey("Shared") -and [bool]$field.Shared) {
+                        $result.Shared[$fieldName] = $value
+                    }
+                }
+            }
+        }
+        "args-multi" {
+            foreach ($argCredential in @($Server.ArgsCredentials)) {
+                if ($argCredential.ContainsKey("Url") -and $argCredential["Url"]) {
+                    Write-UiInfo "$($argCredential.Label) 获取地址: $($argCredential["Url"])"
+                }
+
+                $value = Read-McpCredentialValue `
+                    -Label ([string]$argCredential.Label) `
+                    -Secret ([bool]$argCredential.Secret) `
+                    -Required ([bool]$argCredential.Required)
+
+                if (-not [string]::IsNullOrWhiteSpace($value)) {
+                    $result.Values[[string]$argCredential.ArgName] = $value
+                }
+            }
+        }
+        "args-token" {
+            $tokenLabel = if ($Server.TokenLabel) { [string]$Server.TokenLabel } else { "Token" }
+            $tokenValue = Read-McpCredentialValue -Label $tokenLabel -Secret $true -Required $true
+            $result.Values["token"] = $tokenValue
+        }
+        "env-file" {
+            $envFile = $Server.EnvFile
+            if (-not $envFile) {
+                throw "$($Server.Name) 缺少 EnvFile 配置"
+            }
+
+            $sharedCredentialName = if ($envFile.ContainsKey("SharedCredentialName")) { [string]$envFile.SharedCredentialName } else { "" }
+            $sharedKeyValue = ""
+
+            if (-not [string]::IsNullOrWhiteSpace($sharedCredentialName) -and $SharedCredentials.ContainsKey($sharedCredentialName)) {
+                $sharedKeyValue = [string]$SharedCredentials[$sharedCredentialName]
+                Write-UiInfo "复用共享凭据: $sharedCredentialName"
+            }
+            else {
+                $sharedLabel = if ($envFile.SharedKeyLabel) { [string]$envFile.SharedKeyLabel } else { "共享 API Key" }
+                $sharedKeyValue = Read-McpCredentialValue -Label $sharedLabel -Secret $true -Required $true
+                if (-not [string]::IsNullOrWhiteSpace($sharedCredentialName)) {
+                    $result.Shared[$sharedCredentialName] = $sharedKeyValue
+                }
+            }
+
+            foreach ($sharedKeyField in @($envFile.SharedKeyFields)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$sharedKeyField)) {
+                    $result.EnvFileValues[[string]$sharedKeyField] = $sharedKeyValue
+                }
+            }
+
+            foreach ($field in @($envFile.Fields)) {
+                $fieldKey = [string]$field.Key
+                if ([string]::IsNullOrWhiteSpace($fieldKey)) {
+                    continue
+                }
+
+                if ($result.EnvFileValues.ContainsKey($fieldKey)) {
+                    continue
+                }
+
+                $defaultValue = if ($field.ContainsKey("Default")) { [string]$field.Default } else { "" }
+                $required = if ($field.ContainsKey("Required")) { [bool]$field.Required } else { $false }
+                $secret = if ($field.ContainsKey("Secret")) { [bool]$field.Secret } else { $false }
+                $fieldLabel = if ($field.ContainsKey("Label") -and $field.Label) { [string]$field.Label } else { $fieldKey }
+
+                $fieldValue = Read-McpCredentialValue -Label $fieldLabel -Secret $secret -Required $required -DefaultValue $defaultValue
+                if (-not [string]::IsNullOrWhiteSpace($fieldValue)) {
+                    $result.EnvFileValues[$fieldKey] = $fieldValue
+                }
+            }
+        }
+        default {
+            throw "不支持的凭据类型: $credentialType"
+        }
+    }
+
+    return $result
+}
+
+function New-McpSettingsEntry {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServerId,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Credentials
+    )
+
+    $mcpType = if ($Server.McpType) { [string]$Server.McpType } else { "stdio" }
+    $credentialType = if ($Server.CredentialType) { [string]$Server.CredentialType } else { "none" }
+
+    switch ($mcpType) {
+        "software" {
+            return $null
+        }
+        "http" {
+            if ($credentialType -eq "url-embedded") {
+                if (-not $Server.UrlTemplate) {
+                    throw "$ServerId 缺少 UrlTemplate"
+                }
+
+                $resolvedUrl = [string]$Server.UrlTemplate
+                foreach ($credentialName in $Credentials.Keys) {
+                    $placeholder = "{0}{1}{2}" -f "{", $credentialName, "}"
+                    $escapedValue = [System.Uri]::EscapeDataString([string]$Credentials[$credentialName])
+                    $resolvedUrl = $resolvedUrl -replace [regex]::Escape($placeholder), $escapedValue
+                }
+
+                if ($resolvedUrl -match "\{[A-Za-z0-9_]+\}") {
+                    # HC-M10: 掩码凭据值，避免异常消息泄露敏感信息
+                    $maskedUrl = $resolvedUrl
+                    foreach ($credName in $Credentials.Keys) {
+                        $escapedVal = [System.Uri]::EscapeDataString([string]$Credentials[$credName])
+                        if ($escapedVal) {
+                            $maskedUrl = $maskedUrl -replace [regex]::Escape($escapedVal), "***"
+                        }
+                    }
+                    throw "$ServerId 的 URL 仍包含未替换占位符: $maskedUrl"
+                }
+
+                return @{
+                    type = "http"
+                    url = $resolvedUrl
+                }
+            }
+
+            if (-not $Server.Url) {
+                throw "$ServerId 缺少 Url"
+            }
+
+            return @{
+                type = "http"
+                url = [string]$Server.Url
+            }
+        }
+        "stdio" {
+            if (-not $Server.Command) {
+                throw "$ServerId 缺少 Command"
+            }
+
+            $args = @()
+            foreach ($arg in @($Server.Args)) {
+                $args += [string]$arg
+            }
+
+            $entry = @{
+                command = [string]$Server.Command
+                args = $args
+            }
+
+            switch ($credentialType) {
+                "single-key" {
+                    $apiKeyName = [string]$Server.ApiKeyName
+                    if (-not $Credentials.ContainsKey($apiKeyName)) {
+                        throw "$ServerId 缺少凭据: $apiKeyName"
+                    }
+
+                    $entry["env"] = @{
+                        $apiKeyName = [string]$Credentials[$apiKeyName]
+                    }
+                }
+                "multi-field" {
+                    $envMap = @{}
+                    foreach ($credentialKey in $Credentials.Keys) {
+                        $credentialValue = [string]$Credentials[$credentialKey]
+                        if (-not [string]::IsNullOrWhiteSpace($credentialValue)) {
+                            $envMap[$credentialKey] = $credentialValue
+                        }
+                    }
+                    if ($envMap.Count -gt 0) {
+                        $entry["env"] = $envMap
+                    }
+                }
+                "args-multi" {
+                    foreach ($argCredential in @($Server.ArgsCredentials)) {
+                        $argName = [string]$argCredential.ArgName
+                        $required = if ($argCredential.ContainsKey("Required")) { [bool]$argCredential.Required } else { $false }
+
+                        if (-not $Credentials.ContainsKey($argName)) {
+                            if ($required) {
+                                throw "$ServerId 缺少参数凭据: $argName"
+                            }
+                            continue
+                        }
+
+                        $argValue = [string]$Credentials[$argName]
+                        if ($required -and [string]::IsNullOrWhiteSpace($argValue)) {
+                            throw "$ServerId 参数凭据为空: $argName"
+                        }
+
+                        if (-not [string]::IsNullOrWhiteSpace($argValue)) {
+                            $entry["args"] += @($argName, $argValue)
+                        }
+                    }
+                }
+                "args-token" {
+                    if (-not $Credentials.ContainsKey("token")) {
+                        throw "$ServerId 缺少 token"
+                    }
+
+                    $tokenValue = [string]$Credentials["token"]
+                    if ([string]::IsNullOrWhiteSpace($tokenValue)) {
+                        throw "$ServerId token 为空"
+                    }
+
+                    $entry["args"] += "$($Server.TokenArg)=$tokenValue"
+                }
+            }
+
+            return $entry
+        }
+        default {
+            throw "不支持的 MCP 类型: $mcpType"
+        }
+    }
+}
+
+function Install-McpSoftware {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServerId,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server
+    )
+
+    $result = @{
+        Success = $true
+        Method = "none"
+        Message = ""
+    }
+
+    if ($Server.McpType -ne "software") {
+        return $result
+    }
+
+    $install = $Server.SoftwareInstall
+    if (-not $install) {
+        throw "$ServerId 缺少 SoftwareInstall 配置"
+    }
+
+    if (Test-CommandAvailable -Command "winget") {
+        try {
+            if ($install.WingetSearch) {
+                $wingetArgs = @(
+                    "install",
+                    "--name", $install.WingetSearch,
+                    "-e",
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                    "--disable-interactivity"
+                )
+                $wingetResult = Invoke-ExternalCommand -Command "winget" -Arguments $wingetArgs -TimeoutSeconds 300
+                if (-not $wingetResult.Success) {
+                    throw "winget 按名称安装失败"
+                }
+            }
+            else {
+                throw "未配置 WingetSearch"
+            }
+
+            $result.Method = "winget"
+            $result.Message = "winget 安装成功"
+            return $result
+        }
+        catch {
+            Write-UiWarn "$($Server.Name) winget 安装失败，将尝试下载方式: $($_.Exception.Message)"
+        }
+    }
+
+    if ($install.DownloadUrl) {
+        try {
+            $downloadDir = "$env:TEMP\ClaudeEnvInstaller"
+            if (-not (Test-Path $downloadDir)) {
+                New-Item -Path $downloadDir -ItemType Directory -Force | Out-Null
+            }
+
+            $fileName = Split-Path -Path ([string]$install.DownloadUrl) -Leaf
+            if ([string]::IsNullOrWhiteSpace($fileName)) {
+                $fileName = "$ServerId-installer.exe"
+            }
+            $downloadPath = Join-Path $downloadDir $fileName
+
+            # 使用统一的下载函数
+            $downloadResult = Invoke-FileDownload -Url $install.DownloadUrl -OutputPath $downloadPath -Description "$($Server.Name) 安装程序"
+
+            if (-not $downloadResult.Success) {
+                throw "下载失败: $($downloadResult.ErrorMessage)"
+            }
+
+            $process = Start-Process -FilePath $downloadPath -PassThru -Wait
+
+            if ($process -and $process.ExitCode -ne 0) {
+                throw "安装程序退出码非 0: $($process.ExitCode)"
+            }
+
+            $result.Method = "download"
+            $result.Message = "下载安装成功"
+            return $result
+        }
+        catch {
+            Write-UiWarn "$($Server.Name) 下载安装失败，将进入引导安装: $($_.Exception.Message)"
+        }
+    }
+
+    Write-UiInfo "请手动安装 $($Server.Name)"
+    if ($install.GuideUrl) {
+        Write-UiInfo "安装指引: $($install.GuideUrl)"
+    }
+    Read-Host "安装完成后按回车继续..."
+
+    $result.Method = "guide"
+    $result.Message = "已切换为引导安装"
+    return $result
+}
+
+function Write-McpEnvFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Server,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$EnvValues
+    )
+
+    try {
+        if (-not $Server.EnvFile) {
+            throw "缺少 EnvFile 配置"
+        }
+
+        $envPath = [string]$Server.EnvFile.Path
+        if ([string]::IsNullOrWhiteSpace($envPath)) {
+            throw "EnvFile.Path 为空"
+        }
+
+        $envDir = Split-Path -Path $envPath -Parent
+        if (-not [string]::IsNullOrWhiteSpace($envDir) -and -not (Test-Path $envDir)) {
+            New-Item -Path $envDir -ItemType Directory -Force | Out-Null
+        }
+
+        $lines = @()
+        if (Test-Path $envPath) {
+            $existingLines = Get-Content -Path $envPath -ErrorAction SilentlyContinue
+            if ($null -ne $existingLines) {
+                $lines = @($existingLines)
+            }
+        }
+
+        $keyLineIndex = @{}
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+                $keyLineIndex[$matches[1]] = $i
+            }
+        }
+
+        foreach ($key in $EnvValues.Keys) {
+            $value = [string]$EnvValues[$key]
+            $value = $value -replace "`r", "" -replace "`n", ""
+            if ([string]::IsNullOrWhiteSpace($value)) {
+                continue
+            }
+
+            $line = "$key=$value"
+            if ($keyLineIndex.ContainsKey($key)) {
+                $lines[[int]$keyLineIndex[$key]] = $line
+            }
+            else {
+                $lines += $line
+            }
+        }
+
+        $writeOk = Write-FileAtomically -FilePath $envPath -Content $lines
+        if (-not $writeOk) {
+            throw "env 文件原子写入失败: $envPath"
+        }
+
+        return @{ Success = $true; Path = $envPath }
+    }
+    catch {
+        return @{
+            Success = $false
+            Path = ""
+            ErrorMessage = $_.Exception.Message
+        }
+    }
+}
+
 # ─── Task 2.6: Get-McpStatus + Show-McpStatusTable ──────────────────────────
 
 function Get-McpStatus {
@@ -1172,6 +2076,189 @@ function Remove-McpServer {
     }
 }
 
+# ─── Install-McpSingleServer（单服务器完整安装管道） ──────────────────────────
+
+function Install-McpSingleServer {
+    <#
+    .SYNOPSIS
+    安装单个 MCP Server（完整 5 阶段管道）
+    被 Invoke-McpToggle（Missing + 需凭据）和 Install-Mcp（批量循环）调用
+    .PARAMETER ServerId
+    注册表中的 Server ID
+    .RETURNS
+    @{ Success; ServerId; Status; ErrorMessage }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServerId
+    )
+
+    if (-not $script:McpServers.Contains($ServerId)) {
+        return @{ Success = $false; ServerId = $ServerId; Status = "Unknown"; ErrorMessage = "未在注册表中定义" }
+    }
+
+    $server = $script:McpServers[$ServerId]
+
+    try {
+        # Phase 1: 运行时依赖
+        $depResult = Install-McpRuntimeDeps -Server $server
+        if (@($depResult.Installed).Count -gt 0) {
+            Write-UiSuccess "$($server.Name) 依赖安装完成: $(@($depResult.Installed) -join ', ')"
+        }
+
+        # Phase 2: 预安装
+        $preResult = Invoke-McpPreInstall -ServerId $ServerId -Server $server
+        if ($preResult.Message -and $preResult.Message -ne "无需预安装") {
+            Write-UiSuccess "$($server.Name) $($preResult.Message)"
+        }
+
+        # Phase 3: 凭据收集（含 vault 历史凭据自动填充）
+        $credentials = @{}
+        $envFileValues = @{}
+        $credentialType = if ($server.CredentialType) { [string]$server.CredentialType } else { "none" }
+
+        if ($credentialType -ne "none") {
+            # 先查 vault 历史凭据
+            $useVaultCredentials = $false
+            try {
+                $meta = Read-McpMeta
+                if ($meta.ContainsKey("servers") -and
+                    $meta.servers -is [hashtable] -and
+                    $meta.servers.ContainsKey($ServerId) -and
+                    $meta.servers[$ServerId] -is [hashtable] -and
+                    $meta.servers[$ServerId].ContainsKey("credentials") -and
+                    $meta.servers[$ServerId].credentials -is [hashtable]) {
+
+                    $vaultCred = $meta.servers[$ServerId].credentials
+                    $hasValues = $vaultCred.ContainsKey("values") -and $vaultCred.values -is [hashtable] -and $vaultCred.values.Count -gt 0
+                    $hasEnvValues = $vaultCred.ContainsKey("envFileValues") -and $vaultCred.envFileValues -is [hashtable] -and $vaultCred.envFileValues.Count -gt 0
+
+                    if ($hasValues -or $hasEnvValues) {
+                        $maskedKeys = @()
+                        if ($hasValues) {
+                            $maskedKeys += @($vaultCred.values.Keys | ForEach-Object { "$_=***" })
+                        }
+                        Write-UiInfo "检测到 $($server.Name) 的历史凭据 ($($maskedKeys -join ', '))"
+                        Write-Host -NoNewline "  是否使用历史凭据？[Y/n]: "
+                        $answer = Read-Host
+                        if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^[Yy]') {
+                            if ($hasValues) { $credentials = $vaultCred.values }
+                            if ($hasEnvValues) { $envFileValues = $vaultCred.envFileValues }
+                            $useVaultCredentials = $true
+                            Write-UiSuccess "$($server.Name) 已使用历史凭据"
+                        }
+                    }
+                }
+            }
+            catch {
+                Write-UiWarn "vault 读取失败，跳过历史凭据检测: $($_.Exception.Message)"
+            }
+
+            # 无历史则走交互式收集
+            if (-not $useVaultCredentials) {
+                $credentialResult = Get-McpCredentials -ServerId $ServerId -Server $server -SharedCredentials @{}
+                $credentials = $credentialResult.Values
+                $envFileValuesCount = if ($credentialResult.ContainsKey("EnvFileValues") -and $credentialResult.EnvFileValues) { @($credentialResult.EnvFileValues.Keys).Count } else { 0 }
+                if ($envFileValuesCount -gt 0) {
+                    $envFileValues = $credentialResult.EnvFileValues
+                }
+            }
+        }
+
+        # Phase 4: 软件安装（仅 software 类型）
+        if ($server.McpType -eq "software") {
+            Install-McpSoftware -ServerId $ServerId -Server $server | Out-Null
+        }
+
+        # Phase 5: 配置写入
+        # 5a. env file（env-file 类型）
+        if ($credentialType -eq "env-file" -and $envFileValues.Count -gt 0) {
+            $envWriteResult = Write-McpEnvFile -Server $server -EnvValues $envFileValues
+            if ($envWriteResult.Success) {
+                Write-UiSuccess "已写入 $($server.Name) .env 文件: $($envWriteResult.Path)"
+            }
+            else {
+                Write-UiWarn "$($server.Name) .env 写入失败: $($envWriteResult.ErrorMessage)"
+            }
+        }
+
+        # 5b. .claude.json — New-McpSettingsEntry → 合并写入
+        $entry = New-McpSettingsEntry -ServerId $ServerId -Server $server -Credentials $credentials
+        if ($entry) {
+            $cjPath = "$(Get-UserHome)\.claude.json"
+            $cj = @{}
+            if (Test-Path $cjPath) {
+                $cj = Get-Content -Path $cjPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if (-not $cj) { $cj = @{} }
+            }
+            if (-not $cj.ContainsKey("mcpServers")) { $cj["mcpServers"] = @{} }
+            $cj["mcpServers"][$ServerId] = $entry
+            $writeOk = Write-FileAtomically -FilePath $cjPath -Content ($cj | ConvertTo-Json -Depth 10)
+            if (-not $writeOk) {
+                throw "更新 .claude.json 失败"
+            }
+        }
+
+        # 5c. settings.json — 补充 mcp__${ServerId} 权限
+        $settingsPath = Get-ClaudeSettingsPath
+        $settings = @{}
+        if (Test-Path $settingsPath) {
+            $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            if (-not $settings) { $settings = @{} }
+        }
+        if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
+        if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
+        if (-not ($settings["permissions"]["allow"] -is [System.Collections.IList])) {
+            $settings["permissions"]["allow"] = @($settings["permissions"]["allow"])
+        }
+        $mcpPerm = "mcp__${ServerId}"
+        if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+            $settings["permissions"]["allow"] += $mcpPerm
+            $settingsJson = $settings | ConvertTo-Json -Depth 10
+            $writeOk = Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
+            if (-not $writeOk) {
+                Write-UiWarn "settings.json 权限写入失败"
+            }
+        }
+
+        # 5d. vault — 持久化凭据 + definitionHash
+        try {
+            $null = Invoke-WithMcpLock {
+                $vaultMeta = Read-McpMeta
+                $cred = @{}
+                if ($credentials.Count -gt 0) { $cred["values"] = $credentials }
+                if ($envFileValues.Count -gt 0) { $cred["envFileValues"] = $envFileValues }
+                $vaultMeta.servers[$ServerId] = @{
+                    disabled       = $false
+                    credentials    = $cred
+                    definitionHash = Get-McpDefinitionHash $server
+                    updatedAt      = (Get-Date).ToUniversalTime().ToString("o")
+                }
+                Write-McpMeta $vaultMeta
+            }
+        }
+        catch {
+            Write-UiWarn "vault 写入失败（不影响 MCP 配置）: $($_.Exception.Message)"
+        }
+
+        # 5e. Sync-AllMcpRules
+        $syncResult = Sync-AllMcpRules
+        if (-not $syncResult.Success) {
+            Write-UiWarn "MCP Rules 同步失败: $($syncResult.ErrorMessage)"
+        }
+
+        # 凭据清零（安全）
+        foreach ($key in @($credentials.Keys)) { $credentials[$key] = $null }
+
+        Write-UiSuccess "MCP Server '$ServerId' 安装完成"
+        return @{ Success = $true; ServerId = $ServerId; Status = "Active" }
+    }
+    catch {
+        Write-UiError "安装 MCP Server '$ServerId' 失败: $($_.Exception.Message)"
+        return @{ Success = $false; ServerId = $ServerId; Status = "Failed"; ErrorMessage = $_.Exception.Message }
+    }
+}
+
 # ─── Task 2.10: Invoke-McpToggle ────────────────────────────────────────────
 
 function Invoke-McpToggle {
@@ -1205,9 +2292,49 @@ function Invoke-McpToggle {
                 "Active"   { Disable-McpServer -ServerId $id }
                 "Disabled" { Enable-McpServer -ServerId $id }
                 "Missing"  {
-                    # Missing = 注册表有定义但不在 .claude.json 也未禁用，尝试从定义重建
-                    if ($script:McpServers -and $script:McpServers.Contains($id)) {
-                        $newConfig = New-McpSettingsEntry -ServerId $id -Server $script:McpServers[$id] -Credentials @{}
+                    # Missing = 注册表有定义但不在 .claude.json 也未禁用
+                    if (-not $script:McpServers -or -not $script:McpServers.Contains($id)) {
+                        Write-UiWarn "MCP Server '$id' 未在注册表中定义"
+                        @{ Success = $false; ServerId = $id; Status = "Unknown" }
+                        break
+                    }
+
+                    $serverDef = $script:McpServers[$id]
+                    $needsCredentials = ($serverDef.CredentialType -and $serverDef.CredentialType -ne "none")
+
+                    # 先检查 vault 是否有历史凭据（values + envFileValues）
+                    $vaultCredentials = $null
+                    $vaultEnvFileValues = $null
+                    try {
+                        $meta = Read-McpMeta
+                        if ($meta.ContainsKey("servers") -and
+                            $meta.servers -is [hashtable] -and
+                            $meta.servers.ContainsKey($id) -and
+                            $meta.servers[$id] -is [hashtable] -and
+                            $meta.servers[$id].ContainsKey("credentials") -and
+                            $meta.servers[$id].credentials -is [hashtable]) {
+                            $vaultCred = $meta.servers[$id].credentials
+                            if ($vaultCred.ContainsKey("values") -and
+                                $vaultCred.values -is [hashtable] -and
+                                $vaultCred.values.Count -gt 0) {
+                                $vaultCredentials = $vaultCred.values
+                            }
+                            if ($vaultCred.ContainsKey("envFileValues") -and
+                                $vaultCred.envFileValues -is [hashtable] -and
+                                $vaultCred.envFileValues.Count -gt 0) {
+                                $vaultEnvFileValues = $vaultCred.envFileValues
+                            }
+                        }
+                    }
+                    catch {
+                        Write-UiWarn "vault 读取失败: $($_.Exception.Message)"
+                    }
+
+                    $hasVaultHistory = $vaultCredentials -or $vaultEnvFileValues
+                    if (-not $needsCredentials -or $hasVaultHistory) {
+                        # 无需凭据 或 vault 有历史 → 直接用 New-McpSettingsEntry 重建
+                        $creds = if ($vaultCredentials) { $vaultCredentials } else { @{} }
+                        $newConfig = New-McpSettingsEntry -ServerId $id -Server $serverDef -Credentials $creds
                         if ($newConfig) {
                             $cjPath = "$(Get-UserHome)\.claude.json"
                             $cj = @{}
@@ -1221,6 +2348,62 @@ function Invoke-McpToggle {
                             if (-not $writeOk) {
                                 throw "更新 .claude.json 失败"
                             }
+
+                            # env-file 类型：写回 env 文件
+                            if ($vaultEnvFileValues -and $serverDef.CredentialType -eq "env-file") {
+                                $envWriteResult = Write-McpEnvFile -Server $serverDef -EnvValues $vaultEnvFileValues
+                                if ($envWriteResult.Success) {
+                                    Write-UiSuccess "已恢复 $($serverDef.Name) .env 文件: $($envWriteResult.Path)"
+                                }
+                                else {
+                                    Write-UiWarn "$($serverDef.Name) .env 恢复失败: $($envWriteResult.ErrorMessage)"
+                                }
+                            }
+
+                            # 补充 settings.json 权限
+                            $settingsPath = Get-ClaudeSettingsPath
+                            $settings = @{}
+                            if (Test-Path $settingsPath) {
+                                $settings = Get-Content -Path $settingsPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                                if (-not $settings) { $settings = @{} }
+                            }
+                            if (-not $settings.ContainsKey("permissions")) { $settings["permissions"] = @{} }
+                            if (-not $settings["permissions"].ContainsKey("allow")) { $settings["permissions"]["allow"] = @() }
+                            if (-not ($settings["permissions"]["allow"] -is [System.Collections.IList])) {
+                                $settings["permissions"]["allow"] = @($settings["permissions"]["allow"])
+                            }
+                            $mcpPerm = "mcp__${id}"
+                            if ($settings["permissions"]["allow"] -notcontains $mcpPerm) {
+                                $settings["permissions"]["allow"] += $mcpPerm
+                                $settingsJson = $settings | ConvertTo-Json -Depth 10
+                                $null = Write-FileAtomically -FilePath $settingsPath -Content @($settingsJson)
+                            }
+
+                            # vault 状态更新
+                            try {
+                                $null = Invoke-WithMcpLock {
+                                    $vaultMeta = Read-McpMeta
+                                    if (-not $vaultMeta.servers.ContainsKey($id)) {
+                                        $credEntry = @{ values = $creds }
+                                        if ($vaultEnvFileValues) { $credEntry["envFileValues"] = $vaultEnvFileValues }
+                                        $vaultMeta.servers[$id] = @{
+                                            disabled       = $false
+                                            credentials    = $credEntry
+                                            definitionHash = Get-McpDefinitionHash $serverDef
+                                            updatedAt      = (Get-Date).ToUniversalTime().ToString("o")
+                                        }
+                                    }
+                                    else {
+                                        $vaultMeta.servers[$id].disabled = $false
+                                        $vaultMeta.servers[$id].updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+                                    }
+                                    Write-McpMeta $vaultMeta
+                                }
+                            }
+                            catch {
+                                Write-UiWarn "vault 更新失败: $($_.Exception.Message)"
+                            }
+
                             Write-UiSuccess "MCP Server '$id' 已恢复"
 
                             # 同步 MCP Rules 文件
@@ -1230,13 +2413,17 @@ function Invoke-McpToggle {
                             }
 
                             @{ Success = $true; ServerId = $id; Status = "Active" }
-                        } else {
-                            Write-UiWarn "MCP Server '$id' 配置类型不支持自动恢复（如需凭据请使用安装功能）"
-                            @{ Success = $false; ServerId = $id; Status = "Missing" }
                         }
-                    } else {
-                        Write-UiWarn "MCP Server '$id' 未在注册表中定义"
-                        @{ Success = $false; ServerId = $id; Status = "Unknown" }
+                        else {
+                            # software 类型返回 $null，走完整安装
+                            $installResult = Install-McpSingleServer -ServerId $id
+                            $installResult
+                        }
+                    }
+                    else {
+                        # 需凭据且无历史 → 走完整安装管道
+                        $installResult = Install-McpSingleServer -ServerId $id
+                        $installResult
                     }
                 }
                 default {
@@ -1267,39 +2454,46 @@ function Invoke-McpToggle {
 function Show-McpManageMenu {
     <#
     .SYNOPSIS
-    MCP 管理交互菜单（查看状态 / 切换 / 删除）
+    MCP 管理交互菜单（扁平化：状态总览 + 操作菜单）
     #>
 
     while ($true) {
-        $options = @(
-            "查看 MCP 状态"
-            "切换 MCP 状态"
-            "删除 MCP"
-        )
-        $choice = Show-SingleSelectMenu -Title "MCP 管理" -Options $options -DefaultIndex 0
+        # 1. 获取并展示状态
+        $statuses = @(Get-McpStatus)
+        Show-McpStatusTable $statuses
 
+        # 2. 动态构建操作菜单
+        $toggleable = @($statuses | Where-Object { $_.Status -in @("Active", "Disabled", "Missing") })
+        $removable  = @($statuses | Where-Object { $_.Status -ne "Missing" })
+
+        $options = [System.Collections.ArrayList]::new()
+        $actionMap = [System.Collections.ArrayList]::new()
+
+        if ($toggleable.Count -gt 0) {
+            [void]$options.Add("开启·禁用 ($($toggleable.Count))")
+            [void]$actionMap.Add("toggle")
+        }
+        if ($removable.Count -gt 0) {
+            [void]$options.Add("删除 MCP")
+            [void]$actionMap.Add("delete")
+        }
+
+        # 非 ANSI 终端无 Esc 键，必须提供显式返回选项
+        [void]$options.Add("返回")
+        [void]$actionMap.Add("back")
+
+        if ($toggleable.Count -eq 0 -and $removable.Count -eq 0) {
+            Write-UiInfo "没有可管理的 MCP Server"
+            Write-Host "按任意键返回..." -ForegroundColor Gray
+            $null = [Console]::ReadKey($true)
+            return
+        }
+
+        $choice = Show-SingleSelectMenu -Title "管理操作" -Options @($options) -DefaultIndex 0
         if ($choice -eq -1) { return }
 
-        switch ($choice) {
-            0 {
-                # 查看状态
-                $statuses = Get-McpStatus
-                Show-McpStatusTable $statuses
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
-            }
-            1 {
-                # 切换状态
-                $statuses = Get-McpStatus
-                $toggleable = @($statuses | Where-Object { $_.Status -in @("Active", "Disabled", "Missing") })
-                if ($toggleable.Count -eq 0) {
-                    Write-UiWarn "没有可切换状态的 MCP Server"
-                    Write-Host "按任意键返回..." -ForegroundColor Gray
-                    $null = [Console]::ReadKey($true)
-                    continue
-                }
-
+        switch ($actionMap[$choice]) {
+            "toggle" {
                 $menuOptions = @($toggleable | ForEach-Object { "$($_.Name) [$($_.Status)]" })
                 $defaultSelected = @()
                 for ($i = 0; $i -lt $toggleable.Count; $i++) {
@@ -1315,7 +2509,6 @@ function Show-McpManageMenu {
                     for ($i = 0; $i -lt $toggleable.Count; $i++) {
                         $wasActive = $toggleable[$i].Status -eq "Active"
                         $isSelected = $selectedIndices -contains $i
-                        # Active 取消勾选 → Disable; Disabled 勾选 → Enable
                         if (($wasActive -and -not $isSelected) -or (-not $wasActive -and $isSelected)) {
                             $toggleIds += $toggleable[$i].Id
                         }
@@ -1323,37 +2516,27 @@ function Show-McpManageMenu {
                     if ($toggleIds.Count -gt 0) {
                         $result = Invoke-McpToggle $toggleIds
                         Write-UiSuccess "切换完成: $($result.SuccessCount) 成功, $($result.FailureCount) 失败"
-                    } else {
+                    }
+                    else {
                         Write-UiInfo "未更改任何状态"
                     }
                 }
-
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
             }
-            2 {
-                # 删除
-                $statuses = Get-McpStatus
-                $removable = @($statuses | Where-Object { $_.Status -ne "Missing" })
-                if ($removable.Count -eq 0) {
-                    Write-UiWarn "没有可删除的 MCP Server"
-                    Write-Host "按任意键返回..." -ForegroundColor Gray
-                    $null = [Console]::ReadKey($true)
-                    continue
-                }
-
+            "delete" {
                 $menuOptions = @($removable | ForEach-Object { "$($_.Name) [$($_.Status)]" })
                 $selected = Show-SingleSelectMenu -Title "选择要删除的 MCP" -Options $menuOptions -DefaultIndex 0
                 if ($selected -ge 0 -and $selected -lt $removable.Count) {
                     Remove-McpServer $removable[$selected].Id
                 }
-
-                Write-Host ""
-                Write-Host "按任意键返回..." -ForegroundColor Gray
-                $null = [Console]::ReadKey($true)
+            }
+            "back" {
+                return
             }
         }
+
+        Write-Host ""
+        Write-Host "按任意键刷新..." -ForegroundColor Gray
+        $null = [Console]::ReadKey($true)
     }
 }
 
