@@ -450,6 +450,15 @@ function Install-CcgWorkflow {
         Write-UiPrimary "正在刷新环境变量..." -Level Detail
         Refresh-SessionPath
 
+        # ── 提取版本号 ──
+        $configToml = "$script:ClaudeDir\.ccg\config.toml"
+        if (Test-Path $configToml) {
+            $configContent = Get-Content $configToml -Raw -ErrorAction SilentlyContinue
+            if ($configContent -match 'version\s*=\s*"([^"]+)"') {
+                $result.Data["Version"] = $matches[1]
+            }
+        }
+
         $result.Success = $true
     }
     catch {

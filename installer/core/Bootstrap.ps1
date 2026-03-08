@@ -155,7 +155,7 @@ function Invoke-StepActionLifecycle {
                 $stepResult.Status = [StepStatus]::Skipped
                 $stepResult.Message = "组件已安装，跳过安装"
                 $stepResult.EndTime = Get-Date
-                Write-UiOutput "  ✓ 组件已安装，跳过" -Level Essential -Type Warning
+                Write-UiOutput "✓ 组件已安装，跳过" -Level Essential -Type Warning
                 return $stepResult
             }
         } else {
@@ -167,7 +167,7 @@ function Invoke-StepActionLifecycle {
                         $stepResult.Status = [StepStatus]::Skipped
                         $stepResult.Message = "组件未安装，跳过更新"
                         $stepResult.EndTime = Get-Date
-                        Write-UiOutput "  ⏭ 组件未安装，跳过 (OnMissing=Skip)" -Level Essential -Type Warning
+                        Write-UiOutput "⏭ 组件未安装，跳过 (OnMissing=Skip)" -Level Essential -Type Warning
                         return $stepResult
                     }
                     "Fail" {
@@ -175,16 +175,16 @@ function Invoke-StepActionLifecycle {
                         $stepResult.Message = "组件未安装，更新失败"
                         $stepResult.ErrorDetails = "Not installed"
                         $stepResult.EndTime = Get-Date
-                        Write-UiOutput "  ✗ 组件未安装 (OnMissing=Fail)" -Level Essential -Type Danger
+                        Write-UiOutput "✗ 组件未安装 (OnMissing=Fail)" -Level Essential -Type Danger
                         return $stepResult
                     }
                     "Install" {
-                        Write-UiOutput "  📦 组件未安装，执行安装..." -Level Essential -Type Info
+                        Write-UiOutput "📦 组件未安装，执行安装..." -Level Essential -Type Info
                         $actionFunction = $StepConfig.InstallFunction
                         $actionLabel = "安装"
                     }
                     "Ask" {
-                        Write-UiOutput "  ❓ [$stepName] 未安装。" -Level Essential -Type Warning
+                        Write-UiOutput "❓ [$stepName] 未安装。" -Level Essential -Type Warning
                         $options = @("跳过此步骤", "直接安装")
                         $choice = Show-SingleSelectMenu -Title "[$stepName] 未安装，选择操作：" -Options $options
                         if ($choice -eq 0) {
@@ -278,7 +278,7 @@ function Invoke-StepActionLifecycle {
             $stepResult.Data["UpdatedItems"] = $actionResult["UpdatedItems"]
         }
 
-        Write-UiOutput "  ✓ $stepName ${actionLabel}成功" -Level Essential -Type Success
+        Write-UiOutput "✓ $stepName ${actionLabel}成功" -Level Essential -Type Success
 
     } catch {
         $stepResult.Status = [StepStatus]::Failed
@@ -286,7 +286,7 @@ function Invoke-StepActionLifecycle {
         $stepResult.ErrorDetails = $_.Exception.Message
         $stepResult.EndTime = Get-Date
 
-        Write-UiOutput "  ✗ $stepName ${actionLabel}失败: $($_.Exception.Message)" -Level Essential -Type Danger
+        Write-UiOutput "✗ $stepName ${actionLabel}失败: $($_.Exception.Message)" -Level Essential -Type Danger
     }
 
     return $stepResult
