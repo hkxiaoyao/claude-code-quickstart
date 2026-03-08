@@ -208,7 +208,7 @@ function Get-ManagedBlockContent {
     }
 
     if (-not (Test-Path $FilePath)) {
-        Write-UiDim "文件不存在: $FilePath"
+        Write-UiDim "文件不存在: $FilePath" -Level Detail
         return $result
     }
 
@@ -256,7 +256,7 @@ function Get-ManagedBlockContent {
         if ($result.Found) {
             Write-UiSuccess "✓ 找到标记块: 第 $($result.StartLine) - $($result.EndLine) 行"
         } else {
-            Write-UiDim "未找到标记块"
+            Write-UiDim "未找到标记块" -Level Detail
             # 如果没有找到标记块，所有内容都在 BeforeBlock 中
             $result.BeforeBlock = $lines
         }
@@ -315,7 +315,7 @@ function Set-ManagedBlockInFile {
         # 检查文件是否存在
         if (-not (Test-Path $FilePath)) {
             if ($CreateIfNotExists) {
-                Write-UiPrimary "创建新文件: $FilePath"
+                Write-UiPrimary "创建新文件: $FilePath" -Level Detail
                 # 创建目录（如果不存在）
                 $directory = Split-Path $FilePath -Parent
                 if ($directory -and -not (Test-Path $directory)) {
@@ -372,7 +372,7 @@ function Set-ManagedBlockInFile {
         $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
-            Write-UiSuccess "✓ 标记块已更新: $FilePath"
+            Write-UiSuccess "✓ 标记块已更新: $FilePath" -Level Detail
             return $true
         } else {
             Write-UiDanger "✗ 标记块更新失败: $FilePath"
@@ -463,7 +463,7 @@ function Write-FileAtomically {
             throw "文件移动失败"
         }
 
-        Write-UiSuccess "✓ 文件原子写入成功: $FilePath"
+        Write-UiSuccess "✓ 文件原子写入成功: $FilePath" -Level Detail
         return $true
 
     } catch {
@@ -517,7 +517,7 @@ function Remove-ManagedBlockFromFile {
         $blockInfo = Get-ManagedBlockContent -FilePath $FilePath -StartMarker $StartMarker -EndMarker $EndMarker
 
         if (-not $blockInfo.Found) {
-            Write-UiDim "未找到标记块，无需移除"
+            Write-UiDim "未找到标记块，无需移除" -Level Detail
             return $true
         }
 

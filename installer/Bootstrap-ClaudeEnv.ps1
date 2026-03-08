@@ -375,7 +375,7 @@ function Show-CompletionMessage {
     Write-Host ""
 
     Write-UiPrimary "🚀 下一步操作："
-    Write-UiInfo "请在 PowerShell 7 中运行主安装脚本："
+    Write-UiInfo "请用管理员打开 PowerShell 7 运行主安装脚本："
     Write-Host ""
     if ($scriptRoot) {
         # 本地文件模式：直接指向同目录的安装脚本
@@ -387,9 +387,8 @@ function Show-CompletionMessage {
     Write-Host ""
 
     Write-UiPrimary "💡 提示："
-    Write-UiDim "• 如果您使用的是 Windows Terminal，建议在其中运行主安装脚本"
+    Write-UiDim "• 如果您使用的是 Windows Terminal，建议在其中运行 PowerShell 7"
     Write-UiDim "• 主安装脚本提供基础环境和进阶扩展两级安装"
-    Write-UiDim "• 安装过程支持断点续传，遇到问题可以重新运行"
     Write-Host ""
 
     if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {

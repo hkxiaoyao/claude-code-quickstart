@@ -254,16 +254,16 @@ function Show-ExecutionPlan {
     Write-Host ""
 
     if ($AutoAdded -and $AutoAdded.Count -gt 0) {
-        Write-UiWarning "以下依赖将自动纳入执行计划（已安装项会自动跳过）：" -Level Detail
+        Write-UiWarning "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
         foreach ($stepId in $AutoAdded) {
             $stepConfig = Get-StepConfigById -StepId $stepId
             $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-            Write-UiInfo "  + $name（自动补齐）" -Level Detail
+            Write-UiInfo "  + $name（自动补齐）"
         }
         Write-Host ""
     }
 
-    Write-UiPrimary "执行计划：" -Level Detail
+    Write-UiPrimary "执行计划："
 
     $orderedPlan = @(Get-ExecutionOrder -StepIds $FinalPlan)
     $index = 0
@@ -272,7 +272,7 @@ function Show-ExecutionPlan {
         $stepConfig = Get-StepConfigById -StepId $stepId
         $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
         $tag = if ($AutoAdded -and $AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
-        Write-UiInfo "  $index. $name $tag" -Level Detail
+        Write-UiInfo "  $index. $name $tag"
     }
 
     Write-Host ""

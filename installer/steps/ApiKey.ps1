@@ -1,5 +1,5 @@
 # 第三方供应商配置步骤 - CCQ
-# 功能: 供应商选择 → Provider.ps1 委托 + ~/.claude.json 配置 + ccp 旧标记块清理
+# 功能: 供应商选择 → Provider.ps1 委托 + ~/.claude.json 配置
 # 重构: 2026-03-06 - 委托 Provider.ps1 的 Add-Provider 处理供应商 CRUD
 
 #Requires -Version 7.0
@@ -89,16 +89,6 @@ function Install-ApiKey {
             Write-UiSuccess "~/.claude.json 配置已更新（hasCompletedOnboarding: true）" -Level Detail
         } catch {
             Write-UiWarning "更新 ~/.claude.json 失败: $($_.Exception.Message)" -Level Debug
-        }
-
-        # 一次性清理旧版 ccp 注入（迁移旧用户）
-        try {
-            $null = Remove-ManagedBlockFromFile -FilePath $PROFILE `
-                -StartMarker "# >>> Claude Code Provider Switcher >>>" `
-                -EndMarker "# <<< Claude Code Provider Switcher <<<"
-            Write-UiInfo "已清理旧版 ccp 命令（供应商管理已迁移到 Manage 脚本）" -Level Detail
-        } catch {
-            # 静默失败：可能标记块不存在或 $PROFILE 不存在
         }
 
         $result.Success = $true

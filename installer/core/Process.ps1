@@ -291,7 +291,7 @@ function Invoke-WingetInstall {
                 $exitCode = $proc.ExitCode
 
                 if ($exitCode -eq 0) {
-                    Write-UiSuccess "✓ $PackageName 安装成功"
+                    Write-UiSuccess "✓ $PackageName 安装成功" -Level Detail
 
                     # 刷新 PATH 以确保新安装的命令可用
                     Refresh-SessionPath
@@ -365,7 +365,7 @@ function Invoke-NpmGlobalInstall {
         $result = Invoke-ExternalCommand -Command "npm" -Arguments $arguments -TimeoutSeconds 300
 
         if ($result.Success) {
-            Write-UiSuccess "✓ $fullPackageName 安装成功"
+            Write-UiSuccess "✓ $fullPackageName 安装成功" -Level Detail
 
             # 刷新 PATH 以确保新安装的命令可用
             Refresh-SessionPath
