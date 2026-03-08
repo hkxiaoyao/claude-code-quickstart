@@ -67,9 +67,9 @@ function Test-CcSwitchInstalled {
 
                     if ($items.Count -gt 0) {
                         $item = $items[0]
-                        Write-UiInfo "  名称: $($item.DisplayName)"
+                        Write-UiInfo "  名称: $($item.DisplayName)" -Level Detail
                         if ($item.DisplayVersion) {
-                            Write-UiInfo "  版本: $($item.DisplayVersion)"
+                            Write-UiInfo "  版本: $($item.DisplayVersion)" -Level Detail
                             return $item.DisplayVersion
                         }
                         return $true
@@ -94,7 +94,7 @@ function Test-CcSwitchInstalled {
                 if (Test-Path $path) {
                     $exeFiles = @(Get-ChildItem -Path $path -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue)
                     if ($exeFiles.Count -gt 0) {
-                        Write-UiInfo "  安装目录: $path"
+                        Write-UiInfo "  安装目录: $path" -Level Detail
                         return $true
                     }
                 }
@@ -124,7 +124,7 @@ function Install-CcSwitch {
 
     try {
         # 1. 检查前置条件
-        Write-UiDim "1. 检查前置条件..."
+        Write-UiDim "1. 检查前置条件..." -Level Detail
 
         if (-not (Test-CommandAvailable -Command "claude")) {
             throw "Claude Code 未安装，请先完成 ClaudeCode 步骤"
@@ -134,7 +134,7 @@ function Install-CcSwitch {
 
         # 2. 检查 CC-Switch 是否已安装
         Write-Host ""
-        Write-UiDim "2. 检查 CC-Switch 安装状态..."
+        Write-UiDim "2. 检查 CC-Switch 安装状态..." -Level Detail
 
         $ccSwitchTest = Test-CcSwitchInstalled
         if ($ccSwitchTest.IsInstalled) {
@@ -144,14 +144,14 @@ function Install-CcSwitch {
             return $result
         } else {
             # 未检测到安装，提醒用户检测机制的限制
-            Write-UiWarning "  未检测到 CC-Switch 安装"
+            Write-UiWarning "  未检测到 CC-Switch 安装" -Level Detail
             Write-Host ""
-            Write-UiDim "  注意: 当前仅支持检测 MSI 安装方式"
-            Write-UiDim "  如果您已通过便携版/自定义方式安装，可选择跳过"
+            Write-UiDim "  注意: 当前仅支持检测 MSI 安装方式" -Level Detail
+            Write-UiDim "  如果您已通过便携版/自定义方式安装，可选择跳过" -Level Detail
             Write-Host ""
             $response = Read-Host "是否继续安装 CC-Switch？[Y/n]"
             if ($response -match "^[Nn]") {
-                Write-UiDim "跳过 CC-Switch 安装"
+                Write-UiDim "跳过 CC-Switch 安装" -Level Detail
                 $result.Success = $true
                 $result.Data["Skipped"] = $true
                 return $result
@@ -160,31 +160,31 @@ function Install-CcSwitch {
 
         # 3. 检查安装权限（非硬性要求，per-user 安装不需要管理员）
         Write-Host ""
-        Write-UiDim "3. 检查安装权限..."
+        Write-UiDim "3. 检查安装权限..." -Level Detail
 
         $isAdmin = Test-IsAdministrator
         if (-not $isAdmin) {
-            Write-UiDim "  当前非管理员权限，将优先尝试 per-user 安装"
+            Write-UiDim "  当前非管理员权限，将优先尝试 per-user 安装" -Level Detail
         } else {
             Write-UiSuccess "✓ 管理员权限确认"
         }
 
         # 4. 获取最新版本信息
         Write-Host ""
-        Write-UiDim "4. 获取 CC-Switch 最新版本信息..."
+        Write-UiDim "4. 获取 CC-Switch 最新版本信息..." -Level Detail
 
         $releaseInfo = Get-LatestCcSwitchRelease
         if (-not $releaseInfo) {
             throw "无法获取 CC-Switch 最新版本信息"
         }
 
-        Write-UiSuccess "✓ 最新版本: $($releaseInfo.Version)"
-        Write-UiDim "  发布时间: $($releaseInfo.PublishedAt)"
-        Write-UiDim "  下载地址: $($releaseInfo.DownloadUrl)"
+        Write-UiSuccess "✓ 最新版本: $($releaseInfo.Version)" -Level Detail
+        Write-UiDim "  发布时间: $($releaseInfo.PublishedAt)" -Level Detail
+        Write-UiDim "  下载地址: $($releaseInfo.DownloadUrl)" -Level Debug
 
         # 5. 下载 CC-Switch 安装包
         Write-Host ""
-        Write-UiDim "5. 下载 CC-Switch 安装包..."
+        Write-UiDim "5. 下载 CC-Switch 安装包..." -Level Detail
 
         $installerPath = Download-CcSwitchInstaller -DownloadUrl $releaseInfo.DownloadUrl -Version $releaseInfo.Version
 
@@ -192,14 +192,14 @@ function Install-CcSwitch {
             throw "CC-Switch 安装包下载失败"
         }
 
-        Write-UiSuccess "✓ 安装包下载成功: $installerPath"
+        Write-UiSuccess "✓ 安装包下载成功: $installerPath" -Level Detail
 
         # 6. 验证安装包
         Write-Host ""
-        Write-UiDim "6. 验证安装包..."
+        Write-UiDim "6. 验证安装包..." -Level Detail
 
         $fileInfo = Get-Item $installerPath
-        Write-UiDim "  文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB"
+        Write-UiDim "  文件大小: $([math]::Round($fileInfo.Length / 1MB, 2)) MB" -Level Detail
 
         # 检查文件类型
         if ($installerPath -notmatch "\.(msi|exe)$") {
@@ -210,7 +210,7 @@ function Install-CcSwitch {
 
         # 7. 执行静默安装
         Write-Host ""
-        Write-UiDim "7. 执行 CC-Switch 静默安装..."
+        Write-UiDim "7. 执行 CC-Switch 静默安装..." -Level Detail
 
         $installResult = Install-CcSwitchPackage -InstallerPath $installerPath
 
@@ -222,7 +222,7 @@ function Install-CcSwitch {
 
         # 8. 验证安装
         Write-Host ""
-        Write-UiDim "8. 验证 CC-Switch 安装..."
+        Write-UiDim "8. 验证 CC-Switch 安装..." -Level Detail
 
         # 等待安装完成
         Start-Sleep -Seconds 3
@@ -230,32 +230,32 @@ function Install-CcSwitch {
         $verifyTest = Test-CcSwitchInstalled
         if (-not $verifyTest.IsInstalled) {
             Write-UiWarning "⚠ CC-Switch 安装验证失败，但安装过程成功"
-            Write-UiDim "  可能需要重启系统或重新登录才能完全生效"
+            Write-UiDim "  可能需要重启系统或重新登录才能完全生效" -Level Detail
         } else {
             Write-UiSuccess "✓ CC-Switch 安装验证成功"
         }
 
         # 9. 清理临时文件
         Write-Host ""
-        Write-UiDim "9. 清理临时文件..."
+        Write-UiDim "9. 清理临时文件..." -Level Detail
 
         try {
             if (Test-Path $script:TempDownloadDir) {
                 Remove-Item $script:TempDownloadDir -Recurse -Force
-                Write-UiSuccess "✓ 临时文件清理完成"
+                Write-UiSuccess "✓ 临时文件清理完成" -Level Detail
             }
         } catch {
-            Write-UiWarning "⚠ 临时文件清理失败，但不影响使用: $($_.Exception.Message)"
+            Write-UiWarning "⚠ 临时文件清理失败，但不影响使用: $($_.Exception.Message)" -Level Debug
         }
 
         # 10. 使用提示
         Write-Host ""
-        Write-UiDim "10. 使用提示..."
+        Write-UiDim "10. 使用提示..." -Level Detail
         Write-UiPrimary "  CC-Switch 已安装完成"
-        Write-UiDim "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:"
-        Write-UiDim "    - 快速切换 Claude Code 配置"
-        Write-UiDim "    - 项目环境管理"
-        Write-UiDim "    - 工作流程优化"
+        Write-UiDim "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:" -Level Detail
+        Write-UiDim "    - 快速切换 Claude Code 配置" -Level Detail
+        Write-UiDim "    - 项目环境管理" -Level Detail
+        Write-UiDim "    - 工作流程优化" -Level Detail
         Write-Host ""
         Write-UiSuccess "✓ CC-Switch 安装完成"
 
@@ -290,7 +290,7 @@ function Get-LatestCcSwitchRelease {
     param()
 
     try {
-        Write-UiDim "  正在获取 GitHub Release 信息..."
+        Write-UiDim "  正在获取 GitHub Release 信息..." -Level Detail
 
         # 强制使用 TLS 1.2+（GitHub API 要求，防止 PS 5.1 默认 TLS 1.0 导致连接失败）
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls13
@@ -443,10 +443,10 @@ function Install-CcSwitchPackage {
 
         switch ($fileExtension) {
             ".msi" {
-                Write-UiDim "  正在执行 MSI 安装..."
+                Write-UiDim "  正在执行 MSI 安装..." -Level Detail
 
                 # 策略 1：per-user 安装（不需要管理员权限）
-                Write-UiDim "  尝试 per-user 安装模式..."
+                Write-UiDim "  尝试 per-user 安装模式..." -Level Debug
                 $perUserArgs = @(
                     "/i", "`"$InstallerPath`"",
                     "/qn",
@@ -463,7 +463,7 @@ function Install-CcSwitchPackage {
                     Write-UiSuccess "  ✓ MSI per-user 安装完成$rebootHint"
                 } else {
                     # 策略 2：全局静默安装（需要管理员）
-                    Write-UiWarning "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..."
+                    Write-UiWarning "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..." -Level Debug
                     $globalArgs = @(
                         "/i", "`"$InstallerPath`"",
                         "/quiet",
@@ -477,7 +477,7 @@ function Install-CcSwitchPackage {
                         Write-UiSuccess "  ✓ MSI 全局安装完成$rebootHint"
                     } else {
                         # 策略 3：GUI 安装降级（让用户手动操作）
-                        Write-UiWarning "  静默安装均失败，启动 GUI 安装..."
+                        Write-UiWarning "  静默安装均失败，启动 GUI 安装..." -Level Debug
                         Write-UiPrimary "  请在弹出的安装向导中手动完成安装"
                         $guiResult = Invoke-ExternalCommand -Command "msiexec" -Arguments @("/i", "`"$InstallerPath`"") -TimeoutSeconds 600
 
@@ -490,7 +490,7 @@ function Install-CcSwitchPackage {
             }
 
             ".exe" {
-                Write-UiDim "  正在执行 EXE 静默安装..."
+                Write-UiDim "  正在执行 EXE 静默安装..." -Level Detail
 
                 # 尝试常见的静默安装参数
                 $silentArgs = @("/S", "/SILENT", "/VERYSILENT", "/quiet", "/q")
@@ -498,7 +498,7 @@ function Install-CcSwitchPackage {
 
                 foreach ($arg in $silentArgs) {
                     try {
-                        Write-UiDim "    尝试参数: $arg"
+                        Write-UiDim "    尝试参数: $arg" -Level Debug
                         $result = Invoke-ExternalCommand -Command $InstallerPath -Arguments @($arg) -TimeoutSeconds 300
 
                         if ($result.Success) {

@@ -254,16 +254,16 @@ function Show-ExecutionPlan {
     Write-Host ""
 
     if ($AutoAdded -and $AutoAdded.Count -gt 0) {
-        Write-UiWarning "以下依赖将自动纳入执行计划（已安装项会自动跳过）："
+        Write-UiWarning "以下依赖将自动纳入执行计划（已安装项会自动跳过）：" -Level Detail
         foreach ($stepId in $AutoAdded) {
             $stepConfig = Get-StepConfigById -StepId $stepId
             $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
-            Write-UiInfo "  + $name（自动补齐）"
+            Write-UiInfo "  + $name（自动补齐）" -Level Detail
         }
         Write-Host ""
     }
 
-    Write-UiPrimary "执行计划："
+    Write-UiPrimary "执行计划：" -Level Detail
 
     $orderedPlan = @(Get-ExecutionOrder -StepIds $FinalPlan)
     $index = 0
@@ -272,7 +272,7 @@ function Show-ExecutionPlan {
         $stepConfig = Get-StepConfigById -StepId $stepId
         $name = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
         $tag = if ($AutoAdded -and $AutoAdded.Count -gt 0 -and $stepId -in $AutoAdded) { "(依赖补齐)" } else { "" }
-        Write-UiInfo "  $index. $name $tag"
+        Write-UiInfo "  $index. $name $tag" -Level Detail
     }
 
     Write-Host ""
@@ -339,16 +339,16 @@ function Invoke-GroupedInstall {
 
         $stepConfig = Get-StepConfigById -StepId $stepId
         if (-not $stepConfig) {
-            Write-UiWarning "未找到步骤配置: $stepId，跳过"
+            Write-UiWarning "未找到步骤配置: $stepId，跳过" -Level Debug
             $results.Skipped++
             continue
         }
 
         Write-Host ""
-        Write-UiDim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        Write-UiDim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -Level Debug
         Write-UiPrimary "步骤 $stepIndex / $($results.Total)：$($stepConfig.StepName)"
-        Write-UiDim "     $($stepConfig.Description)"
-        Write-UiDim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        Write-UiDim "     $($stepConfig.Description)" -Level Detail
+        Write-UiDim "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -Level Debug
 
         # 检查前置依赖
         $depCheck = Test-StepDependencies -StepId $stepId -State $State
@@ -435,7 +435,7 @@ function Show-AdvancedSelectMenu {
     param()
 
     Write-Host ""
-    Write-UiPrimary "正在检测进阶扩展组件状态..."
+    Write-UiPrimary "正在检测进阶扩展组件状态..." -Level Detail
     Write-Host ""
 
     $advancedGroup = $script:StepGroups["Advanced"]
@@ -528,13 +528,13 @@ function Show-StepList {
     #>
     param()
 
-    Write-UiPrimary "已注册的安装步骤："
+    Write-UiPrimary "已注册的安装步骤：" -Level Detail
     Write-Host ""
 
     $stepIndex = 0
     foreach ($groupName in @("Basic", "Advanced")) {
         $group = $script:StepGroups[$groupName]
-        Write-UiPrimary "─── $($group.Label)（$($group.Description)）───"
+        Write-UiPrimary "─── $($group.Label)（$($group.Description)）───" -Level Detail
         Write-Host ""
 
         foreach ($stepId in $group.StepIds) {
@@ -543,10 +543,10 @@ function Show-StepList {
 
             $stepIndex++
             $tag = if ($step.IsOptional) { "[可选]" } else { "[必选]" }
-            Write-UiInfo "  $stepIndex. $tag $($step.StepName)"
-            Write-UiDim "       $($step.Description)"
+            Write-UiInfo "  $stepIndex. $tag $($step.StepName)" -Level Detail
+            Write-UiDim "       $($step.Description)" -Level Detail
             $deps = (Get-StepDependencies)[$stepId]
-            Write-UiDim "       依赖: $(if (-not $deps -or $deps.Count -eq 0) { '无' } else { $deps -join ', ' })"
+            Write-UiDim "       依赖: $(if (-not $deps -or $deps.Count -eq 0) { '无' } else { $deps -join ', ' })" -Level Debug
             Write-Host ""
         }
     }
@@ -618,9 +618,9 @@ function Show-FinalSummary {
 
     if ($Results.Failed -eq 0) {
         Write-Host ""
-        Write-UiPrimary "快速开始："
-        Write-UiInfo "  claude          - 启动 Claude Code"
-        Write-UiInfo "  claude --help   - 查看帮助信息"
+        Write-UiPrimary "快速开始：" -Level Detail
+        Write-UiInfo "  claude          - 启动 Claude Code" -Level Detail
+        Write-UiInfo "  claude --help   - 查看帮助信息" -Level Detail
     } else {
         Write-UiWarning "安装完成，但有 $($Results.Failed) 个步骤失败"
         Write-Host ""
@@ -634,7 +634,7 @@ function Show-FinalSummary {
             }
         }
         Write-Host ""
-        Write-UiInfo "重新运行安装器可重试失败步骤"
+        Write-UiInfo "重新运行安装器可重试失败步骤" -Level Detail
     }
 
     Write-Host ""
@@ -657,7 +657,7 @@ function Main {
         # 欢迎横幅
         Show-CcqLogo -Subtitle "Claude Code Quickstart"
 
-        Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能"
+        Write-UiInfo "支持一键搭建 Claude Code 的开发环境及进阶功能" -Level Detail
         Write-Host ""
 
         # 创建新的安装状态（纯内存，不持久化）
@@ -679,7 +679,7 @@ function Main {
 
             if ($Group -eq "Basic") {
                 # 基础环境：直接一键安装
-                Write-UiPrimary "基础环境一键安装模式"
+                Write-UiPrimary "基础环境一键安装模式" -Level Detail
                 Write-Host ""
                 $basicStepIds = $script:StepGroups["Basic"].StepIds
                 $results = Invoke-GroupedInstall -StepIds $basicStepIds -State $state
@@ -690,7 +690,7 @@ function Main {
             elseif ($Group -eq "Advanced") {
                 if ($Mode -eq "Select") {
                     # 进阶：多选模式
-                    Write-UiPrimary "进阶扩展可选安装模式"
+                    Write-UiPrimary "进阶扩展可选安装模式" -Level Detail
                     Write-Host ""
                     $selectedIds = @(Show-AdvancedSelectMenu)
                     if ($selectedIds -and $selectedIds.Count -gt 0) {
@@ -704,7 +704,7 @@ function Main {
                 }
                 else {
                     # 进阶：一键安装（默认，排除可选步骤）
-                    Write-UiPrimary "进阶扩展一键安装模式"
+                    Write-UiPrimary "进阶扩展一键安装模式" -Level Detail
                     Write-Host ""
                     $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {
                         $sid = $_
@@ -731,14 +731,14 @@ function Main {
 
             if ($topChoice -eq -1) {
                 Write-Host ""
-                Write-UiPrimary "退出 CCQ"
+                Write-UiPrimary "退出 CCQ" -Level Detail
                 break
             }
 
             if ($topChoice -eq 0) {
                 # 基础环境：直接一键安装
                 Write-Host ""
-                Write-UiPrimary "基础环境一键安装"
+                Write-UiPrimary "基础环境一键安装" -Level Detail
                 Write-Host ""
 
                 $basicStepIds = $script:StepGroups["Basic"].StepIds
@@ -763,7 +763,7 @@ function Main {
                 if ($advChoice -eq 0) {
                     # 一键安装（排除可选步骤）
                     Write-Host ""
-                    Write-UiPrimary "进阶扩展一键安装"
+                    Write-UiPrimary "进阶扩展一键安装" -Level Detail
                     Write-Host ""
 
                     $advancedStepIds = @($script:StepGroups["Advanced"].StepIds | ForEach-Object {

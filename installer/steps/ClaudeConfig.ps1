@@ -109,7 +109,7 @@ function Install-ClaudeConfig {
                 $existingContent = Get-Content $settingsPath -Raw
                 $settings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
                 if (-not $settings) { $settings = @{} }
-                Write-UiInfo "已读取现有配置，将按缺失项补全"
+                Write-UiInfo "已读取现有配置，将按缺失项补全" -Level Detail
             }
             catch {
                 throw "无法解析现有 settings.json，已停止写入以避免覆盖用户配置: $($_.Exception.Message)"
@@ -178,13 +178,13 @@ function Install-ClaudeConfig {
         $settings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
         Move-Item $tempPath $settingsPath -Force
 
-        Write-UiSuccess "✓ Claude Code 常用配置已写入 ~/.claude/settings.json"
-        Write-UiInfo "配置路径: $settingsPath"
-        Write-UiInfo "配置摘要:"
-        Write-UiInfo "  - 语言: $($settings['language'])"
-        Write-UiInfo "  - 默认模型: $($settings['model'])"
-        Write-UiInfo "  - 权限项: $($settings['permissions']['allow'].Count) 项"
-        Write-UiInfo "  - 环境变量: $($script:ClaudeConfigEnvDefaults.Count) 项"
+        Write-UiSuccess "✓ Claude Code 常用配置已写入 ~/.claude/settings.json" -Level Detail
+        Write-UiInfo "配置路径: $settingsPath" -Level Detail
+        Write-UiInfo "配置摘要:" -Level Detail
+        Write-UiInfo "  - 语言: $($settings['language'])" -Level Detail
+        Write-UiInfo "  - 默认模型: $($settings['model'])" -Level Detail
+        Write-UiInfo "  - 权限项: $($settings['permissions']['allow'].Count) 项" -Level Detail
+        Write-UiInfo "  - 环境变量: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
 
         $result.Success = $true
     }
@@ -257,9 +257,9 @@ function Verify-ClaudeConfig {
         }
 
         Write-UiSuccess "✓ Claude Code 常用配置验证通过"
-        Write-UiInfo "  - language: $($settings.language)"
-        Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项"
-        Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项"
+        Write-UiInfo "  - language: $($settings.language)" -Level Detail
+        Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项" -Level Detail
+        Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
 
         $result.Success = $true
     }
@@ -390,7 +390,7 @@ function Update-ClaudeConfig {
         # 结果
         if ($updatedItems.Count -eq 0) {
             $result.UpdatedItems = @("noop::ClaudeConfig::no-change")
-            Write-UiDim "ClaudeConfig 已是最新，无需更新"
+            Write-UiDim "ClaudeConfig 已是最新，无需更新" -Level Debug
         } else {
             $result.UpdatedItems = @($updatedItems)
             Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)"

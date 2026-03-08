@@ -54,7 +54,7 @@ function Install-ClaudeCode {
         Write-UiPrimary "📦 开始安装 Claude Code..."
 
         # 1. 验证前置条件
-        Write-UiPrimary "🔍 验证前置条件..."
+        Write-UiPrimary "🔍 验证前置条件..." -Level Detail
 
         # 先刷新 PATH 确保能找到 node 和 npm
         Refresh-SessionPath
@@ -64,12 +64,12 @@ function Install-ClaudeCode {
         if (-not $nodeDetails.Available) {
             Write-UiDanger "✗ Node.js 未找到"
             if ($nodeDetails.ErrorMessage) {
-                Write-UiInfo "  错误详情: $($nodeDetails.ErrorMessage)"
+                Write-UiInfo "  错误详情: $($nodeDetails.ErrorMessage)" -Level Detail
             }
-            Write-UiDim "💡 这可能是因为 fnm 环境变量尚未在当前会话中生效"
-            Write-UiDim "💡 请尝试以下操作之一："
-            Write-UiDim "   1. 重新启动 PowerShell 后重新运行安装器"
-            Write-UiDim "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器"
+            Write-UiDim "💡 这可能是因为 fnm 环境变量尚未在当前会话中生效" -Level Detail
+            Write-UiDim "💡 请尝试以下操作之一：" -Level Detail
+            Write-UiDim "   1. 重新启动 PowerShell 后重新运行安装器" -Level Detail
+            Write-UiDim "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器" -Level Detail
             throw "Node.js 未安装或不可用，请先完成 NodeFnm 步骤并重新启动 PowerShell"
         }
 
@@ -78,10 +78,10 @@ function Install-ClaudeCode {
         if (-not $npmDetails.Available) {
             Write-UiDanger "✗ npm 未找到"
             if ($npmDetails.ResolvedPath) {
-                Write-UiInfo "  解析路径: $($npmDetails.ResolvedPath)"
+                Write-UiInfo "  解析路径: $($npmDetails.ResolvedPath)" -Level Detail
             }
             if ($npmDetails.ErrorMessage) {
-                Write-UiInfo "  错误详情: $($npmDetails.ErrorMessage)"
+                Write-UiInfo "  错误详情: $($npmDetails.ErrorMessage)" -Level Detail
             }
             throw "npm 未安装，请先完成 NodeFnm 步骤并重新启动 PowerShell"
         }
@@ -117,7 +117,7 @@ function Install-ClaudeCode {
         }
 
         # 3. 使用 npm 全局安装 Claude Code
-        Write-UiPrimary "🚀 通过 npm 全局安装 Claude Code..."
+        Write-UiPrimary "🚀 通过 npm 全局安装 Claude Code..." -Level Detail
 
         try {
             $installResult = Invoke-NpmGlobalInstall -PackageName $script:ClaudeCodePackage -Force
@@ -130,15 +130,15 @@ function Install-ClaudeCode {
 
         } catch {
             # 如果标准安装失败，尝试其他方法
-            Write-UiWarning "⚠ 标准 npm 安装失败，尝试备用方法..."
+            Write-UiWarning "⚠ 标准 npm 安装失败，尝试备用方法..." -Level Detail
 
             try {
                 # 尝试清理 npm 缓存后重新安装
-                Write-UiPrimary "清理 npm 缓存..."
+                Write-UiPrimary "清理 npm 缓存..." -Level Detail
                 $cleanResult = Invoke-ExternalCommand -Command "npm" -Arguments @("cache", "clean", "--force") -TimeoutSeconds 60 -SuppressOutput
 
                 if ($cleanResult.Success) {
-                    Write-UiPrimary "重新尝试安装..."
+                    Write-UiPrimary "重新尝试安装..." -Level Detail
                     $retryResult = Invoke-ExternalCommand -Command "npm" -Arguments @("install", "-g", $script:ClaudeCodePackage, "--force") -TimeoutSeconds 300
 
                     if (-not $retryResult.Success) {
@@ -154,7 +154,7 @@ function Install-ClaudeCode {
         }
 
         # 4. 刷新 PATH 并验证安装
-        Write-UiPrimary "🔄 刷新环境变量并验证安装..."
+        Write-UiPrimary "🔄 刷新环境变量并验证安装..." -Level Detail
 
         Refresh-SessionPath
 
@@ -169,10 +169,10 @@ function Install-ClaudeCode {
                 $npmGlobalPath = & npm config get prefix 2>$null
                 if ($npmGlobalPath -and (Test-Path $npmGlobalPath)) {
                     $env:PATH = "$npmGlobalPath;$env:PATH"
-                    Write-UiInfo "已手动添加 npm 全局路径到 PATH"
+                    Write-UiInfo "已手动添加 npm 全局路径到 PATH" -Level Detail
                 }
             } catch {
-                Write-UiWarning "⚠ 无法获取 npm 全局路径"
+                Write-UiWarning "⚠ 无法获取 npm 全局路径" -Level Debug
             }
 
             # 再次验证
@@ -195,27 +195,27 @@ function Install-ClaudeCode {
         Write-UiSuccess "✓ Claude Code 验证成功 (版本: $claudeVersion)"
 
         # 5. 验证基本功能
-        Write-UiPrimary "✅ 验证 Claude Code 基本功能..."
+        Write-UiPrimary "✅ 验证 Claude Code 基本功能..." -Level Detail
 
         try {
             # 测试 --version 命令
             $versionResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--version") -SuppressOutput -TimeoutSeconds 15
             if ($versionResult.Success) {
-                Write-UiSuccess "✓ Claude Code 版本命令正常"
+                Write-UiSuccess "✓ Claude Code 版本命令正常" -Level Detail
             } else {
-                Write-UiWarning "⚠ Claude Code 版本命令异常，但不影响基本使用"
+                Write-UiWarning "⚠ Claude Code 版本命令异常，但不影响基本使用" -Level Detail
             }
 
             # 测试 --help 命令
             $helpResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--help") -SuppressOutput -TimeoutSeconds 15
             if ($helpResult.Success) {
-                Write-UiSuccess "✓ Claude Code 帮助命令正常"
+                Write-UiSuccess "✓ Claude Code 帮助命令正常" -Level Detail
             } else {
-                Write-UiWarning "⚠ Claude Code 帮助命令异常，但不影响基本使用"
+                Write-UiWarning "⚠ Claude Code 帮助命令异常，但不影响基本使用" -Level Detail
             }
 
         } catch {
-            Write-UiWarning "⚠ Claude Code 功能验证异常: $($_.Exception.Message)"
+            Write-UiWarning "⚠ Claude Code 功能验证异常: $($_.Exception.Message)" -Level Debug
         }
 
         # 安装成功
@@ -223,7 +223,7 @@ function Install-ClaudeCode {
         $result.Message = "Claude Code 安装完成"
 
         Write-UiSuccess "✅ ClaudeCode 安装完成！"
-        Write-UiDim "💡 提示: Claude Code 现在可以通过 'claude' 命令使用"
+        Write-UiDim "💡 提示: Claude Code 现在可以通过 'claude' 命令使用" -Level Detail
 
     } catch {
         $result.ErrorMessage = "Claude Code 安装失败: $($_.Exception.Message)"
@@ -330,7 +330,7 @@ function Update-ClaudeCode {
     }
 
     try {
-        Write-UiPrimary "更新 Claude Code..."
+        Write-UiPrimary "更新 Claude Code..." -Level Detail
 
         # 获取当前版本
         $oldVersion = ""
@@ -340,15 +340,15 @@ function Update-ClaudeCode {
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
             throw "无法获取当前 Claude Code 版本，请确认已安装"
         }
-        Write-UiInfo "当前版本: $oldVersion"
+        Write-UiInfo "当前版本: $oldVersion" -Level Detail
 
         # 检测是否有新版本（使用 npm outdated -g 批量缓存）
         $updateCheck = Test-NpmUpdateAvailable -PackageName $script:ClaudeCodePackage -CurrentVersion $oldVersion
         if ($updateCheck.LatestVersion) {
-            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)" -Level Detail
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiInfo "Claude Code 已是最新版本 ($oldVersion)"
+            Write-UiInfo "Claude Code 已是最新版本 ($oldVersion)" -Level Detail
             $result.UpdatedItems = @("noop::ClaudeCode::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
@@ -362,7 +362,7 @@ function Update-ClaudeCode {
         for ($attempt = 0; $attempt -lt 3; $attempt++) {
             if ($attempt -gt 0) {
                 $waitSec = [math]::Pow(2, $attempt)
-                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..." -Level Debug
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -377,12 +377,12 @@ function Update-ClaudeCode {
 
         if (-not $installSuccess) {
             # 回退到旧版本
-            Write-UiWarning "更新失败，尝试回退到 $oldVersion..."
+            Write-UiWarning "更新失败，尝试回退到 $oldVersion..." -Level Debug
             $rollbackResult = Invoke-ExternalCommand -Command "npm" `
                 -Arguments @("install", "-g", "$($script:ClaudeCodePackage)@$oldVersion") `
                 -TimeoutSeconds 300 -SuppressOutput -RetryCount 0
             if ($rollbackResult.ExitCode -ne 0) {
-                Write-UiWarning "回退也失败，当前状态可能不一致"
+                Write-UiWarning "回退也失败，当前状态可能不一致" -Level Debug
             }
             throw "npm install @latest 失败 (已尝试 3 次): $lastError"
         }
@@ -398,7 +398,7 @@ function Update-ClaudeCode {
         # 构建 UpdatedItems
         if ($oldVersion -eq $newVersion) {
             $result.UpdatedItems = @("noop::ClaudeCode::no-change")
-            Write-UiInfo "Claude Code 已是最新版本 ($newVersion)"
+            Write-UiInfo "Claude Code 已是最新版本 ($newVersion)" -Level Detail
         } else {
             $result.UpdatedItems = @("npm::claude-code::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ Claude Code 已更新: $oldVersion -> $newVersion"

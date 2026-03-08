@@ -156,10 +156,10 @@ function Install-ClaudeMd {
         $claudeMdDir = Split-Path $claudeMdPath -Parent
         if (-not (Test-Path $claudeMdDir)) {
             New-Item -ItemType Directory -Path $claudeMdDir -Force | Out-Null
-            Write-UiInfo "已创建目录: $claudeMdDir"
+            Write-UiInfo "已创建目录: $claudeMdDir" -Level Detail
         }
 
-        Write-UiPrimary "写入 CLAUDE.md 配置..."
+        Write-UiPrimary "写入 CLAUDE.md 配置..." -Level Detail
         $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
 
         if (-not $writeResult) {
@@ -167,15 +167,15 @@ function Install-ClaudeMd {
         }
 
         $lineCount = ($script:ClaudeMdTemplate -split "`n").Count
-        Write-UiSuccess "CLAUDE.md 已写入 ($lineCount 行)"
+        Write-UiSuccess "CLAUDE.md 已写入 ($lineCount 行)" -Level Detail
 
-        Write-UiInfo "配置路径: $claudeMdPath"
+        Write-UiInfo "配置路径: $claudeMdPath" -Level Detail
 
         # 显示配置摘要
-        Write-UiInfo "配置摘要:"
-        Write-UiInfo "  - 主文件行数: $lineCount"
-        Write-UiInfo "  - 核心原则: 5 项（调研优先/三问/红线/安全/风格）"
-        Write-UiInfo "  - 工作流原则: 2 条"
+        Write-UiInfo "配置摘要:" -Level Detail
+        Write-UiInfo "  - 主文件行数: $lineCount" -Level Detail
+        Write-UiInfo "  - 核心原则: 5 项（调研优先/三问/红线/安全/风格）" -Level Detail
+        Write-UiInfo "  - 工作流原则: 2 条" -Level Detail
 
         $result.Success = $true
     }
@@ -234,8 +234,8 @@ function Verify-ClaudeMd {
         }
 
         Write-UiSuccess "CLAUDE.md 配置验证通过"
-        Write-UiInfo "  - 主文件大小: $([math]::Round($fileSize / 1024, 2)) KB"
-        Write-UiInfo "  - 章节完整性: 通过"
+        Write-UiInfo "  - 主文件大小: $([math]::Round($fileSize / 1024, 2)) KB" -Level Detail
+        Write-UiInfo "  - 章节完整性: 通过" -Level Detail
 
         $result.Success = $true
     }
@@ -296,7 +296,7 @@ function Update-ClaudeMd {
         # 结果
         if ($updatedItems.Count -eq 0) {
             $result.UpdatedItems = @("noop::ClaudeMd::no-change")
-            Write-UiDim "ClaudeMd 已是最新，无需更新"
+            Write-UiDim "ClaudeMd 已是最新，无需更新" -Level Debug
         } else {
             $result.UpdatedItems = @($updatedItems)
             Write-UiSuccess "ClaudeMd 已更新 ($($updatedItems.Count) 项变更)"

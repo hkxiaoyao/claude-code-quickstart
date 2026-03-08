@@ -130,6 +130,8 @@ function Write-UiBase {
     ANSI 颜色代码
     .PARAMETER NoNewline
     不添加换行符
+    .PARAMETER Level
+    输出级别：Essential（必要）, Detail（详细）, Debug（调试）
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -138,8 +140,15 @@ function Write-UiBase {
         [Parameter(Mandatory = $true)]
         [string]$ColorCode,
 
-        [switch]$NoNewline
+        [switch]$NoNewline,
+
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
     )
+
+    # 级别过滤：Normal 模式下仅 Essential 通过
+    if ($script:CcqOutputMode -eq [CcqOutputMode]::Normal -and $Level -gt [CcqOutputLevel]::Essential) {
+        return
+    }
 
     $Message = Convert-EmojiToText -Text $Message
 
@@ -161,8 +170,12 @@ function Write-UiSuccess {
     .SYNOPSIS
     输出成功级别的彩色文本（亮绿色）
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Success -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Success -NoNewline:$NoNewline -Level $Level
 }
 
 function Write-UiPrimary {
@@ -170,8 +183,12 @@ function Write-UiPrimary {
     .SYNOPSIS
     输出主色调文本（Claude 橙色），用于标题、品牌、活跃操作
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Primary -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Primary -NoNewline:$NoNewline -Level $Level
 }
 
 function Write-UiWarning {
@@ -179,8 +196,12 @@ function Write-UiWarning {
     .SYNOPSIS
     输出警告级别的彩色文本（亮黄色）
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Warning -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Warning -NoNewline:$NoNewline -Level $Level
 }
 
 function Write-UiDanger {
@@ -188,8 +209,12 @@ function Write-UiDanger {
     .SYNOPSIS
     输出错误级别的彩色文本（亮红色）
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Danger -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Danger -NoNewline:$NoNewline -Level $Level
 }
 
 function Write-UiInfo {
@@ -197,8 +222,12 @@ function Write-UiInfo {
     .SYNOPSIS
     输出信息级别的彩色文本（白色），用于数据、路径、指令
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Info -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Info -NoNewline:$NoNewline -Level $Level
 }
 
 function Write-UiDim {
@@ -206,8 +235,12 @@ function Write-UiDim {
     .SYNOPSIS
     输出弱化文本（灰色），用于装饰、元信息
     #>
-    param([Parameter(Mandatory = $true)][string]$Message, [switch]$NoNewline)
-    Write-UiBase $Message $script:AnsiColors.Dim -NoNewline:$NoNewline
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [switch]$NoNewline,
+        [CcqOutputLevel]$Level = [CcqOutputLevel]::Essential
+    )
+    Write-UiBase $Message $script:AnsiColors.Dim -NoNewline:$NoNewline -Level $Level
 }
 
 function Clear-UiScreen {
@@ -819,12 +852,12 @@ function Show-InstallSummary {
         return
     }
 
-    # 计算列宽
-    $nameWidth = ($Items | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
-    $statusWidth = ($Items | ForEach-Object { $_.Status.Length } | Measure-Object -Maximum).Maximum
-    $versionWidth = ($Items | ForEach-Object { $_.Version.Length } | Measure-Object -Maximum).Maximum
+    # 计算列宽（CJK 感知：按显示宽度而非字符数）
+    $nameWidth = ($Items | ForEach-Object { Get-StringDisplayWidth $_.Name } | Measure-Object -Maximum).Maximum
+    $statusWidth = ($Items | ForEach-Object { Get-StringDisplayWidth $_.Status } | Measure-Object -Maximum).Maximum
+    $versionWidth = ($Items | ForEach-Object { Get-StringDisplayWidth $_.Version } | Measure-Object -Maximum).Maximum
 
-    # 确保最小宽度
+    # 确保最小宽度（表头中文字符占双倍宽度）
     $nameWidth = [Math]::Max($nameWidth, 10)
     $statusWidth = [Math]::Max($statusWidth, 8)
     $versionWidth = [Math]::Max($versionWidth, 8)
@@ -832,17 +865,17 @@ function Show-InstallSummary {
     # 表格边框
     $separator = "+" + ("-" * ($nameWidth + 2)) + "+" + ("-" * ($statusWidth + 2)) + "+" + ("-" * ($versionWidth + 2)) + "+"
 
-    # 表头
+    # 表头（使用 CJK 感知填充）
     Write-UiDim $separator
-    $header = "| $("组件".PadRight($nameWidth)) | $("状态".PadRight($statusWidth)) | $("版本".PadRight($versionWidth)) |"
+    $header = "| $(Format-DisplayPad "组件" $nameWidth) | $(Format-DisplayPad "状态" $statusWidth) | $(Format-DisplayPad "版本" $versionWidth) |"
     Write-UiInfo $header
     Write-UiDim $separator
 
-    # 数据行
+    # 数据行（使用 CJK 感知填充）
     foreach ($item in $Items) {
-        $name = $item.Name.PadRight($nameWidth)
-        $status = $item.Status.PadRight($statusWidth)
-        $version = $item.Version.PadRight($versionWidth)
+        $name = Format-DisplayPad $item.Name $nameWidth
+        $status = Format-DisplayPad $item.Status $statusWidth
+        $version = Format-DisplayPad $item.Version $versionWidth
 
         $row = "| $name | $status | $version |"
 

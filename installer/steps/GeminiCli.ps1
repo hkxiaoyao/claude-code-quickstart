@@ -83,7 +83,7 @@ function Install-GeminiCli {
         }
 
         # 全局安装 Gemini CLI（HC-2: 无 -DisplayName 参数）
-        Write-UiPrimary "正在通过 npm 全局安装 Gemini CLI..."
+        Write-UiPrimary "正在通过 npm 全局安装 Gemini CLI..." -Level Detail
         $installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
 
         if (-not $installOut.Success) {
@@ -91,7 +91,7 @@ function Install-GeminiCli {
         }
 
         # 刷新 PATH
-        Write-UiPrimary "刷新环境变量..."
+        Write-UiPrimary "刷新环境变量..." -Level Detail
         Refresh-SessionPath
 
         # 验证安装（通过 npm list 验证，避免 fnm multishell wrapper 挂起）
@@ -102,8 +102,8 @@ function Install-GeminiCli {
         }
 
         Write-UiSuccess "✓ Gemini CLI 安装成功"
-        Write-UiInfo "版本: $version"
-        Write-UiInfo "命令: gemini --help"
+        Write-UiInfo "版本: $version" -Level Detail
+        Write-UiInfo "命令: gemini --help" -Level Detail
 
         $result.Success          = $true
         $result.Data["Version"] = $version
@@ -144,9 +144,9 @@ function Verify-GeminiCli {
         $cmdResolved = if ($cmdInfo) { "✓ ($($cmdInfo.Source))" } else { "- (PATH 未就绪，重启 Shell 后可用)" }
 
         Write-UiSuccess "✓ Gemini CLI 验证通过"
-        Write-UiInfo "  - npm 包状态: ✓"
-        Write-UiInfo "  - 版本信息: $version"
-        Write-UiInfo "  - 命令解析: $cmdResolved"
+        Write-UiInfo "  - npm 包状态: ✓" -Level Detail
+        Write-UiInfo "  - 版本信息: $version" -Level Detail
+        Write-UiInfo "  - 命令解析: $cmdResolved" -Level Detail
 
         $result.Success = $true
     }
@@ -181,15 +181,15 @@ function Update-GeminiCli {
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
             throw "无法获取当前 Gemini CLI 版本，请确认已安装"
         }
-        Write-UiInfo "当前版本: $oldVersion"
+        Write-UiInfo "当前版本: $oldVersion" -Level Detail
 
         # 检测是否有新版本（使用 npm outdated -g 批量缓存）
         $updateCheck = Test-NpmUpdateAvailable -PackageName "@google/gemini-cli" -CurrentVersion $oldVersion
         if ($updateCheck.LatestVersion) {
-            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)" -Level Detail
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiDim "Gemini CLI 已是最新版本 ($oldVersion)"
+            Write-UiDim "Gemini CLI 已是最新版本 ($oldVersion)" -Level Debug
             $result.UpdatedItems = @("noop::GeminiCli::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
@@ -203,7 +203,7 @@ function Update-GeminiCli {
         for ($attempt = 0; $attempt -lt 3; $attempt++) {
             if ($attempt -gt 0) {
                 $waitSec = [math]::Pow(2, $attempt)
-                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..." -Level Debug
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -232,7 +232,7 @@ function Update-GeminiCli {
 
         if ($oldVersion -eq $newVersion) {
             $result.UpdatedItems = @("noop::GeminiCli::no-change")
-            Write-UiDim "Gemini CLI 已是最新版本 ($newVersion)"
+            Write-UiDim "Gemini CLI 已是最新版本 ($newVersion)" -Level Debug
         } else {
             $result.UpdatedItems = @("npm::gemini-cli::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ Gemini CLI 已更新: $oldVersion -> $newVersion"

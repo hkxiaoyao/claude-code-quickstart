@@ -69,7 +69,7 @@ function Install-Git {
 
         if (Test-CommandAvailable -Command "git") {
             $currentVersion = Get-CommandVersion -Command "git"
-            Write-UiSuccess "✓ Git 已安装，当前版本: $currentVersion"
+            Write-UiSuccess "✓ Git 已安装，当前版本: $currentVersion" -Level Detail
 
             # 检查版本是否满足要求
             try {
@@ -77,17 +77,17 @@ function Install-Git {
                 $gitVersion = [Version]$versionString
 
                 if ($gitVersion -lt $script:MinGitVersion) {
-                    Write-UiWarning "⚠ Git 版本过低，尝试更新..."
+                    Write-UiWarning "⚠ Git 版本过低，尝试更新..." -Level Detail
                     $needsUpdate = $true
                 } else {
                     $needsUpdate = $false
                 }
             } catch {
-                Write-UiWarning "⚠ 无法解析 Git 版本，尝试重新安装..."
+                Write-UiWarning "⚠ 无法解析 Git 版本，尝试重新安装..." -Level Debug
                 $needsUpdate = $true
             }
         } else {
-            Write-UiPrimary "Git 未安装，开始安装..."
+            Write-UiPrimary "Git 未安装，开始安装..." -Level Detail
             $needsUpdate = $true
         }
 
@@ -101,13 +101,13 @@ function Install-Git {
                     }
                     Write-UiSuccess "✓ Git 通过 winget 安装成功"
                 } catch {
-                    Write-UiWarning "⚠ winget 安装失败，请手动安装 Git"
-                    Write-UiInfo "请访问 https://git-scm.com/download/win 下载并安装 Git"
+                    Write-UiWarning "⚠ winget 安装失败，请手动安装 Git" -Level Detail
+                    Write-UiInfo "请访问 https://git-scm.com/download/win 下载并安装 Git" -Level Detail
                     throw "Git 安装失败，请手动安装后重新运行"
                 }
             } else {
-                Write-UiWarning "⚠ winget 不可用，无法自动安装 Git"
-                Write-UiInfo "请访问 https://git-scm.com/download/win 下载并安装 Git"
+                Write-UiWarning "⚠ winget 不可用，无法自动安装 Git" -Level Detail
+                Write-UiInfo "请访问 https://git-scm.com/download/win 下载并安装 Git" -Level Detail
                 throw "Git 安装失败，请手动安装后重新运行"
             }
 
@@ -124,7 +124,7 @@ function Install-Git {
         $result.Data["GitVersion"] = $finalGitVersion
 
         # 2. 配置 Git 推荐设置
-        Write-UiPrimary "🔧 配置 Git 推荐设置..."
+        Write-UiPrimary "🔧 配置 Git 推荐设置..." -Level Detail
 
         $recommendedConfigs = @(
             @{ Key = "init.defaultBranch"; Value = "main"; Description = "默认分支名" },
@@ -139,20 +139,20 @@ function Install-Git {
                 if (-not $existingValue) {
                     $configResult = Invoke-ExternalCommand -Command "git" -Arguments @("config", "--global", $config.Key, $config.Value) -TimeoutSeconds 30
                     if ($configResult.Success) {
-                        Write-UiSuccess "✓ $($config.Description) 配置成功: $($config.Value)"
+                        Write-UiSuccess "✓ $($config.Description) 配置成功: $($config.Value)" -Level Detail
                     } else {
-                        Write-UiWarning "⚠ $($config.Description) 配置失败: $($configResult.Error)"
+                        Write-UiWarning "⚠ $($config.Description) 配置失败: $($configResult.Error)" -Level Debug
                     }
                 } else {
-                    Write-UiInfo "ℹ $($config.Description) 已存在: $existingValue"
+                    Write-UiInfo "ℹ $($config.Description) 已存在: $existingValue" -Level Detail
                 }
             } catch {
-                Write-UiWarning "⚠ $($config.Description) 配置异常: $($_.Exception.Message)"
+                Write-UiWarning "⚠ $($config.Description) 配置异常: $($_.Exception.Message)" -Level Debug
             }
         }
 
         # 3.5. 配置 Git Bash UTF-8 支持（~/.bashrc）
-        Write-UiPrimary "🔧 配置 Git Bash UTF-8 支持..."
+        Write-UiPrimary "🔧 配置 Git Bash UTF-8 支持..." -Level Detail
 
         try {
             # 查找用户主目录
@@ -207,16 +207,16 @@ function Install-Git {
                 $success = Set-ManagedBlockInFile -FilePath $bashrcPath -Content $utf8Config -CreateIfNotExists -AppendIfNoBlock
 
                 if ($success) {
-                    Write-UiSuccess "✓ Git Bash UTF-8 配置已应用（Python UTF-8 + PowerShell wrapper）"
+                    Write-UiSuccess "✓ Git Bash UTF-8 配置已应用（Python UTF-8 + PowerShell wrapper）" -Level Detail
                 } else {
-                    Write-UiWarning "⚠ Git Bash 配置写入失败（不影响主安装流程）"
+                    Write-UiWarning "⚠ Git Bash 配置写入失败（不影响主安装流程）" -Level Debug
                 }
             } else {
-                Write-UiWarning "⚠ 无法确定用户主目录，跳过 Git Bash 配置"
+                Write-UiWarning "⚠ 无法确定用户主目录，跳过 Git Bash 配置" -Level Detail
             }
         } catch {
-            Write-UiWarning "⚠ Git Bash 配置过程中发生错误: $($_.Exception.Message)"
-            Write-UiDim "这不影响主安装流程，可以稍后手动配置"
+            Write-UiWarning "⚠ Git Bash 配置过程中发生错误: $($_.Exception.Message)" -Level Debug
+            Write-UiDim "这不影响主安装流程，可以稍后手动配置" -Level Detail
         }
 
         # 安装成功
@@ -257,7 +257,7 @@ function Verify-Git {
         # 验证 Git 命令可用性
         if (Test-CommandAvailable -Command "git") {
             $gitVersion = Get-CommandVersion -Command "git"
-            Write-UiSuccess "✓ Git 命令验证通过 (版本: $gitVersion)"
+            Write-UiSuccess "✓ Git 命令验证通过 (版本: $gitVersion)" -Level Detail
         } else {
             $verificationPassed = $false
             $issues += "Git 命令不可用"
@@ -268,7 +268,7 @@ function Verify-Git {
             # 测试 git version 命令
             $versionResult = Invoke-ExternalCommand -Command "git" -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10
             if ($versionResult.Success) {
-                Write-UiSuccess "✓ Git 基本功能验证通过"
+                Write-UiSuccess "✓ Git 基本功能验证通过" -Level Detail
             } else {
                 $issues += "Git 基本功能测试失败"
             }
@@ -276,7 +276,7 @@ function Verify-Git {
             # 测试 git config 命令
             $configResult = Invoke-ExternalCommand -Command "git" -Arguments @("config", "--list", "--global") -SuppressOutput -TimeoutSeconds 10
             if ($configResult.Success) {
-                Write-UiSuccess "✓ Git 配置功能验证通过"
+                Write-UiSuccess "✓ Git 配置功能验证通过" -Level Detail
             } else {
                 $issues += "Git 配置功能测试失败"
             }

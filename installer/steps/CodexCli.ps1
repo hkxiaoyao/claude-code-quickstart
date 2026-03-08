@@ -52,7 +52,7 @@ function Install-CodexCli {
         }
 
         # 全局安装 Codex CLI（HC-2: 无 -DisplayName 参数）
-        Write-UiPrimary "正在通过 npm 全局安装 Codex CLI..."
+        Write-UiPrimary "正在通过 npm 全局安装 Codex CLI..." -Level Detail
         $installOut = Invoke-NpmGlobalInstall -PackageName "@openai/codex"
 
         if (-not $installOut.Success) {
@@ -60,7 +60,7 @@ function Install-CodexCli {
         }
 
         # 刷新 PATH
-        Write-UiPrimary "刷新环境变量..."
+        Write-UiPrimary "刷新环境变量..." -Level Detail
         Refresh-SessionPath
 
         # 验证安装
@@ -80,8 +80,8 @@ function Install-CodexCli {
 
         $version = Get-CommandVersion -Command "codex"
         Write-UiSuccess "✓ Codex CLI 安装成功"
-        Write-UiInfo "版本: $version"
-        Write-UiInfo "命令: codex --help"
+        Write-UiInfo "版本: $version" -Level Detail
+        Write-UiInfo "命令: codex --help" -Level Detail
 
         $result.Success          = $true
         $result.Data["Version"] = $version
@@ -127,9 +127,9 @@ function Verify-CodexCli {
         }
 
         Write-UiSuccess "✓ Codex CLI 验证通过"
-        Write-UiInfo "  - 命令可用性: ✓"
-        Write-UiInfo "  - 版本信息: $version"
-        Write-UiInfo "  - 帮助信息: ✓"
+        Write-UiInfo "  - 命令可用性: ✓" -Level Detail
+        Write-UiInfo "  - 版本信息: $version" -Level Detail
+        Write-UiInfo "  - 帮助信息: ✓" -Level Detail
 
         $result.Success = $true
     }
@@ -164,15 +164,15 @@ function Update-CodexCli {
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
             throw "无法获取当前 Codex CLI 版本，请确认已安装"
         }
-        Write-UiInfo "当前版本: $oldVersion"
+        Write-UiInfo "当前版本: $oldVersion" -Level Detail
 
         # 检测是否有新版本（使用 npm outdated -g 批量缓存）
         $updateCheck = Test-NpmUpdateAvailable -PackageName "@openai/codex" -CurrentVersion $oldVersion
         if ($updateCheck.LatestVersion) {
-            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)"
+            Write-UiInfo "最新版本: $($updateCheck.LatestVersion)" -Level Detail
         }
         if ($updateCheck.Available -eq $false) {
-            Write-UiDim "Codex CLI 已是最新版本 ($oldVersion)"
+            Write-UiDim "Codex CLI 已是最新版本 ($oldVersion)" -Level Debug
             $result.UpdatedItems = @("noop::CodexCli::no-change")
             $result.Data["OldVersion"] = $oldVersion
             $result.Data["NewVersion"] = $oldVersion
@@ -186,7 +186,7 @@ function Update-CodexCli {
         for ($attempt = 0; $attempt -lt 3; $attempt++) {
             if ($attempt -gt 0) {
                 $waitSec = [math]::Pow(2, $attempt)
-                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..."
+                Write-UiDim "等待 ${waitSec}s 后重试 (第 $($attempt + 1) 次)..." -Level Debug
                 Start-Sleep -Seconds $waitSec
             }
             $installResult = Invoke-ExternalCommand -Command "npm" `
@@ -215,7 +215,7 @@ function Update-CodexCli {
 
         if ($oldVersion -eq $newVersion) {
             $result.UpdatedItems = @("noop::CodexCli::no-change")
-            Write-UiDim "Codex CLI 已是最新版本 ($newVersion)"
+            Write-UiDim "Codex CLI 已是最新版本 ($newVersion)" -Level Debug
         } else {
             $result.UpdatedItems = @("npm::codex-cli::${oldVersion}->${newVersion}")
             Write-UiSuccess "✓ Codex CLI 已更新: $oldVersion -> $newVersion"

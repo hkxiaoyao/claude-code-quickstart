@@ -29,9 +29,9 @@ function Test-ApiKeyInstalled {
             # 通过 Provider.ps1 识别当前活跃供应商
             $active = Get-ActiveProvider
             if ($active) {
-                Write-UiInfo "  当前供应商: $($active.Name)"
+                Write-UiInfo "  当前供应商: $($active.Name)" -Level Detail
                 if (-not [string]::IsNullOrWhiteSpace($active.BaseUrl)) {
-                    Write-UiInfo "  Base URL: $($active.BaseUrl)"
+                    Write-UiInfo "  Base URL: $($active.BaseUrl)" -Level Detail
                 }
             }
             return $true
@@ -86,9 +86,9 @@ function Install-ApiKey {
             $claudeJsonConfig | ConvertTo-Json -Depth 10 | Set-Content $tempJsonPath -Encoding UTF8
             Move-Item $tempJsonPath $claudeJsonPath -Force
 
-            Write-UiSuccess "~/.claude.json 配置已更新（hasCompletedOnboarding: true）"
+            Write-UiSuccess "~/.claude.json 配置已更新（hasCompletedOnboarding: true）" -Level Detail
         } catch {
-            Write-UiWarning "更新 ~/.claude.json 失败: $($_.Exception.Message)"
+            Write-UiWarning "更新 ~/.claude.json 失败: $($_.Exception.Message)" -Level Debug
         }
 
         # 一次性清理旧版 ccp 注入（迁移旧用户）
@@ -96,7 +96,7 @@ function Install-ApiKey {
             $null = Remove-ManagedBlockFromFile -FilePath $PROFILE `
                 -StartMarker "# >>> Claude Code Provider Switcher >>>" `
                 -EndMarker "# <<< Claude Code Provider Switcher <<<"
-            Write-UiInfo "已清理旧版 ccp 命令（供应商管理已迁移到 Manage 脚本）"
+            Write-UiInfo "已清理旧版 ccp 命令（供应商管理已迁移到 Manage 脚本）" -Level Detail
         } catch {
             # 静默失败：可能标记块不存在或 $PROFILE 不存在
         }
@@ -157,7 +157,7 @@ function Verify-ApiKey {
                 }
             }
             if ($missingModels.Count -gt 0) {
-                Write-UiWarning "模型映射不完整，缺少: $($missingModels -join ', ')"
+                Write-UiWarning "模型映射不完整，缺少: $($missingModels -join ', ')" -Level Detail
             }
         }
 
@@ -166,7 +166,7 @@ function Verify-ApiKey {
         foreach ($envVar in $sensitiveEnvVars) {
             $envValue = [Environment]::GetEnvironmentVariable($envVar, "User")
             if (-not [string]::IsNullOrWhiteSpace($envValue)) {
-                Write-UiWarning "检测到用户级环境变量 $envVar，建议清理（API Key 应仅存于 settings.json）"
+                Write-UiWarning "检测到用户级环境变量 $envVar，建议清理（API Key 应仅存于 settings.json）" -Level Detail
             }
         }
 

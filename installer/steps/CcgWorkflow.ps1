@@ -351,8 +351,8 @@ function Install-CcgWorkflow {
         }
 
         # ── 执行 npx 官方初始化 ──
-        Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow 引擎..."
-        Write-UiPrimary "正在执行官方初始化 (此过程涉及远程下载，请稍候)..."
+        Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow 引擎..." -Level Detail
+        Write-UiPrimary "正在执行官方初始化 (此过程涉及远程下载，请稍候)..." -Level Detail
 
         $npxResult = Invoke-ExternalCommand `
             -Command "npx" `
@@ -388,13 +388,13 @@ function Install-CcgWorkflow {
         $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
         $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
         if (-not $ruleWriteResult) {
-            Write-UiWarning "CCG 规则文件写入失败，但不影响主安装"
+            Write-UiWarning "CCG 规则文件写入失败，但不影响主安装" -Level Detail
         } else {
-            Write-UiInfo "已写入: rules/ccq-ccgworkflow.md"
+            Write-UiInfo "已写入: rules/ccq-ccgworkflow.md" -Level Detail
         }
 
         # ── 写入 CCG env 配置到 settings.json ──
-        Write-UiPrimary "配置 CCG Workflow 环境变量..."
+        Write-UiPrimary "配置 CCG Workflow 环境变量..." -Level Detail
         $settingsPath = "$script:ClaudeDir\settings.json"
         $envSettings = @{}
 
@@ -404,7 +404,7 @@ function Install-CcgWorkflow {
                 $envSettings = $existingContent | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
                 if (-not $envSettings) { $envSettings = @{} }
             } catch {
-                Write-UiWarning "无法解析 settings.json，跳过 env 配置（不影响主安装）"
+                Write-UiWarning "无法解析 settings.json，跳过 env 配置（不影响主安装）" -Level Debug
                 $envSettings = $null
             }
         }
@@ -426,9 +426,9 @@ function Install-CcgWorkflow {
                 $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"
                 $envSettings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
                 Move-Item $tempPath $settingsPath -Force
-                Write-UiInfo "已写入 $envAdded 个 CCG 环境变量到 settings.json"
+                Write-UiInfo "已写入 $envAdded 个 CCG 环境变量到 settings.json" -Level Detail
             } else {
-                Write-UiInfo "CCG 环境变量已存在，跳过写入"
+                Write-UiInfo "CCG 环境变量已存在，跳过写入" -Level Detail
             }
         }
 
@@ -440,14 +440,14 @@ function Install-CcgWorkflow {
                 if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
                     $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                     if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                        Write-UiWarning "检测到 .claude.json 中的 mcpServers 配置在安装过程中被修改，请手动检查"
+                        Write-UiWarning "检测到 .claude.json 中的 mcpServers 配置在安装过程中被修改，请手动检查" -Level Detail
                     }
                 }
             }
         }
 
         # ── 刷新 PATH ──
-        Write-UiPrimary "正在刷新环境变量..."
+        Write-UiPrimary "正在刷新环境变量..." -Level Detail
         Refresh-SessionPath
 
         $result.Success = $true
@@ -483,10 +483,10 @@ function Verify-CcgWorkflow {
         $commandFiles = Get-ChildItem $commandsDir -Filter "*.md" -ErrorAction SilentlyContinue
         $commandCount = if ($null -ne $commandFiles) { $commandFiles.Count } else { 0 }
         if ($commandCount -ge 20) {
-            Write-UiInfo "  - 命令模板: 已安装 $commandCount 个 [PASS]"
+            Write-UiInfo "  - 命令模板: 已安装 $commandCount 个 [PASS]" -Level Detail
         }
         else {
-            Write-UiInfo "  - 命令模板: 仅 $commandCount 个 (期望 >= 20) [FAIL]"
+            Write-UiInfo "  - 命令模板: 仅 $commandCount 个 (期望 >= 20) [FAIL]" -Level Detail
             $allPassed = $false
         }
 
@@ -495,10 +495,10 @@ function Verify-CcgWorkflow {
         $agentFiles = Get-ChildItem $agentsDir -Filter "*.md" -ErrorAction SilentlyContinue
         $agentCount = if ($null -ne $agentFiles) { $agentFiles.Count } else { 0 }
         if ($agentCount -ge 4) {
-            Write-UiInfo "  - Agent 模板: 已安装 $agentCount 个 [PASS]"
+            Write-UiInfo "  - Agent 模板: 已安装 $agentCount 个 [PASS]" -Level Detail
         }
         else {
-            Write-UiInfo "  - Agent 模板: 仅 $agentCount 个 (期望 >= 4) [FAIL]"
+            Write-UiInfo "  - Agent 模板: 仅 $agentCount 个 (期望 >= 4) [FAIL]" -Level Detail
             $allPassed = $false
         }
 
@@ -511,14 +511,14 @@ function Verify-CcgWorkflow {
                 $pkgVersion = $matches[1]
             }
             if ($pkgVersion) {
-                Write-UiInfo "  - 配置文件: config.toml 存在, ccg-workflow v$pkgVersion [PASS]"
+                Write-UiInfo "  - 配置文件: config.toml 存在, ccg-workflow v$pkgVersion [PASS]" -Level Detail
             }
             else {
-                Write-UiInfo "  - 配置文件: config.toml 存在 [PASS]"
+                Write-UiInfo "  - 配置文件: config.toml 存在 [PASS]" -Level Detail
             }
         }
         else {
-            Write-UiInfo "  - 配置文件: config.toml 不存在 [FAIL]"
+            Write-UiInfo "  - 配置文件: config.toml 不存在 [FAIL]" -Level Detail
             $allPassed = $false
         }
 
@@ -536,19 +536,19 @@ function Verify-CcgWorkflow {
             if ($versionResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($versionResult.Output)) {
                 $wrapperVersion = $versionResult.Output.Trim()
             }
-            Write-UiInfo "  - 二进制文件: codeagent-wrapper $wrapperVersion [PASS]"
+            Write-UiInfo "  - 二进制文件: codeagent-wrapper $wrapperVersion [PASS]" -Level Detail
         }
         else {
-            Write-UiInfo "  - 二进制文件: codeagent-wrapper.exe 不存在 [FAIL]"
+            Write-UiInfo "  - 二进制文件: codeagent-wrapper.exe 不存在 [FAIL]" -Level Detail
             $allPassed = $false
         }
 
         # 会话可用性验证
         if (Test-CommandAvailable -Command "codeagent-wrapper") {
-            Write-UiInfo "  - PATH 可用性: codeagent-wrapper 在 PATH 中 [PASS]"
+            Write-UiInfo "  - PATH 可用性: codeagent-wrapper 在 PATH 中 [PASS]" -Level Detail
         }
         else {
-            Write-UiWarning "  - PATH 可用性: codeagent-wrapper 不在 PATH 中 (可能需要重启终端) [SKIP]"
+            Write-UiWarning "  - PATH 可用性: codeagent-wrapper 不在 PATH 中 (可能需要重启终端) [SKIP]" -Level Detail
         }
 
         # ── env 配置验证 ──
@@ -566,20 +566,20 @@ function Verify-CcgWorkflow {
                         }
                     }
                     if ($missingEnvKeys.Count -eq 0) {
-                        Write-UiInfo "  - CCG 环境变量: $($script:CcgWorkflowEnvDefaults.Count) 项已配置 [PASS]"
+                        Write-UiInfo "  - CCG 环境变量: $($script:CcgWorkflowEnvDefaults.Count) 项已配置 [PASS]" -Level Detail
                     } else {
-                        Write-UiInfo "  - CCG 环境变量: 缺少 $($missingEnvKeys -join ', ') [FAIL]"
+                        Write-UiInfo "  - CCG 环境变量: 缺少 $($missingEnvKeys -join ', ') [FAIL]" -Level Detail
                         $allPassed = $false
                     }
                 } else {
-                    Write-UiInfo "  - CCG 环境变量: settings.json 无 env 节 [FAIL]"
+                    Write-UiInfo "  - CCG 环境变量: settings.json 无 env 节 [FAIL]" -Level Detail
                     $allPassed = $false
                 }
             } catch {
-                Write-UiInfo "  - CCG 环境变量: 读取 settings.json 失败 [SKIP]"
+                Write-UiInfo "  - CCG 环境变量: 读取 settings.json 失败 [SKIP]" -Level Detail
             }
         } else {
-            Write-UiInfo "  - CCG 环境变量: settings.json 不存在 [SKIP]"
+            Write-UiInfo "  - CCG 环境变量: settings.json 不存在 [SKIP]" -Level Detail
         }
 
         # ── MCP 保护验证 ──
@@ -590,18 +590,18 @@ function Verify-CcgWorkflow {
             if ($claudeJsonRaw) {
                 $claudeJson = $claudeJsonRaw | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
                 if ($null -ne $claudeJson -and $claudeJson.ContainsKey("mcpServers")) {
-                    Write-UiInfo "  - MCP 配置: 未被覆盖 [PASS]"
+                    Write-UiInfo "  - MCP 配置: 未被覆盖 [PASS]" -Level Detail
                 }
                 else {
-                    Write-UiInfo "  - MCP 配置: mcpServers 字段不存在 [SKIP]"
+                    Write-UiInfo "  - MCP 配置: mcpServers 字段不存在 [SKIP]" -Level Detail
                 }
             }
             else {
-                Write-UiInfo "  - MCP 配置: .claude.json 为空 [SKIP]"
+                Write-UiInfo "  - MCP 配置: .claude.json 为空 [SKIP]" -Level Detail
             }
         }
         else {
-            Write-UiInfo "  - MCP 配置: .claude.json 不存在 [SKIP]"
+            Write-UiInfo "  - MCP 配置: .claude.json 不存在 [SKIP]" -Level Detail
         }
 
         # ── 最终判定 ──
@@ -640,7 +640,7 @@ function Update-CcgWorkflow {
     }
 
     try {
-        Write-UiPrimary "更新 CCG Workflow..."
+        Write-UiPrimary "更新 CCG Workflow..." -Level Detail
 
         # 前置检查
         Refresh-SessionPath
@@ -656,21 +656,21 @@ function Update-CcgWorkflow {
         $result.Data["OldVersion"] = $oldVersion
         $result.Data["UpdateKind"] = $components.UpdateKind
 
-        Write-UiInfo "当前版本: $oldVersion"
+        Write-UiInfo "当前版本: $oldVersion" -Level Detail
         if ($components.LatestVersion) {
-            Write-UiInfo "最新版本: $($components.LatestVersion)"
+            Write-UiInfo "最新版本: $($components.LatestVersion)" -Level Detail
         }
 
         # ── 无更新 → noop ──
         if (-not $components.EngineNeedUpdate -and -not $components.RulesNeedUpdate -and -not $components.EnvNeedUpdate) {
-            Write-UiInfo "CCG Workflow 已是最新（引擎/规则/env 均无变更）"
+            Write-UiInfo "CCG Workflow 已是最新（引擎/规则/env 均无变更）" -Level Detail
             $result.UpdatedItems = @("noop::CcgWorkflow::no-change")
             $result.Data["NewVersion"] = $oldVersion
             $result.Success = $true
             return $result
         }
 
-        Write-UiInfo "更新类型: $($components.StatusHint)"
+        Write-UiInfo "更新类型: $($components.StatusHint)" -Level Detail
 
         # ── 引擎更新分支 ──
         if ($components.EngineNeedUpdate) {
@@ -688,7 +688,7 @@ function Update-CcgWorkflow {
             }
 
             # 执行 npx ccg-workflow@latest init（--skip-mcp 必须保留）
-            Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow..."
+            Write-UiPrimary "正在通过 npx 获取最新版 CCG Workflow..." -Level Detail
             $npxResult = Invoke-ExternalCommand `
                 -Command "npx" `
                 -Arguments @("--yes", "ccg-workflow@latest", "init", "--skip-prompt", "--skip-mcp", "--lang", "zh-CN", "--install-dir", "$script:ClaudeDir") `
@@ -711,7 +711,7 @@ function Update-CcgWorkflow {
                     if ($null -ne $claudeJsonAfter -and $claudeJsonAfter.ContainsKey("mcpServers")) {
                         $mcpSnapshotAfter = $claudeJsonAfter["mcpServers"] | ConvertTo-Json -Depth 10 -ErrorAction SilentlyContinue
                         if ($mcpSnapshotBefore -ne $mcpSnapshotAfter) {
-                            Write-UiWarning "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查"
+                            Write-UiWarning "检测到 .claude.json 中的 mcpServers 在更新过程中被修改，请手动检查" -Level Detail
                         }
                     }
                 }
@@ -739,7 +739,7 @@ function Update-CcgWorkflow {
                 Write-UiSuccess "CCG Workflow 引擎已更新: $oldVersion -> $newVersion"
             } else {
                 $result.UpdatedItems += "npx::ccg-workflow::reinstalled"
-                Write-UiInfo "CCG Workflow 引擎已重新安装 ($newVersion)"
+                Write-UiInfo "CCG Workflow 引擎已重新安装 ($newVersion)" -Level Detail
             }
         } else {
             $result.Data["NewVersion"] = $oldVersion
@@ -760,9 +760,9 @@ function Update-CcgWorkflow {
                     try {
                         Remove-Item $oldPath -Force -ErrorAction Stop
                         $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
-                        Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）"
+                        Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）" -Level Detail
                     } catch {
-                        Write-UiWarning "无法删除旧文件: $oldFile"
+                        Write-UiWarning "无法删除旧文件: $oldFile" -Level Debug
                     }
                 }
             }
@@ -817,7 +817,7 @@ function Update-CcgWorkflow {
 
                 Write-UiSuccess "CCG Workflow env 配置已对齐"
             } else {
-                Write-UiWarning "settings.json 不存在，跳过 env 对齐"
+                Write-UiWarning "settings.json 不存在，跳过 env 对齐" -Level Detail
             }
         }
 
