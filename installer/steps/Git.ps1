@@ -220,6 +220,8 @@ function Install-Git {
         }
 
         # 安装成功
+        $gitVersion = Get-CommandVersion -Command "git"
+        $result.Data["Version"] = $gitVersion
         $result.Success = $true
         $result.Message = "Git 安装和配置完成"
 

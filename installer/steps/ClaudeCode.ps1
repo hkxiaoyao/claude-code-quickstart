@@ -192,6 +192,7 @@ function Install-ClaudeCode {
 
         $claudeVersion = Get-CommandVersion -Command "claude"
         $result.Data["ClaudeVersion"] = $claudeVersion
+        $result.Data["Version"] = $claudeVersion
         Write-UiSuccess "✓ Claude Code 验证成功 (版本: $claudeVersion)" -Level Detail
 
         # 5. 验证基本功能

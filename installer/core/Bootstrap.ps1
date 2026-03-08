@@ -155,6 +155,23 @@ function Invoke-StepActionLifecycle {
                 $stepResult.Status = [StepStatus]::Skipped
                 $stepResult.Message = "组件已安装，跳过安装"
                 $stepResult.EndTime = Get-Date
+
+                # 合并 testResult 的版本和数据（跳过路径也需要版本信息）
+                if ($testResult -and $testResult -isnot [bool]) {
+                    if ($testResult -is [hashtable]) {
+                        if ($testResult.ContainsKey("Version") -and $testResult["Version"]) {
+                            $stepResult.Data["Version"] = $testResult["Version"]
+                        }
+                        if ($testResult.ContainsKey("Data") -and $testResult["Data"] -is [hashtable]) {
+                            foreach ($key in $testResult["Data"].Keys) {
+                                $stepResult.Data[$key] = $testResult["Data"][$key]
+                            }
+                        }
+                    } elseif ($testResult.Version) {
+                        $stepResult.Data["Version"] = $testResult.Version
+                    }
+                }
+
                 Write-UiOutput "✓ 组件已安装，跳过" -Level Essential -Type Warning
                 return $stepResult
             }

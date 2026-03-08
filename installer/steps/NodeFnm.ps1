@@ -1177,6 +1177,7 @@ function Install-NodeFnm {
         if ($nodeDetails.Available) {
             $nodeVersion = Get-CommandVersion -Command "node"
             $result.Data["NodeVersion"] = $nodeVersion
+            $result.Data["Version"] = $nodeVersion
             $result.Data["NodePath"] = $nodeDetails.ResolvedPath
             Write-UiSuccess "✓ Node.js 验证成功 (版本: $nodeVersion)" -Level Detail
             Write-UiInfo "  路径: $($nodeDetails.ResolvedPath)" -Level Detail
