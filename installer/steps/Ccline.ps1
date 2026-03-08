@@ -41,7 +41,6 @@ function Install-Ccline {
     param()
 
     Write-UiPrimary "=== CCometixLine 安装 ===" -Level Detail
-    Write-UiDim "" -Level Detail
 
     $stepResult = @{
         Success      = $false
@@ -79,7 +78,6 @@ function Install-Ccline {
         Write-UiSuccess "✓ 前置条件检查完成" -Level Detail
 
         # 2. 检查 CCometixLine 是否已安装
-        Write-UiDim "" -Level Detail
         Write-UiDim "2. 检查 CCometixLine 安装状态..." -Level Detail
 
         if (Test-CommandAvailable -Command "ccline") {
@@ -113,7 +111,6 @@ function Install-Ccline {
         }
 
         # 3. 验证安装
-        Write-UiDim "" -Level Detail
         Write-UiDim "3. 验证 CCometixLine 安装..." -Level Detail
 
         # 刷新 PATH 以确保 ccline 命令可用
@@ -127,7 +124,6 @@ function Install-Ccline {
         Write-UiSuccess "✓ CCometixLine 验证成功: $cclineVersion" -Level Detail
 
         # 4. 创建 Claude Code 配置目录
-        Write-UiDim "" -Level Detail
         Write-UiDim "4. 准备 Claude Code 配置..." -Level Detail
 
         if (-not (Test-Path $script:ClaudeConfigDir)) {
@@ -138,7 +134,6 @@ function Install-Ccline {
         }
 
         # 5. 配置状态栏设置
-        Write-UiDim "" -Level Detail
         Write-UiDim "5. 配置 Claude Code 状态栏..." -Level Detail
 
         # 读取现有配置或创建新配置
@@ -181,7 +176,6 @@ function Install-Ccline {
         }
 
         # 6. 测试状态栏功能
-        Write-UiDim "" -Level Detail
         Write-UiDim "6. 测试状态栏功能..." -Level Detail
 
         try {
@@ -208,7 +202,6 @@ function Install-Ccline {
         }
 
         # 7. 执行 ccline patch
-        Write-UiDim "" -Level Detail
         Write-UiDim "7. 执行 CCometixLine patch..." -Level Detail
 
         $patchApplied = $false
@@ -249,17 +242,14 @@ function Install-Ccline {
         }
 
         # 8. 使用提示
-        Write-UiDim "" -Level Detail
         Write-UiDim "8. 使用提示..." -Level Detail
         Write-UiPrimary "  CCometixLine 状态栏已配置完成" -Level Detail
         Write-UiDim "  状态栏将在 Claude Code 中自动显示自定义信息" -Level Detail
-        Write-UiDim "" -Level Detail
         Write-UiDim "  基本命令:" -Level Detail
         Write-UiDim "    ccline --version       # 查看版本" -Level Detail
         Write-UiDim "    ccline --help          # 查看帮助" -Level Detail
         Write-UiDim "    ccline --patch <path>  # Patch Claude Code" -Level Detail
 
-        Write-UiDim "" -Level Detail
         Write-UiSuccess "✓ CCometixLine 安装和配置完成" -Level Detail
 
         $resultMessage = if ($patchApplied) {
