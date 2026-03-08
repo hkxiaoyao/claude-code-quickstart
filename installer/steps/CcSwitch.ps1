@@ -113,7 +113,7 @@ function Install-CcSwitch {
     #>
     param()
 
-    Write-UiPrimary "=== CC-Switch 安装 ==="
+    Write-UiPrimary "=== CC-Switch 安装 ===" -Level Detail
     Write-Host ""
 
     $result = @{
@@ -130,7 +130,7 @@ function Install-CcSwitch {
             throw "Claude Code 未安装，请先完成 ClaudeCode 步骤"
         }
 
-        Write-UiSuccess "✓ 前置条件检查完成"
+        Write-UiSuccess "✓ 前置条件检查完成" -Level Detail
 
         # 2. 检查 CC-Switch 是否已安装
         Write-Host ""
@@ -138,7 +138,7 @@ function Install-CcSwitch {
 
         $ccSwitchTest = Test-CcSwitchInstalled
         if ($ccSwitchTest.IsInstalled) {
-            Write-UiSuccess "✓ CC-Switch 已安装，跳过"
+            Write-UiSuccess "✓ CC-Switch 已安装，跳过" -Level Detail
             $result.Success = $true
             $result.Data["Skipped"] = $true
             return $result
@@ -166,7 +166,7 @@ function Install-CcSwitch {
         if (-not $isAdmin) {
             Write-UiDim "  当前非管理员权限，将优先尝试 per-user 安装" -Level Detail
         } else {
-            Write-UiSuccess "✓ 管理员权限确认"
+            Write-UiSuccess "✓ 管理员权限确认" -Level Detail
         }
 
         # 4. 获取最新版本信息
@@ -206,7 +206,7 @@ function Install-CcSwitch {
             throw "不支持的安装包格式: $installerPath"
         }
 
-        Write-UiSuccess "✓ 安装包验证通过"
+        Write-UiSuccess "✓ 安装包验证通过" -Level Detail
 
         # 7. 执行静默安装
         Write-Host ""
@@ -218,7 +218,7 @@ function Install-CcSwitch {
             throw "CC-Switch 安装失败: $($installResult.ErrorMessage)"
         }
 
-        Write-UiSuccess "✓ CC-Switch 安装成功"
+        Write-UiSuccess "✓ CC-Switch 安装成功" -Level Detail
 
         # 8. 验证安装
         Write-Host ""
@@ -232,7 +232,7 @@ function Install-CcSwitch {
             Write-UiWarning "⚠ CC-Switch 安装验证失败，但安装过程成功"
             Write-UiDim "  可能需要重启系统或重新登录才能完全生效" -Level Detail
         } else {
-            Write-UiSuccess "✓ CC-Switch 安装验证成功"
+            Write-UiSuccess "✓ CC-Switch 安装验证成功" -Level Detail
         }
 
         # 9. 清理临时文件
@@ -251,13 +251,13 @@ function Install-CcSwitch {
         # 10. 使用提示
         Write-Host ""
         Write-UiDim "10. 使用提示..." -Level Detail
-        Write-UiPrimary "  CC-Switch 已安装完成"
+        Write-UiPrimary "  CC-Switch 已安装完成" -Level Detail
         Write-UiDim "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:" -Level Detail
         Write-UiDim "    - 快速切换 Claude Code 配置" -Level Detail
         Write-UiDim "    - 项目环境管理" -Level Detail
         Write-UiDim "    - 工作流程优化" -Level Detail
         Write-Host ""
-        Write-UiSuccess "✓ CC-Switch 安装完成"
+        Write-UiSuccess "✓ CC-Switch 安装完成" -Level Detail
 
         $result.Success = $true
         $result.Data["Version"] = $releaseInfo.Version
@@ -460,7 +460,7 @@ function Install-CcSwitchPackage {
 
                 if ($perUserResult.Success -or $perUserResult.ExitCode -eq 3010) {
                     $rebootHint = if ($perUserResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
-                    Write-UiSuccess "  ✓ MSI per-user 安装完成$rebootHint"
+                    Write-UiSuccess "  ✓ MSI per-user 安装完成$rebootHint" -Level Detail
                 } else {
                     # 策略 2：全局静默安装（需要管理员）
                     Write-UiWarning "  per-user 安装失败 (退出码: $($perUserResult.ExitCode))，尝试全局安装..." -Level Debug
@@ -474,7 +474,7 @@ function Install-CcSwitchPackage {
 
                     if ($globalResult.Success -or $globalResult.ExitCode -eq 3010) {
                         $rebootHint = if ($globalResult.ExitCode -eq 3010) { "（需重启生效）" } else { "" }
-                        Write-UiSuccess "  ✓ MSI 全局安装完成$rebootHint"
+                        Write-UiSuccess "  ✓ MSI 全局安装完成$rebootHint" -Level Detail
                     } else {
                         # 策略 3：GUI 安装降级（让用户手动操作）
                         Write-UiWarning "  静默安装均失败，启动 GUI 安装..." -Level Debug
@@ -502,7 +502,7 @@ function Install-CcSwitchPackage {
                         $result = Invoke-ExternalCommand -Command $InstallerPath -Arguments @($arg) -TimeoutSeconds 300
 
                         if ($result.Success) {
-                            Write-UiSuccess "  ✓ EXE 安装完成 (参数: $arg)"
+                            Write-UiSuccess "  ✓ EXE 安装完成 (参数: $arg)" -Level Detail
                             $installSuccess = $true
                             break
                         }

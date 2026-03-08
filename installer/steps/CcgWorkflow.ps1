@@ -293,7 +293,7 @@ function Install-CcgWorkflow {
     }
 
     try {
-        Write-UiPrimary "安装 CCG Workflow (官方初始化方式)..."
+        Write-UiPrimary "安装 CCG Workflow (官方初始化方式)..." -Level Detail
 
         # ── 前置检查 ──
         Refresh-SessionPath
@@ -334,7 +334,7 @@ function Install-CcgWorkflow {
             throw $errorMsg
         }
 
-        Write-UiSuccess "环境检查: Node.js & npm 已就绪"
+        Write-UiSuccess "环境检查: Node.js & npm 已就绪" -Level Detail
 
         # ── MCP 快照（安装前）──
         # mcpServers 配置在 ~/.claude.json，不在 settings.json
@@ -378,7 +378,7 @@ function Install-CcgWorkflow {
             }
         }
 
-        Write-UiSuccess "成功部署 CCG 目录结构与配置文件"
+        Write-UiSuccess "成功部署 CCG 目录结构与配置文件" -Level Detail
 
         # ── 写入 CCG 规则文件 ──
         $rulesDir = "$script:ClaudeDir\rules"
@@ -606,7 +606,7 @@ function Verify-CcgWorkflow {
 
         # ── 最终判定 ──
         if ($allPassed) {
-            Write-UiSuccess "CCG Workflow 验证通过"
+            Write-UiSuccess "CCG Workflow 验证通过" -Level Detail
             $result.Success = $true
         }
         else {
@@ -736,7 +736,7 @@ function Update-CcgWorkflow {
 
             if ($oldVersion -ne $newVersion) {
                 $result.UpdatedItems += "npx::ccg-workflow::${oldVersion}->${newVersion}"
-                Write-UiSuccess "CCG Workflow 引擎已更新: $oldVersion -> $newVersion"
+                Write-UiSuccess "CCG Workflow 引擎已更新: $oldVersion -> $newVersion" -Level Detail
             } else {
                 $result.UpdatedItems += "npx::ccg-workflow::reinstalled"
                 Write-UiInfo "CCG Workflow 引擎已重新安装 ($newVersion)" -Level Detail
@@ -772,7 +772,7 @@ function Update-CcgWorkflow {
             $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
             if ($ruleWriteResult) {
                 $result.UpdatedItems += "file::rules/ccq-ccgworkflow.md::overwritten"
-                Write-UiSuccess "CCG Workflow 规则文件已更新"
+                Write-UiSuccess "CCG Workflow 规则文件已更新" -Level Detail
             } else {
                 throw "CCG Workflow 规则文件写入失败: $ccgRulePath"
             }
@@ -815,7 +815,7 @@ function Update-CcgWorkflow {
                     }
                 }
 
-                Write-UiSuccess "CCG Workflow env 配置已对齐"
+                Write-UiSuccess "CCG Workflow env 配置已对齐" -Level Detail
             } else {
                 Write-UiWarning "settings.json 不存在，跳过 env 对齐" -Level Detail
             }

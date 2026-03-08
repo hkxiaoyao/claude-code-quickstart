@@ -801,7 +801,7 @@ function Refresh-SessionPath {
     param()
 
     try {
-        Write-UiPrimary "正在刷新 PATH 环境变量..."
+        Write-UiPrimary "正在刷新 PATH 环境变量..." -Level Detail
 
         # 读取系统级 PATH
         $systemPath = ""
@@ -844,7 +844,7 @@ function Refresh-SessionPath {
         # 更新当前会话的 PATH
         $env:PATH = $uniquePath -join ';'
 
-        Write-UiSuccess "✓ PATH 环境变量已刷新"
+        Write-UiSuccess "✓ PATH 环境变量已刷新" -Level Detail
 
         # 快速验证常见命令（仅使用 Get-Command，不实际执行）
         $commonCommands = @("node", "npm", "git", "winget", "pwsh", "claude")
@@ -860,7 +860,7 @@ function Refresh-SessionPath {
         }
 
         if ($availableCommands.Count -gt 0) {
-            Write-UiSuccess "可用命令: $($availableCommands -join ', ')"
+            Write-UiSuccess "可用命令: $($availableCommands -join ', ')" -Level Detail
         }
 
     } catch {

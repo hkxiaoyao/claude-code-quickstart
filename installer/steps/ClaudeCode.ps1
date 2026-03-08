@@ -51,7 +51,7 @@ function Install-ClaudeCode {
     }
 
     try {
-        Write-UiPrimary "📦 开始安装 Claude Code..."
+        Write-UiPrimary "📦 开始安装 Claude Code..." -Level Detail
 
         # 1. 验证前置条件
         Write-UiPrimary "🔍 验证前置条件..." -Level Detail
@@ -93,13 +93,13 @@ function Install-ClaudeCode {
             throw "Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:MinNodeVersion+)"
         }
 
-        Write-UiSuccess "✓ 前置条件验证通过"
+        Write-UiSuccess "✓ 前置条件验证通过" -Level Detail
         $result.Data["NodeVersion"] = $nodeVersion
 
         # 2. 检查是否已安装
         if (Test-CommandAvailable -Command "claude") {
             $existingVersion = Get-CommandVersion -Command "claude"
-            Write-UiInfo "检测到已安装的 Claude Code (版本: $existingVersion)"
+            Write-UiInfo "检测到已安装的 Claude Code (版本: $existingVersion)" -Level Detail
 
             # 询问是否重新安装或更新
             $options = @("保持现有版本", "重新安装最新版本")
@@ -109,10 +109,10 @@ function Install-ClaudeCode {
                 $result.Success = $true
                 $result.Message = "保持现有 Claude Code 安装"
                 $result.Data["ClaudeVersion"] = $existingVersion
-                Write-UiSuccess "✓ 保持现有 Claude Code 安装"
+                Write-UiSuccess "✓ 保持现有 Claude Code 安装" -Level Detail
                 return $result
             } else {
-                Write-UiPrimary "将重新安装 Claude Code..."
+                Write-UiPrimary "将重新安装 Claude Code..." -Level Detail
             }
         }
 
@@ -125,7 +125,7 @@ function Install-ClaudeCode {
                 throw "npm 安装 Claude Code 失败"
             }
 
-            Write-UiSuccess "✓ Claude Code npm 包安装成功"
+            Write-UiSuccess "✓ Claude Code npm 包安装成功" -Level Detail
             $result.Data["NpmInstallSuccess"] = $true
 
         } catch {
@@ -192,7 +192,7 @@ function Install-ClaudeCode {
 
         $claudeVersion = Get-CommandVersion -Command "claude"
         $result.Data["ClaudeVersion"] = $claudeVersion
-        Write-UiSuccess "✓ Claude Code 验证成功 (版本: $claudeVersion)"
+        Write-UiSuccess "✓ Claude Code 验证成功 (版本: $claudeVersion)" -Level Detail
 
         # 5. 验证基本功能
         Write-UiPrimary "✅ 验证 Claude Code 基本功能..." -Level Detail
@@ -222,7 +222,7 @@ function Install-ClaudeCode {
         $result.Success = $true
         $result.Message = "Claude Code 安装完成"
 
-        Write-UiSuccess "✅ ClaudeCode 安装完成！"
+        Write-UiSuccess "✅ ClaudeCode 安装完成！" -Level Detail
         Write-UiDim "💡 提示: Claude Code 现在可以通过 'claude' 命令使用" -Level Detail
 
     } catch {
@@ -249,7 +249,7 @@ function Verify-ClaudeCode {
     }
 
     try {
-        Write-UiPrimary "✅ 验证 Claude Code 安装..."
+        Write-UiPrimary "✅ 验证 Claude Code 安装..." -Level Detail
 
         $verificationPassed = $true
         $issues = @()
@@ -257,7 +257,7 @@ function Verify-ClaudeCode {
         # 验证 claude 命令可用性
         if (Test-CommandAvailable -Command "claude") {
             $claudeVersion = Get-CommandVersion -Command "claude"
-            Write-UiSuccess "✓ Claude Code 命令验证通过 (版本: $claudeVersion)"
+            Write-UiSuccess "✓ Claude Code 命令验证通过 (版本: $claudeVersion)" -Level Detail
         } else {
             $verificationPassed = $false
             $issues += "claude 命令不可用"
@@ -268,7 +268,7 @@ function Verify-ClaudeCode {
             # 测试 --version
             $versionResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10
             if ($versionResult.Success) {
-                Write-UiSuccess "✓ Claude Code --version 验证通过"
+                Write-UiSuccess "✓ Claude Code --version 验证通过" -Level Detail
             } else {
                 $issues += "claude --version 命令失败"
             }
@@ -276,7 +276,7 @@ function Verify-ClaudeCode {
             # 测试 --help
             $helpResult = Invoke-ExternalCommand -Command "claude" -Arguments @("--help") -SuppressOutput -TimeoutSeconds 10
             if ($helpResult.Success) {
-                Write-UiSuccess "✓ Claude Code --help 验证通过"
+                Write-UiSuccess "✓ Claude Code --help 验证通过" -Level Detail
             } else {
                 $issues += "claude --help 命令失败"
             }
@@ -289,7 +289,7 @@ function Verify-ClaudeCode {
         try {
             $npmListResult = Invoke-ExternalCommand -Command "npm" -Arguments @("list", "-g", "--depth=0") -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
             if ($npmListResult.Success -and $npmListResult.Output -match $script:ClaudeCodePackage) {
-                Write-UiSuccess "✓ Claude Code npm 包状态验证通过"
+                Write-UiSuccess "✓ Claude Code npm 包状态验证通过" -Level Detail
             } else {
                 $issues += "Claude Code npm 包未在全局列表中找到"
             }
@@ -401,7 +401,7 @@ function Update-ClaudeCode {
             Write-UiInfo "Claude Code 已是最新版本 ($newVersion)" -Level Detail
         } else {
             $result.UpdatedItems = @("npm::claude-code::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ Claude Code 已更新: $oldVersion -> $newVersion"
+            Write-UiSuccess "✓ Claude Code 已更新: $oldVersion -> $newVersion" -Level Detail
         }
 
         $result.Success = $true

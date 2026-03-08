@@ -53,7 +53,7 @@ function Install-ApiKey {
     }
 
     try {
-        Write-UiPrimary "配置第三方 AI 供应商..."
+        Write-UiPrimary "配置第三方 AI 供应商..." -Level Detail
 
         # 委托 Provider.ps1 的共用添加函数（安装模式: 强制激活）
         $addResult = Add-Provider -Activate
@@ -170,7 +170,7 @@ function Verify-ApiKey {
             }
         }
 
-        Write-UiSuccess "供应商配置验证通过"
+        Write-UiSuccess "供应商配置验证通过" -Level Detail
         $result.Success = $true
     }
     catch {

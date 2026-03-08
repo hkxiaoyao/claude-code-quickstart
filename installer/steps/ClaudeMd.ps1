@@ -148,7 +148,7 @@ function Install-ClaudeMd {
     $result = @{ Success = $false; ErrorMessage = ""; Data = @{} }
 
     try {
-        Write-UiPrimary "配置用户级 CLAUDE.md..."
+        Write-UiPrimary "配置用户级 CLAUDE.md..." -Level Detail
 
         $claudeMdPath = Get-ClaudeMdPath
 
@@ -233,7 +233,7 @@ function Verify-ClaudeMd {
             throw "CLAUDE.md 文件过小，可能不完整"
         }
 
-        Write-UiSuccess "CLAUDE.md 配置验证通过"
+        Write-UiSuccess "CLAUDE.md 配置验证通过" -Level Detail
         Write-UiInfo "  - 主文件大小: $([math]::Round($fileSize / 1024, 2)) KB" -Level Detail
         Write-UiInfo "  - 章节完整性: 通过" -Level Detail
 
@@ -299,7 +299,7 @@ function Update-ClaudeMd {
             Write-UiDim "ClaudeMd 已是最新，无需更新" -Level Debug
         } else {
             $result.UpdatedItems = @($updatedItems)
-            Write-UiSuccess "ClaudeMd 已更新 ($($updatedItems.Count) 项变更)"
+            Write-UiSuccess "ClaudeMd 已更新 ($($updatedItems.Count) 项变更)" -Level Detail
         }
 
         $result.Success = $true

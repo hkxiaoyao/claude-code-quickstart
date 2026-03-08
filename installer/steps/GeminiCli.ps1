@@ -67,7 +67,7 @@ function Install-GeminiCli {
     }
 
     try {
-        Write-UiPrimary "安装 Gemini CLI..."
+        Write-UiPrimary "安装 Gemini CLI..." -Level Detail
 
         # 检查 Node.js 是否可用
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
@@ -101,7 +101,7 @@ function Install-GeminiCli {
             throw "安装后 npm 未检测到 @google/gemini-cli，请重新启动 PowerShell 后重试"
         }
 
-        Write-UiSuccess "✓ Gemini CLI 安装成功"
+        Write-UiSuccess "✓ Gemini CLI 安装成功" -Level Detail
         Write-UiInfo "版本: $version" -Level Detail
         Write-UiInfo "命令: gemini --help" -Level Detail
 
@@ -143,7 +143,7 @@ function Verify-GeminiCli {
         $cmdInfo = Get-Command "gemini" -ErrorAction SilentlyContinue
         $cmdResolved = if ($cmdInfo) { "✓ ($($cmdInfo.Source))" } else { "- (PATH 未就绪，重启 Shell 后可用)" }
 
-        Write-UiSuccess "✓ Gemini CLI 验证通过"
+        Write-UiSuccess "✓ Gemini CLI 验证通过" -Level Detail
         Write-UiInfo "  - npm 包状态: ✓" -Level Detail
         Write-UiInfo "  - 版本信息: $version" -Level Detail
         Write-UiInfo "  - 命令解析: $cmdResolved" -Level Detail
@@ -174,7 +174,7 @@ function Update-GeminiCli {
     }
 
     try {
-        Write-UiPrimary "更新 Gemini CLI..."
+        Write-UiPrimary "更新 Gemini CLI..." -Level Detail
 
         # 获取当前版本（通过 npm list，避免执行 gemini 命令）
         $oldVersion = Get-GeminiCliVersionFromNpm
@@ -235,7 +235,7 @@ function Update-GeminiCli {
             Write-UiDim "Gemini CLI 已是最新版本 ($newVersion)" -Level Debug
         } else {
             $result.UpdatedItems = @("npm::gemini-cli::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ Gemini CLI 已更新: $oldVersion -> $newVersion"
+            Write-UiSuccess "✓ Gemini CLI 已更新: $oldVersion -> $newVersion" -Level Detail
         }
 
         $result.Success = $true

@@ -99,7 +99,7 @@ function Install-ClaudeConfig {
     }
 
     try {
-        Write-UiPrimary "配置 Claude Code 常用设置..."
+        Write-UiPrimary "配置 Claude Code 常用设置..." -Level Detail
 
         $settingsPath = Get-ClaudeSettingsPath
         $settings = @{}
@@ -256,7 +256,7 @@ function Verify-ClaudeConfig {
             throw "env 缺少: $($missingEnvKeys -join ', ')"
         }
 
-        Write-UiSuccess "✓ Claude Code 常用配置验证通过"
+        Write-UiSuccess "✓ Claude Code 常用配置验证通过" -Level Detail
         Write-UiInfo "  - language: $($settings.language)" -Level Detail
         Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项" -Level Detail
         Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
@@ -393,7 +393,7 @@ function Update-ClaudeConfig {
             Write-UiDim "ClaudeConfig 已是最新，无需更新" -Level Debug
         } else {
             $result.UpdatedItems = @($updatedItems)
-            Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)"
+            Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)" -Level Detail
         }
 
         $result.Success = $true

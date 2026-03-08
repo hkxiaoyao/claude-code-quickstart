@@ -106,7 +106,7 @@ function Install-Mcp {
     #>
 
     try {
-        Write-UiPrimary "配置 MCP Server..."
+        Write-UiPrimary "配置 MCP Server..." -Level Detail
 
         # 检测已安装的 MCP Server
         $claudeJsonPath = "$(Get-UserHome)\.claude.json"

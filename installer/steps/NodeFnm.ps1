@@ -773,7 +773,7 @@ function Uninstall-ExistingNode {
         }
 
         $result.Success = $true
-        Write-UiSuccess "✓ 冲突工具卸载与 PATH 清理完成"
+        Write-UiSuccess "✓ 冲突工具卸载与 PATH 清理完成" -Level Detail
     } catch {
         $result.ErrorMessage = "卸载冲突环境失败: $($_.Exception.Message)"
         Write-UiDanger "✗ $($result.ErrorMessage)"
@@ -990,7 +990,7 @@ function Install-NodeFnm {
         Write-UiPrimary "🔧 安装 fnm (Fast Node Manager)..." -Level Detail
 
         if (Test-CommandAvailable -Command "fnm") {
-            Write-UiSuccess "✓ fnm 已安装，跳过安装步骤"
+            Write-UiSuccess "✓ fnm 已安装，跳过安装步骤" -Level Detail
         } else {
             # 使用 winget 安装 fnm
             if (Test-CommandAvailable -Command "winget") {
@@ -999,7 +999,7 @@ function Install-NodeFnm {
                     if (-not $fnmInstall.Success) {
                         throw "winget 安装 fnm 失败"
                     }
-                    Write-UiSuccess "✓ fnm 通过 winget 安装成功"
+                    Write-UiSuccess "✓ fnm 通过 winget 安装成功" -Level Detail
                 } catch {
                     Write-UiWarning "⚠ winget 安装失败，尝试手动下载安装..." -Level Detail
 
@@ -1028,7 +1028,7 @@ function Install-NodeFnm {
                         # 添加到 PATH（临时）
                         $env:PATH = "$fnmDir;$env:PATH"
 
-                        Write-UiSuccess "✓ fnm 手动安装成功"
+                        Write-UiSuccess "✓ fnm 手动安装成功" -Level Detail
                     } catch {
                         throw "手动下载安装 fnm 失败: $($_.Exception.Message)"
                     }
@@ -1048,7 +1048,7 @@ function Install-NodeFnm {
 
         $fnmVersion = Get-CommandVersion -Command "fnm"
         $result.Data["FnmVersion"] = $fnmVersion
-        Write-UiSuccess "✓ fnm 验证成功 (版本: $fnmVersion)"
+        Write-UiSuccess "✓ fnm 验证成功 (版本: $fnmVersion)" -Level Detail
 
         # 2. 配置 PowerShell Profile（在安装 Node.js 之前）
         Write-UiPrimary "⚙️ 配置 PowerShell Profile..." -Level Detail
@@ -1076,7 +1076,7 @@ function Install-NodeFnm {
         $profileSuccess = Set-ManagedBlockInFile -FilePath $profilePath -Content $fnmConfig -CreateIfNotExists -AppendIfNoBlock
 
         if ($profileSuccess) {
-            Write-UiSuccess "✓ PowerShell Profile 配置成功"
+            Write-UiSuccess "✓ PowerShell Profile 配置成功" -Level Detail
             $result.Data["ProfileConfigured"] = $true
         } else {
             Write-UiWarning "⚠ PowerShell Profile 配置失败，但不影响 fnm 使用" -Level Detail
@@ -1111,7 +1111,7 @@ function Install-NodeFnm {
                 throw "fnm 安装 Node.js 失败: $($installResult.Error)"
             }
 
-            Write-UiSuccess "✓ Node.js LTS 安装成功"
+            Write-UiSuccess "✓ Node.js LTS 安装成功" -Level Detail
 
             # 显式注入 fnm 环境变量到当前会话（不依赖 $PROFILE 重载）
             # fnm use 需要 FNM_MULTISHELL_PATH 等变量，必须在调用前确保已设置
@@ -1134,7 +1134,7 @@ function Install-NodeFnm {
             # 优先使用 fnm default 设置默认版本（不依赖 MULTISHELL_PATH）
             $defaultResult = Invoke-ExternalCommand -Command "fnm" -Arguments @("default", "lts-latest") -TimeoutSeconds 60
             if ($defaultResult.Success) {
-                Write-UiSuccess "✓ Node.js LTS 已设为默认版本"
+                Write-UiSuccess "✓ Node.js LTS 已设为默认版本" -Level Detail
             } else {
                 Write-UiWarning "⚠ fnm default 失败，尝试 fnm use..." -Level Debug
             }
@@ -1160,7 +1160,7 @@ function Install-NodeFnm {
                 throw $friendlyMsg
             }
 
-            Write-UiSuccess "✓ Node.js LTS 版本已激活"
+            Write-UiSuccess "✓ Node.js LTS 版本已激活" -Level Detail
 
         } catch {
             throw "Node.js 安装过程失败: $($_.Exception.Message)"
@@ -1178,7 +1178,7 @@ function Install-NodeFnm {
             $nodeVersion = Get-CommandVersion -Command "node"
             $result.Data["NodeVersion"] = $nodeVersion
             $result.Data["NodePath"] = $nodeDetails.ResolvedPath
-            Write-UiSuccess "✓ Node.js 验证成功 (版本: $nodeVersion)"
+            Write-UiSuccess "✓ Node.js 验证成功 (版本: $nodeVersion)" -Level Detail
             Write-UiInfo "  路径: $($nodeDetails.ResolvedPath)" -Level Detail
         } else {
             $errorMsg = "Node.js 安装后不可用"
@@ -1198,7 +1198,7 @@ function Install-NodeFnm {
             $npmVersion = Get-CommandVersion -Command "npm"
             $result.Data["NpmVersion"] = $npmVersion
             $result.Data["NpmPath"] = $npmDetails.ResolvedPath
-            Write-UiSuccess "✓ npm 验证成功 (版本: $npmVersion)"
+            Write-UiSuccess "✓ npm 验证成功 (版本: $npmVersion)" -Level Detail
             Write-UiInfo "  路径: $($npmDetails.ResolvedPath)" -Level Detail
         } else {
             $errorMsg = "npm 安装后不可用"
@@ -1238,7 +1238,7 @@ function Install-NodeFnm {
             if (-not $restoreResult.Success) {
                 Write-UiWarning "⚠ npm 全局包部分恢复失败（详见结果数据）"
             } else {
-                Write-UiSuccess "✓ npm 全局包恢复完成"
+                Write-UiSuccess "✓ npm 全局包恢复完成" -Level Detail
             }
         }
 
@@ -1246,7 +1246,7 @@ function Install-NodeFnm {
         $result.Success = $true
         $result.Message = "Node.js 运行时安装配置完成"
 
-        Write-UiSuccess "✅ NodeFnm 安装完成！"
+        Write-UiSuccess "✅ NodeFnm 安装完成！" -Level Detail
         Write-UiDim "💡 提示: 如果在新的 PowerShell 会话中 node 命令不可用，请重新启动 PowerShell" -Level Detail
 
     } catch {
@@ -1281,7 +1281,7 @@ function Verify-NodeFnm {
         # 验证 fnm（可选）
         if (Test-CommandAvailable -Command "fnm") {
             $fnmVersion = Get-CommandVersion -Command "fnm"
-            Write-UiSuccess "✓ fnm 验证通过 (版本: $fnmVersion)"
+            Write-UiSuccess "✓ fnm 验证通过 (版本: $fnmVersion)" -Level Detail
         } else {
             Write-UiWarning "⚠ fnm 未安装或不可用（允许使用 nvm/direct Node 环境）" -Level Detail
         }
@@ -1299,7 +1299,7 @@ function Verify-NodeFnm {
                 # 验证提取的版本号是否为数字
                 if ($versionNumber -match '^\d+$') {
                     if ([int]$versionNumber -ge [int]$script:RequiredNodeVersion) {
-                        Write-UiSuccess "✓ Node.js 验证通过 (版本: $nodeVersion)"
+                        Write-UiSuccess "✓ Node.js 验证通过 (版本: $nodeVersion)" -Level Detail
                     } else {
                         $verificationPassed = $false
                         $issues += "Node.js 版本过低 (当前: $nodeVersion, 需要: v$script:RequiredNodeVersion+)"
@@ -1320,7 +1320,7 @@ function Verify-NodeFnm {
         # 验证 npm（必须）
         if (Test-CommandAvailable -Command "npm") {
             $npmVersion = Get-CommandVersion -Command "npm"
-            Write-UiSuccess "✓ npm 验证通过 (版本: $npmVersion)"
+            Write-UiSuccess "✓ npm 验证通过 (版本: $npmVersion)" -Level Detail
         } else {
             $verificationPassed = $false
             $issues += "npm 命令不可用"
@@ -1330,7 +1330,7 @@ function Verify-NodeFnm {
         try {
             $npmTestResult = Invoke-ExternalCommand -Command "npm" -Arguments @("--version") -SuppressOutput -TimeoutSeconds 10
             if ($npmTestResult.Success) {
-                Write-UiSuccess "✓ npm 功能验证通过"
+                Write-UiSuccess "✓ npm 功能验证通过" -Level Detail
             } else {
                 $issues += "npm 功能测试失败"
             }

@@ -62,10 +62,10 @@ function Install-Git {
     }
 
     try {
-        Write-UiPrimary "📦 开始安装和配置 Git..."
+        Write-UiPrimary "📦 开始安装和配置 Git..." -Level Detail
 
         # 1. 安装 Git
-        Write-UiPrimary "🔧 检查并安装 Git..."
+        Write-UiPrimary "🔧 检查并安装 Git..." -Level Detail
 
         if (Test-CommandAvailable -Command "git") {
             $currentVersion = Get-CommandVersion -Command "git"
@@ -99,7 +99,7 @@ function Install-Git {
                     if (-not $gitInstall.Success) {
                         throw "winget 安装 Git 失败"
                     }
-                    Write-UiSuccess "✓ Git 通过 winget 安装成功"
+                    Write-UiSuccess "✓ Git 通过 winget 安装成功" -Level Detail
                 } catch {
                     Write-UiWarning "⚠ winget 安装失败，请手动安装 Git" -Level Detail
                     Write-UiInfo "请访问 https://git-scm.com/download/win 下载并安装 Git" -Level Detail
@@ -223,7 +223,7 @@ function Install-Git {
         $result.Success = $true
         $result.Message = "Git 安装和配置完成"
 
-        Write-UiSuccess "✅ Git 安装完成！"
+        Write-UiSuccess "✅ Git 安装完成！" -Level Detail
 
     } catch {
         $result.ErrorMessage = "Git 安装和配置失败: $($_.Exception.Message)"
@@ -249,7 +249,7 @@ function Verify-Git {
     }
 
     try {
-        Write-UiPrimary "✅ 验证 Git 安装和配置..."
+        Write-UiPrimary "✅ 验证 Git 安装和配置..." -Level Detail
 
         $verificationPassed = $true
         $issues = @()

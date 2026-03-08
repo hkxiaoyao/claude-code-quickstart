@@ -36,7 +36,7 @@ function Install-CodexCli {
     }
 
     try {
-        Write-UiPrimary "安装 Codex CLI..."
+        Write-UiPrimary "安装 Codex CLI..." -Level Detail
 
         # 检查 Node.js 是否可用
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
@@ -79,7 +79,7 @@ function Install-CodexCli {
         }
 
         $version = Get-CommandVersion -Command "codex"
-        Write-UiSuccess "✓ Codex CLI 安装成功"
+        Write-UiSuccess "✓ Codex CLI 安装成功" -Level Detail
         Write-UiInfo "版本: $version" -Level Detail
         Write-UiInfo "命令: codex --help" -Level Detail
 
@@ -126,7 +126,7 @@ function Verify-CodexCli {
             throw "codex --help 执行失败"
         }
 
-        Write-UiSuccess "✓ Codex CLI 验证通过"
+        Write-UiSuccess "✓ Codex CLI 验证通过" -Level Detail
         Write-UiInfo "  - 命令可用性: ✓" -Level Detail
         Write-UiInfo "  - 版本信息: $version" -Level Detail
         Write-UiInfo "  - 帮助信息: ✓" -Level Detail
@@ -157,7 +157,7 @@ function Update-CodexCli {
     }
 
     try {
-        Write-UiPrimary "更新 Codex CLI..."
+        Write-UiPrimary "更新 Codex CLI..." -Level Detail
 
         # 获取当前版本
         $oldVersion = Get-CommandVersion -Command "codex"
@@ -218,7 +218,7 @@ function Update-CodexCli {
             Write-UiDim "Codex CLI 已是最新版本 ($newVersion)" -Level Debug
         } else {
             $result.UpdatedItems = @("npm::codex-cli::${oldVersion}->${newVersion}")
-            Write-UiSuccess "✓ Codex CLI 已更新: $oldVersion -> $newVersion"
+            Write-UiSuccess "✓ Codex CLI 已更新: $oldVersion -> $newVersion" -Level Detail
         }
 
         $result.Success = $true

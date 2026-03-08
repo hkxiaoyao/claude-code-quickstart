@@ -40,7 +40,7 @@ function Install-Ccline {
     #>
     param()
 
-    Write-UiPrimary "=== CCometixLine 安装 ==="
+    Write-UiPrimary "=== CCometixLine 安装 ===" -Level Detail
     Write-Host ""
 
     $stepResult = @{
@@ -76,7 +76,7 @@ function Install-Ccline {
             throw $errorMsg
         }
 
-        Write-UiSuccess "✓ 前置条件检查完成"
+        Write-UiSuccess "✓ 前置条件检查完成" -Level Detail
 
         # 2. 检查 CCometixLine 是否已安装
         Write-Host ""
@@ -97,11 +97,11 @@ function Install-Ccline {
                 if (-not $npmResult.Success) {
                     throw "CCometixLine 重新安装失败"
                 }
-                Write-UiSuccess "✓ CCometixLine 重新安装成功"
+                Write-UiSuccess "✓ CCometixLine 重新安装成功" -Level Detail
             }
         } else {
             # 安装 CCometixLine
-            Write-UiWarning "安装 CCometixLine..."
+            Write-UiWarning "安装 CCometixLine..." -Level Detail
 
             $npmResult = Invoke-NpmGlobalInstall -PackageName $script:CclinePackage
 
@@ -109,7 +109,7 @@ function Install-Ccline {
                 throw "CCometixLine 安装失败"
             }
 
-            Write-UiSuccess "✓ CCometixLine 安装成功"
+            Write-UiSuccess "✓ CCometixLine 安装成功" -Level Detail
         }
 
         # 3. 验证安装
@@ -234,7 +234,7 @@ function Install-Ccline {
             $patchResult = Invoke-ExternalCommand -Command "ccline" -Arguments @("--patch", $claudeCliArg) -TimeoutSeconds 30
             if ($patchResult.Success) {
                 $patchApplied = $true
-                Write-UiSuccess "✓ CCometixLine patch 执行成功"
+                Write-UiSuccess "✓ CCometixLine patch 执行成功" -Level Detail
             } else {
                 Write-UiWarning "⚠ CCometixLine patch 执行失败，但不影响基本功能" -Level Debug
                 Write-UiDim "  错误信息: $($patchResult.Error)" -Level Debug
@@ -251,7 +251,7 @@ function Install-Ccline {
         # 8. 使用提示
         Write-Host ""
         Write-UiDim "8. 使用提示..." -Level Detail
-        Write-UiPrimary "  CCometixLine 状态栏已配置完成"
+        Write-UiPrimary "  CCometixLine 状态栏已配置完成" -Level Detail
         Write-UiDim "  状态栏将在 Claude Code 中自动显示自定义信息" -Level Detail
         Write-Host ""
         Write-UiDim "  基本命令:" -Level Detail
@@ -260,7 +260,7 @@ function Install-Ccline {
         Write-UiDim "    ccline --patch <path>  # Patch Claude Code" -Level Detail
 
         Write-Host ""
-        Write-UiSuccess "✓ CCometixLine 安装和配置完成"
+        Write-UiSuccess "✓ CCometixLine 安装和配置完成" -Level Detail
 
         $resultMessage = if ($patchApplied) {
             "CCometixLine 安装、状态栏配置和 patch 全部成功"
@@ -312,7 +312,7 @@ function Update-Ccline {
     }
 
     try {
-        Write-UiPrimary "更新 CCometixLine..."
+        Write-UiPrimary "更新 CCometixLine..." -Level Detail
 
         # 获取当前版本
         $oldVersion = ""
@@ -371,10 +371,10 @@ function Update-Ccline {
 
             if ($oldVersion -eq $newVersion) {
                 [void]$updatedItems.Add("noop::Ccline::no-change")
-                Write-UiDim "CCometixLine 已是最新版本 ($newVersion)"
+                Write-UiDim "CCometixLine 已是最新版本 ($newVersion)" -Level Detail
             } else {
                 [void]$updatedItems.Add("npm::ccline::${oldVersion}->${newVersion}")
-                Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion"
+                Write-UiSuccess "✓ CCometixLine 已更新: $oldVersion -> $newVersion" -Level Detail
             }
         }
 
@@ -395,7 +395,7 @@ function Update-Ccline {
                     if ($patchResult.Success) {
                         $patchApplied = $true
                         [void]$updatedItems.Add("patch::ccline::re-patched")
-                        Write-UiSuccess "✓ CCometixLine patch 重新应用成功"
+                        Write-UiSuccess "✓ CCometixLine patch 重新应用成功" -Level Detail
                     } else {
                         Write-UiWarning "CCometixLine patch 重新应用失败，不影响基本功能" -Level Debug
                     }
