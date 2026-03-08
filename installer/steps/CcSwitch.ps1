@@ -114,7 +114,6 @@ function Install-CcSwitch {
     param()
 
     Write-UiPrimary "=== CC-Switch 安装 ===" -Level Detail
-    Write-Host ""
 
     $result = @{
         Success      = $false
@@ -133,7 +132,6 @@ function Install-CcSwitch {
         Write-UiSuccess "✓ 前置条件检查完成" -Level Detail
 
         # 2. 检查 CC-Switch 是否已安装
-        Write-Host ""
         Write-UiDim "2. 检查 CC-Switch 安装状态..." -Level Detail
 
         $ccSwitchTest = Test-CcSwitchInstalled
@@ -145,10 +143,8 @@ function Install-CcSwitch {
         } else {
             # 未检测到安装，提醒用户检测机制的限制
             Write-UiWarning "  未检测到 CC-Switch 安装" -Level Detail
-            Write-Host ""
             Write-UiDim "  注意: 当前仅支持检测 MSI 安装方式" -Level Detail
             Write-UiDim "  如果您已通过便携版/自定义方式安装，可选择跳过" -Level Detail
-            Write-Host ""
             $response = Read-Host "是否继续安装 CC-Switch？[Y/n]"
             if ($response -match "^[Nn]") {
                 Write-UiDim "跳过 CC-Switch 安装" -Level Detail
@@ -159,7 +155,6 @@ function Install-CcSwitch {
         }
 
         # 3. 检查安装权限（非硬性要求，per-user 安装不需要管理员）
-        Write-Host ""
         Write-UiDim "3. 检查安装权限..." -Level Detail
 
         $isAdmin = Test-IsAdministrator
@@ -170,7 +165,6 @@ function Install-CcSwitch {
         }
 
         # 4. 获取最新版本信息
-        Write-Host ""
         Write-UiDim "4. 获取 CC-Switch 最新版本信息..." -Level Detail
 
         $releaseInfo = Get-LatestCcSwitchRelease
@@ -183,7 +177,6 @@ function Install-CcSwitch {
         Write-UiDim "  下载地址: $($releaseInfo.DownloadUrl)" -Level Debug
 
         # 5. 下载 CC-Switch 安装包
-        Write-Host ""
         Write-UiDim "5. 下载 CC-Switch 安装包..." -Level Detail
 
         $installerPath = Download-CcSwitchInstaller -DownloadUrl $releaseInfo.DownloadUrl -Version $releaseInfo.Version
@@ -195,7 +188,6 @@ function Install-CcSwitch {
         Write-UiSuccess "✓ 安装包下载成功: $installerPath" -Level Detail
 
         # 6. 验证安装包
-        Write-Host ""
         Write-UiDim "6. 验证安装包..." -Level Detail
 
         $fileInfo = Get-Item $installerPath
@@ -209,7 +201,6 @@ function Install-CcSwitch {
         Write-UiSuccess "✓ 安装包验证通过" -Level Detail
 
         # 7. 执行静默安装
-        Write-Host ""
         Write-UiDim "7. 执行 CC-Switch 静默安装..." -Level Detail
 
         $installResult = Install-CcSwitchPackage -InstallerPath $installerPath
@@ -221,7 +212,6 @@ function Install-CcSwitch {
         Write-UiSuccess "✓ CC-Switch 安装成功" -Level Detail
 
         # 8. 验证安装
-        Write-Host ""
         Write-UiDim "8. 验证 CC-Switch 安装..." -Level Detail
 
         # 等待安装完成
@@ -236,7 +226,6 @@ function Install-CcSwitch {
         }
 
         # 9. 清理临时文件
-        Write-Host ""
         Write-UiDim "9. 清理临时文件..." -Level Detail
 
         try {
@@ -249,14 +238,12 @@ function Install-CcSwitch {
         }
 
         # 10. 使用提示
-        Write-Host ""
         Write-UiDim "10. 使用提示..." -Level Detail
         Write-UiPrimary "  CC-Switch 已安装完成" -Level Detail
         Write-UiDim "  CC-Switch 是 Claude Code 的辅助工具，提供以下功能:" -Level Detail
         Write-UiDim "    - 快速切换 Claude Code 配置" -Level Detail
         Write-UiDim "    - 项目环境管理" -Level Detail
         Write-UiDim "    - 工作流程优化" -Level Detail
-        Write-Host ""
         Write-UiSuccess "✓ CC-Switch 安装完成" -Level Detail
 
         $result.Success = $true
