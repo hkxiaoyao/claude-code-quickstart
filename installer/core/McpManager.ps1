@@ -91,10 +91,6 @@ $script:McpRulesCategories = @{
                 )
                 Fallback = "Grep + Glob"
             }
-            @{
-                Scenario = "Prompt 增强"
-                Steps    = @( @{ McpId = "ace-tool"; Tool = "mcp__ace-tool__enhance_prompt" } )
-            }
         )
         StaticRows = @(
             @{ Scenario = "精确字符串/正则";  Tool = "Grep" }
@@ -237,7 +233,7 @@ $script:McpServers = [ordered]@{
     }
     "ace-tool" = @{
         Name = "ACE Tool"
-        Description = "代码上下文检索、语义搜索和 AI Prompt 增强"
+        Description = "代码上下文检索、语义搜索"
         McpType = "stdio"
         Command = "npx"
         Args = @("-y", "ace-tool@latest")
@@ -540,6 +536,112 @@ function Sync-AllMcpRules {
     catch {
         $result.ErrorMessage = $_.Exception.Message
         Write-UiWarning "MCP Rules 同步失败: $($result.ErrorMessage)"
+    }
+
+    return $result
+}
+
+# ─── 凭据同步 ──────────────────────────────────────────────────────────────
+
+function Sync-McpCredentials {
+    <#
+    .SYNOPSIS
+    同步 .claude.json 和 vault 之间的凭据（双向补缺）
+    .DESCRIPTION
+    场景 A: .claude.json 有 env 但 vault 无 credentials → 备份到 vault
+    场景 B: vault 有 credentials 但 .claude.json env 缺失 → 恢复（仅限内置 MCP）
+    .RETURNS
+    @{ Success = $bool; SyncedCount = $int; Details = @() }
+    #>
+
+    $result = @{ Success = $true; SyncedCount = 0; Details = @() }
+
+    try {
+        # 读取 .claude.json（无需 vault 锁）
+        $cjPath = "$(Get-UserHome)\.claude.json"
+        if (-not (Test-Path $cjPath)) { return $result }
+        $cj = Get-Content -Path $cjPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if (-not $cj -or -not $cj.ContainsKey("mcpServers") -or $cj["mcpServers"] -isnot [hashtable]) { return $result }
+
+        # 共享状态（hashtable 引用类型，scriptblock 内修改对外可见）
+        $sync = @{ VaultCount = 0; VaultDetails = @(); CjCount = 0; CjDetails = @(); CjChanged = $false }
+
+        # vault 读改写在同一锁区间（与 Enable-McpServer 模式一致）
+        $null = Invoke-WithMcpLock {
+            $meta = Read-McpMeta
+            $vaultChanged = $false
+
+            foreach ($id in @($cj["mcpServers"].Keys)) {
+                $config = $cj["mcpServers"][$id]
+                if ($config -isnot [hashtable]) { continue }
+
+                $cjHasEnv = $config.ContainsKey("env") -and
+                            $config["env"] -is [hashtable] -and
+                            $config["env"].Count -gt 0
+                $vaultHasCred = $meta["servers"].ContainsKey($id) -and
+                                $meta["servers"][$id] -is [hashtable] -and
+                                $meta["servers"][$id].ContainsKey("credentials") -and
+                                $meta["servers"][$id]["credentials"] -is [hashtable]
+                $vaultHasValues = $vaultHasCred -and
+                                  $meta["servers"][$id]["credentials"].ContainsKey("values") -and
+                                  $meta["servers"][$id]["credentials"]["values"] -is [hashtable] -and
+                                  $meta["servers"][$id]["credentials"]["values"].Count -gt 0
+
+                # 场景 A: .claude.json 有 env, vault 无 → 备份到 vault
+                if ($cjHasEnv -and -not $vaultHasValues) {
+                    if (-not $meta["servers"].ContainsKey($id)) {
+                        $meta["servers"][$id] = @{}
+                    }
+                    if ($meta["servers"][$id] -isnot [hashtable]) {
+                        $meta["servers"][$id] = @{}
+                    }
+                    $meta["servers"][$id]["credentials"] = @{ values = $config["env"] }
+                    $meta["servers"][$id]["updatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+                    $vaultChanged = $true
+                    $sync.VaultCount++
+                    $sync.VaultDetails += "vault-backup::$id"
+                    Write-UiDim "  凭据备份: $id → vault" -Level Detail
+                }
+
+                # 场景 B: vault 有 credentials, .claude.json env 缺失 → 恢复（仅限内置 MCP）
+                if (-not $cjHasEnv -and $vaultHasValues) {
+                    $isBuiltin = $script:McpServers -and $script:McpServers.ContainsKey($id)
+                    if ($isBuiltin) {
+                        $config["env"] = $meta["servers"][$id]["credentials"]["values"]
+                        $sync.CjChanged = $true
+                        $sync.CjCount++
+                        $sync.CjDetails += "claude-restore::$id"
+                        Write-UiDim "  凭据恢复: vault → $id" -Level Detail
+                    }
+                }
+            }
+
+            # vault 写入（同一锁区间内）
+            if ($vaultChanged) {
+                Write-McpMeta $meta
+                Write-UiDim "vault 已更新" -Level Detail
+            }
+        }
+
+        # vault 同步成功（锁区间无异常）→ 计入结果
+        $result.SyncedCount += $sync.VaultCount
+        $result.Details += $sync.VaultDetails
+
+        # .claude.json 写入（无需 vault 锁）— 写入成功才计入同步数
+        if ($sync.CjChanged) {
+            $writeOk = Write-FileAtomically -FilePath $cjPath -Content @($cj | ConvertTo-Json -Depth 10)
+            if ($writeOk) {
+                $result.SyncedCount += $sync.CjCount
+                $result.Details += $sync.CjDetails
+            }
+            else {
+                Write-UiWarning "凭据恢复写入 .claude.json 失败"
+            }
+        }
+    }
+    catch {
+        $result.Success = $false
+        Write-UiWarning "凭据同步失败: $($_.Exception.Message)" -Level Detail
     }
 
     return $result
@@ -1563,7 +1665,7 @@ function Get-McpStatus {
     $meta = Read-McpMeta
 
     # 收集所有 server ID（union）
-    $allIds = [System.Collections.Generic.HashSet[string]]::new()
+    $allIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($id in $claudeServers.Keys) { [void]$allIds.Add($id) }
     if ($script:McpServers) {
         foreach ($id in $script:McpServers.Keys) { [void]$allIds.Add($id) }
@@ -2422,6 +2524,13 @@ function Show-McpManageMenu {
     .SYNOPSIS
     MCP 管理交互菜单（扁平化：状态总览 + 操作菜单）
     #>
+
+    # 入口同步：凭据对齐 + Rules 渲染
+    $syncResult = Sync-McpCredentials
+    if ($syncResult.SyncedCount -gt 0) {
+        Write-UiSuccess "已同步 $($syncResult.SyncedCount) 个 MCP 凭据"
+    }
+    Sync-AllMcpRules | Out-Null
 
     while ($true) {
         # 1. 获取并展示状态
