@@ -283,6 +283,69 @@ function Show-ExecutionPlan {
     return ($confirmIndex -eq 0)
 }
 
+function Register-CcqShortcut {
+    <#
+    .SYNOPSIS
+    注册 ccq 快捷命令（当前会话 + Profile 持久化）
+    .DESCRIPTION
+    非阻塞设计：失败仅输出 Debug 级警告，不影响安装主流程。
+    #>
+    param()
+
+    $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1"
+
+    try {
+        # 1) 当前会话立即可用
+        $ccqScript = [ScriptBlock]::Create("irm '$manageScriptUrl' | iex")
+        Set-Item -Path Function:\global:ccq -Value $ccqScript
+
+        # 2) Profile 持久化（仅写 SHORTCUTS 子段）
+        $profilePath = $PROFILE
+        if ([string]::IsNullOrWhiteSpace($profilePath)) {
+            return
+        }
+
+        $hasManagedBlock = $false
+        if (Test-Path $profilePath) {
+            $blockInfo = Get-ManagedBlockContent -FilePath $profilePath
+            $hasManagedBlock = [bool]$blockInfo.Found
+            # 先迁移旧结构（幂等）
+            $null = Migrate-ManagedBlockToSubsections -FilePath $profilePath
+        }
+
+        $shortcutContent = @(
+            "function ccq {"
+            "    irm '$manageScriptUrl' | iex"
+            "}"
+        )
+
+        $saved = Set-ManagedSubsectionInFile -FilePath $profilePath -SectionName "SHORTCUTS" -SectionContent $shortcutContent
+        if (-not $saved -and -not $hasManagedBlock) {
+            # 托管块不存在时，创建仅包含 SHORTCUTS 的新托管块
+            $initialContent = @(
+                "# [CCQ:SHORTCUTS:BEGIN]"
+            )
+            $initialContent += @($shortcutContent)
+            $initialContent += @(
+                "# [CCQ:SHORTCUTS:END]"
+            )
+
+            $saved = Set-ManagedBlockInFile -FilePath $profilePath -Content $initialContent -CreateIfNotExists -AppendIfNoBlock
+        }
+
+        if (-not $saved -and $hasManagedBlock) {
+            Write-UiWarning "⚠ SHORTCUTS 子段写入失败，检测到已有托管块，已跳过降级覆盖" -Level Debug
+        }
+
+        if (-not $saved) {
+            Write-UiWarning "⚠ ccq 快捷命令持久化失败（不影响安装流程）" -Level Debug
+        }
+
+    } catch {
+        Write-UiWarning "⚠ 注册 ccq 快捷命令失败（不影响安装流程）: $($_.Exception.Message)" -Level Debug
+    }
+}
+
 function Invoke-GroupedInstall {
     <#
     .SYNOPSIS
@@ -308,6 +371,7 @@ function Invoke-GroupedInstall {
     if (-not $closure.FinalPlan -or $closure.FinalPlan.Count -eq 0) {
         Write-Host ""
         Write-UiSuccess "所有选定步骤已安装，无需操作"
+        Register-CcqShortcut
         return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
     }
 
@@ -421,6 +485,8 @@ function Invoke-GroupedInstall {
     } catch {
         # 指纹种子写入失败不阻塞安装流程
     }
+
+    Register-CcqShortcut
 
     return $results
 }
@@ -619,6 +685,7 @@ function Show-FinalSummary {
     if ($Results.Failed -eq 0) {
         Write-Host ""
         Write-UiPrimary "快速开始：" -Level Detail
+        Write-UiInfo "  ccq             - CCQ 管理入口（更新/供应商/MCP）" -Level Detail
         Write-UiInfo "  claude          - 启动 Claude Code" -Level Detail
         Write-UiInfo "  claude --help   - 查看帮助信息" -Level Detail
     } else {

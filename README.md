@@ -83,6 +83,14 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 
 #### 3) 管理脚本（PS 7+）
 
+新增快捷指令入口（历史安装用户需重新执行一次安装脚本的基础环境）：
+
+```powershell
+ccq
+```
+
+旧入口：
+
 ```powershell
 irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1' | iex
 ```
@@ -265,29 +273,26 @@ claude-code-quickstart/
 
 直接重新运行安装脚本即可。CCQ 会实时检测并跳过已安装项。
 
-### Q2：怎么查看可更新内容？
+### Q2：提示找不到`ccq`怎么办？
 
-```powershell
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Update -ListUpdates
-```
+按你的场景分两种处理：
 
-### Q3：怎么重新配置供应商？
+1. **之前执行过 install（历史安装用户）**
+   - 重新执行一次安装脚本的基础环境，让 `ccq` 写入 `$profile`
 
-```powershell
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider
-```
+2. **刚刚执行完 install（本次安装用户）**
+   - 先新开一个终端再试：
 
-### Q4：如何验证脚本语法？
+   ```powershell
+   ccq
+   ```
 
-```powershell
-pwsh -File test-syntax.ps1
-```
+   - 如果当前终端也想立即可用，可执行：
 
-### Q5：如何构建单文件版本？
-
-```powershell
-pwsh -File ".\installer\build\Build-SingleFile.ps1"
-```
+   ```powershell
+   . $PROFILE
+   ccq
+   ```
 
 ---
 

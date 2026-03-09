@@ -1072,8 +1072,32 @@ function Install-NodeFnm {
             "}"
         )
 
-        # 使用标记块写入配置
-        $profileSuccess = Set-ManagedBlockInFile -FilePath $profilePath -Content $fnmConfig -CreateIfNotExists -AppendIfNoBlock
+        # 先迁移旧结构（无子段标记时包裹为 FNM 子段，幂等）
+        $hasManagedBlock = $false
+        if (Test-Path $profilePath) {
+            $blockInfo = Get-ManagedBlockContent -FilePath $profilePath
+            $hasManagedBlock = [bool]$blockInfo.Found
+            $null = Migrate-ManagedBlockToSubsections -FilePath $profilePath
+        }
+
+        # 仅维护 FNM 子段，避免覆盖其他子段（如 SHORTCUTS）
+        $profileSuccess = Set-ManagedSubsectionInFile -FilePath $profilePath -SectionName "FNM" -SectionContent $fnmConfig
+        if (-not $profileSuccess -and -not $hasManagedBlock) {
+            # 托管块不存在时降级创建外层块并写入 FNM 子段
+            $initialContent = @(
+                "# [CCQ:FNM:BEGIN]"
+            )
+            $initialContent += @($fnmConfig)
+            $initialContent += @(
+                "# [CCQ:FNM:END]"
+            )
+
+            $profileSuccess = Set-ManagedBlockInFile -FilePath $profilePath -Content $initialContent -CreateIfNotExists -AppendIfNoBlock
+        }
+
+        if (-not $profileSuccess -and $hasManagedBlock) {
+            Write-UiWarning "⚠ FNM 子段写入失败，检测到已有托管块，已跳过降级覆盖" -Level Debug
+        }
 
         if ($profileSuccess) {
             Write-UiSuccess "✓ PowerShell Profile 配置成功" -Level Detail

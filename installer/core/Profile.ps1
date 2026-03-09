@@ -385,6 +385,194 @@ function Set-ManagedBlockInFile {
     }
 }
 
+function Test-CcqSubsectionMarkersPresent {
+    <#
+    .SYNOPSIS
+    检测托管块内容中是否存在 CCQ 子段标记
+    .PARAMETER Content
+    托管块内容数组
+    .RETURNS
+    存在任意子段标记返回 $true，否则返回 $false
+    #>
+    param(
+        [AllowEmptyString()]
+        [string[]]$Content
+    )
+
+    $lines = @()
+    if ($null -ne $Content) {
+        $lines = @($Content)
+    }
+
+    foreach ($line in $lines) {
+        if ([string]::IsNullOrWhiteSpace([string]$line)) { continue }
+        if (($line.Trim()) -match '^\s*#\s*\[CCQ:[A-Za-z0-9_-]+:(BEGIN|END)\]\s*$') {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Convert-LegacyManagedBlockContentToSubsection {
+    <#
+    .SYNOPSIS
+    将无子段标记的旧托管块内容包装为指定子段
+    .PARAMETER Content
+    旧托管块内容
+    .PARAMETER LegacySection
+    旧内容归属子段名（默认 FNM）
+    .RETURNS
+    转换后的托管块内容数组
+    #>
+    param(
+        [AllowEmptyString()]
+        [string[]]$Content,
+
+        [string]$LegacySection = "FNM"
+    )
+
+    $source = @()
+    if ($null -ne $Content) {
+        $source = @($Content)
+    }
+
+    $result = [System.Collections.ArrayList]::new()
+    $null = $result.Add("# [CCQ:$LegacySection:BEGIN]")
+    foreach ($line in $source) {
+        $null = $result.Add($line)
+    }
+    $null = $result.Add("# [CCQ:$LegacySection:END]")
+
+    return ,$result.ToArray()
+}
+
+function Migrate-ManagedBlockToSubsections {
+    <#
+    .SYNOPSIS
+    迁移旧托管块为子段结构（幂等）
+    .PARAMETER FilePath
+    Profile 文件路径
+    .RETURNS
+    迁移成功返回 $true，跳过或失败返回 $false
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath
+    )
+
+    try {
+        $blockInfo = Get-ManagedBlockContent -FilePath $FilePath
+        if (-not $blockInfo.Found) {
+            return $false
+        }
+
+        $lines = @($blockInfo.Content)
+        if (Test-CcqSubsectionMarkersPresent -Content $lines) {
+            # 已是子段结构：幂等成功
+            return $true
+        }
+
+        $migratedContent = Convert-LegacyManagedBlockContentToSubsection -Content $lines -LegacySection "FNM"
+        return (Set-ManagedBlockInFile -FilePath $FilePath -Content $migratedContent)
+
+    } catch {
+        Write-UiWarning "⚠ 托管块迁移失败: $($_.Exception.Message)" -Level Debug
+        return $false
+    }
+}
+
+function Set-ManagedSubsectionInFile {
+    <#
+    .SYNOPSIS
+    在托管块中 Upsert 指定子段
+    .PARAMETER FilePath
+    Profile 文件路径
+    .PARAMETER SectionName
+    子段名称（如 FNM、SHORTCUTS）
+    .PARAMETER SectionContent
+    子段内容数组
+    .RETURNS
+    操作成功返回 $true，失败返回 $false
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SectionName,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string[]]$SectionContent
+    )
+
+    try {
+        $blockInfo = Get-ManagedBlockContent -FilePath $FilePath
+        if (-not $blockInfo.Found) {
+            return $false
+        }
+
+        $lines = @($blockInfo.Content)
+        $beginMarker = "# [CCQ:$SectionName:BEGIN]"
+        $endMarker = "# [CCQ:$SectionName:END]"
+
+        $beginIdx = -1
+        $endIdx = -1
+
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $trimmed = $lines[$i].Trim()
+            if ($trimmed -eq $beginMarker) {
+                $beginIdx = $i
+            }
+            if ($trimmed -eq $endMarker) {
+                $endIdx = $i
+                break
+            }
+        }
+
+        $newLines = [System.Collections.ArrayList]::new()
+
+        if ($beginIdx -ge 0 -and $endIdx -ge 0 -and $endIdx -gt $beginIdx) {
+            # 子段存在，替换
+            for ($i = 0; $i -lt $beginIdx; $i++) {
+                $null = $newLines.Add($lines[$i])
+            }
+
+            $null = $newLines.Add($beginMarker)
+            foreach ($line in $SectionContent) {
+                $null = $newLines.Add($line)
+            }
+            $null = $newLines.Add($endMarker)
+
+            for ($i = $endIdx + 1; $i -lt $lines.Count; $i++) {
+                $null = $newLines.Add($lines[$i])
+            }
+        } else {
+            # 子段不存在，追加
+            foreach ($line in $lines) {
+                $null = $newLines.Add($line)
+            }
+
+            if ($newLines.Count -gt 0) {
+                $null = $newLines.Add("")
+            }
+
+            $null = $newLines.Add($beginMarker)
+            foreach ($line in $SectionContent) {
+                $null = $newLines.Add($line)
+            }
+            $null = $newLines.Add($endMarker)
+        }
+
+        return (Set-ManagedBlockInFile -FilePath $FilePath -Content $newLines.ToArray())
+
+    } catch {
+        Write-UiWarning "⚠ 子段写入失败: $($_.Exception.Message)" -Level Debug
+        return $false
+    }
+}
+
 function Write-FileAtomically {
     <#
     .SYNOPSIS
