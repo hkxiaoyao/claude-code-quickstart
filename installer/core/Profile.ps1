@@ -200,11 +200,11 @@ function Get-ManagedBlockContent {
 
     $result = @{
         Found = $false
-        Content = @()
+        Content = [System.Collections.ArrayList]::new()
         StartLine = -1
         EndLine = -1
-        BeforeBlock = @()
-        AfterBlock = @()
+        BeforeBlock = [System.Collections.ArrayList]::new()
+        AfterBlock = [System.Collections.ArrayList]::new()
     }
 
     if (-not (Test-Path $FilePath)) {
@@ -243,13 +243,13 @@ function Get-ManagedBlockContent {
             }
 
             if ($inBlock) {
-                $result.Content += $line
+                $null = $result.Content.Add($line)
             } elseif ($result.StartLine -eq -1) {
                 # 在标记块之前
-                $result.BeforeBlock += $line
+                $null = $result.BeforeBlock.Add($line)
             } elseif ($result.EndLine -ne -1) {
                 # 在标记块之后
-                $result.AfterBlock += $line
+                $null = $result.AfterBlock.Add($line)
             }
         }
 
@@ -258,7 +258,8 @@ function Get-ManagedBlockContent {
         } else {
             Write-UiDim "未找到标记块" -Level Detail
             # 如果没有找到标记块，所有内容都在 BeforeBlock 中
-            $result.BeforeBlock = $lines
+            $result.BeforeBlock.Clear()
+            foreach ($bLine in $lines) { $null = $result.BeforeBlock.Add($bLine) }
         }
 
         return $result
@@ -325,9 +326,6 @@ function Set-ManagedBlockInFile {
                 Write-UiDanger "文件不存在: $FilePath"
                 return $false
             }
-        } else {
-            # 备份现有文件
-            $null = Backup-FileWithTimestamp -FilePath $FilePath -BackupReason "managed_block"
         }
 
         # 读取现有标记块
@@ -367,8 +365,35 @@ function Set-ManagedBlockInFile {
             }
         }
 
-        # 转换为数组并原子写入文件
+        # 转换为数组
         $contentArray = $newContent.ToArray()
+
+        # 内容相等短路：避免无意义的备份和重写
+        # 仅当结构完整（BEGIN + END 均找到）且内容一致时才短路，损坏块不短路以保留自愈能力
+        if ((Test-Path $FilePath) -and $blockInfo.Found -and $blockInfo.EndLine -ne -1) {
+            $existingContent = @($blockInfo.Content.ToArray())
+            $innerContent = @($contentArray[1..($contentArray.Count - 2)])
+            $contentEqual = $false
+            if ($innerContent.Count -eq $existingContent.Count) {
+                $contentEqual = $true
+                for ($ci = 0; $ci -lt $innerContent.Count; $ci++) {
+                    if ([string]$innerContent[$ci] -ne [string]$existingContent[$ci]) {
+                        $contentEqual = $false
+                        break
+                    }
+                }
+            }
+            if ($contentEqual) {
+                Write-UiSuccess "✓ 标记块内容未变更，跳过写入: $FilePath" -Level Detail
+                return $true
+            }
+        }
+
+        # 备份现有文件（内容确实需要变更时才备份）
+        if (Test-Path $FilePath) {
+            $null = Backup-FileWithTimestamp -FilePath $FilePath -BackupReason "managed_block"
+        }
+
         $success = Write-FileAtomically -FilePath $FilePath -Content $contentArray
 
         if ($success) {
@@ -444,7 +469,174 @@ function Convert-LegacyManagedBlockContentToSubsection {
     }
     $null = $result.Add("# [CCQ:$LegacySection:END]")
 
-    return ,$result.ToArray()
+    return $result.ToArray()
+}
+
+function Remove-CcqFunctionBlocksFromContent {
+    <#
+    .SYNOPSIS
+    从托管块内容中移除标准 ccq 函数定义
+    .DESCRIPTION
+    用于收敛历史重复写入或误迁移到其他子段中的 ccq 快捷函数，
+    仅删除标准的 function ccq { ... } 块，不影响其他配置内容。
+    .PARAMETER Content
+    托管块内容数组
+    .RETURNS
+    清理后的内容数组
+    #>
+    param(
+        [AllowEmptyString()]
+        [string[]]$Content
+    )
+
+    $lines = @()
+    if ($null -ne $Content) {
+        $lines = @($Content)
+    }
+
+    $result = [System.Collections.ArrayList]::new()
+    $skippingCcqFunction = $false
+    $braceDepth = 0
+
+    foreach ($line in $lines) {
+        $text = [string]$line
+        $trimmed = $text.Trim()
+
+        if (-not $skippingCcqFunction -and $trimmed -match '^function\s+ccq\s*\{\s*$') {
+            $skippingCcqFunction = $true
+            $openCount = @($text.ToCharArray() | Where-Object { $_ -eq '{' }).Count
+            $closeCount = @($text.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+            $braceDepth = $openCount - $closeCount
+
+            if ($braceDepth -le 0) {
+                $skippingCcqFunction = $false
+                $braceDepth = 0
+            }
+            continue
+        }
+
+        if ($skippingCcqFunction) {
+            $openCount = @($text.ToCharArray() | Where-Object { $_ -eq '{' }).Count
+            $closeCount = @($text.ToCharArray() | Where-Object { $_ -eq '}' }).Count
+            $braceDepth += $openCount - $closeCount
+
+            if ($braceDepth -le 0) {
+                $skippingCcqFunction = $false
+                $braceDepth = 0
+            }
+            continue
+        }
+
+        $null = $result.Add($text)
+    }
+
+    return $result.ToArray()
+}
+
+function Set-CcqShortcutSubsectionInFile {
+    <#
+    .SYNOPSIS
+    规范化并写入 SHORTCUTS 子段
+    .DESCRIPTION
+    在写入前清理历史残留的 SHORTCUTS 子段、损坏标记和裸 ccq 函数定义，
+    最终收敛为单个标准 SHORTCUTS 子段，同时保留 FNM 等其他子段内容。
+    .PARAMETER FilePath
+    Profile 文件路径
+    .PARAMETER ShortcutContent
+    SHORTCUTS 子段内容数组
+    .RETURNS
+    操作成功返回 $true，失败返回 $false
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string[]]$ShortcutContent
+    )
+
+    try {
+        $blockInfo = Get-ManagedBlockContent -FilePath $FilePath
+        if (-not $blockInfo.Found) {
+            return $false
+        }
+
+        $sourceLines = Remove-CcqFunctionBlocksFromContent -Content $blockInfo.Content.ToArray()
+        $normalizedLines = [System.Collections.ArrayList]::new()
+        $inShortcutsSection = $false
+
+        foreach ($line in $sourceLines) {
+            $text = [string]$line
+            $trimmed = $text.Trim()
+
+            if ($trimmed -match '^#\s*\[CCQ:\s*\]$') {
+                continue
+            }
+
+            if ($inShortcutsSection) {
+                if ($trimmed -eq '# [CCQ:SHORTCUTS:END]') {
+                    $inShortcutsSection = $false
+                    continue
+                }
+
+                if ($trimmed -match '^#\s*\[CCQ:([A-Za-z0-9_-]+):(BEGIN|END)\]$' -and $matches[1] -ne 'SHORTCUTS') {
+                    $inShortcutsSection = $false
+                } else {
+                    continue
+                }
+            }
+
+            if ($trimmed -eq '# [CCQ:SHORTCUTS:BEGIN]') {
+                $inShortcutsSection = $true
+                continue
+            }
+
+            if ($trimmed -eq '# [CCQ:SHORTCUTS:END]') {
+                continue
+            }
+
+            $null = $normalizedLines.Add($text)
+        }
+
+
+        while ($normalizedLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace([string]$normalizedLines[$normalizedLines.Count - 1])) {
+            $normalizedLines.RemoveAt($normalizedLines.Count - 1)
+        }
+
+        if ($normalizedLines.Count -gt 0) {
+            $null = $normalizedLines.Add("")
+        }
+
+        $null = $normalizedLines.Add('# [CCQ:SHORTCUTS:BEGIN]')
+        foreach ($line in @($ShortcutContent)) {
+            $null = $normalizedLines.Add($line)
+        }
+        $null = $normalizedLines.Add('# [CCQ:SHORTCUTS:END]')
+
+        # 内容相等短路：避免无意义的备份和重写（跨进程幂等）
+        $finalContent = $normalizedLines.ToArray()
+        $existingContent = @($blockInfo.Content)
+        $contentEqual = $false
+        if ($finalContent.Count -eq $existingContent.Count) {
+            $contentEqual = $true
+            for ($ci = 0; $ci -lt $finalContent.Count; $ci++) {
+                if ([string]$finalContent[$ci] -ne [string]$existingContent[$ci]) {
+                    $contentEqual = $false
+                    break
+                }
+            }
+        }
+        if ($contentEqual) {
+            return $true
+        }
+
+        return (Set-ManagedBlockInFile -FilePath $FilePath -Content $finalContent)
+
+    } catch {
+        Write-UiWarning "⚠ SHORTCUTS 子段规范化写入失败: $($_.Exception.Message)" -Level Debug
+        return $false
+    }
 }
 
 function Migrate-ManagedBlockToSubsections {
@@ -467,11 +659,74 @@ function Migrate-ManagedBlockToSubsections {
             return $false
         }
 
-        $lines = @($blockInfo.Content)
-        if (Test-CcqSubsectionMarkersPresent -Content $lines) {
-            # 已是子段结构：幂等成功
+        $lines = @($blockInfo.Content.ToArray())
+        $hasSubsectionMarkers = Test-CcqSubsectionMarkersPresent -Content $lines
+
+        if ($hasSubsectionMarkers) {
+            # 已有子段标记，检查是否存在”裸内容”（不在任何子段内的非标记非空行）
+            # 裸内容是历史遗留的未包裹 FNM 配置，需要将其收敛为 FNM 子段
+            $hasFnmBegin = $false
+            $hasFnmEnd = $false
+            $inAnySection = $false
+            $hasBareContent = $false
+
+            foreach ($checkLine in $lines) {
+                $checkTrimmed = ([string]$checkLine).Trim()
+                if ($checkTrimmed -eq '# [CCQ:FNM:BEGIN]') { $hasFnmBegin = $true; $inAnySection = $true; continue }
+                if ($checkTrimmed -eq '# [CCQ:FNM:END]') { $hasFnmEnd = $true; $inAnySection = $false; continue }
+                if ($checkTrimmed -match '^#\s*\[CCQ:[A-Za-z0-9_-]+:BEGIN\]$') { $inAnySection = $true; continue }
+                if ($checkTrimmed -match '^#\s*\[CCQ:[A-Za-z0-9_-]+:END\]$') { $inAnySection = $false; continue }
+                # 跳过损坏的空名称 CCQ 标记（如 # [CCQ:]），不视为裸内容
+                if ($checkTrimmed -match '^#\s*\[CCQ:[^A-Za-z0-9_-]*\]$') { continue }
+                # 不在任何子段内的非空行 = 裸内容
+                if (-not $inAnySection -and -not [string]::IsNullOrWhiteSpace($checkTrimmed)) {
+                    $hasBareContent = $true
+                    break
+                }
+            }
+
+            # 存在裸内容且 FNM 标记不完整时，将裸内容收敛为 FNM 子段（保留其他已有子段）
+            if ($hasBareContent -and (-not $hasFnmBegin -or -not $hasFnmEnd)) {
+                $fnmLines = [System.Collections.ArrayList]::new()
+                $otherLines = [System.Collections.ArrayList]::new()
+                $inSection = $false
+
+                foreach ($wLine in $lines) {
+                    $wTrimmed = ([string]$wLine).Trim()
+                    # 跳过残留的 FNM 标记（避免重复）
+                    if ($wTrimmed -eq '# [CCQ:FNM:BEGIN]' -or $wTrimmed -eq '# [CCQ:FNM:END]') { continue }
+                    # 跳过损坏的空名称 CCQ 标记（如 # [CCQ:]），直接丢弃
+                    if ($wTrimmed -match '^#\s*\[CCQ:[^A-Za-z0-9_-]*\]$') { continue }
+                    if ($wTrimmed -match '^#\s*\[CCQ:[A-Za-z0-9_-]+:BEGIN\]$') {
+                        $inSection = $true
+                        $null = $otherLines.Add($wLine)
+                        continue
+                    }
+                    if ($wTrimmed -match '^#\s*\[CCQ:[A-Za-z0-9_-]+:END\]$') {
+                        $inSection = $false
+                        $null = $otherLines.Add($wLine)
+                        continue
+                    }
+                    if ($inSection) {
+                        $null = $otherLines.Add($wLine)
+                    } else {
+                        # 裸内容归入 FNM 子段
+                        $null = $fnmLines.Add($wLine)
+                    }
+                }
+
+                $result = [System.Collections.ArrayList]::new()
+                $null = $result.Add('# [CCQ:FNM:BEGIN]')
+                foreach ($l in $fnmLines) { $null = $result.Add($l) }
+                $null = $result.Add('# [CCQ:FNM:END]')
+                foreach ($l in $otherLines) { $null = $result.Add($l) }
+                return (Set-ManagedBlockInFile -FilePath $FilePath -Content $result.ToArray())
+            }
+
+            # FNM 标记完整或无裸内容，幂等成功
             return $true
         }
+
 
         $migratedContent = Convert-LegacyManagedBlockContentToSubsection -Content $lines -LegacySection "FNM"
         return (Set-ManagedBlockInFile -FilePath $FilePath -Content $migratedContent)
@@ -513,7 +768,7 @@ function Set-ManagedSubsectionInFile {
             return $false
         }
 
-        $lines = @($blockInfo.Content)
+        $lines = @($blockInfo.Content.ToArray())
         $beginMarker = "# [CCQ:$SectionName:BEGIN]"
         $endMarker = "# [CCQ:$SectionName:END]"
 
@@ -569,6 +824,56 @@ function Set-ManagedSubsectionInFile {
 
     } catch {
         Write-UiWarning "⚠ 子段写入失败: $($_.Exception.Message)" -Level Debug
+        return $false
+    }
+}
+
+function Write-ProfileSubsection {
+    <#
+    .SYNOPSIS
+    统一的 Profile 子段写入入口（迁移 + Upsert + 降级创建）
+    .PARAMETER FilePath
+    Profile 文件路径
+    .PARAMETER SectionName
+    子段名称（如 FNM、SHORTCUTS）
+    .PARAMETER SectionContent
+    子段内容数组
+    .RETURNS
+    操作成功返回 $true，失败返回 $false
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SectionName,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string[]]$SectionContent
+    )
+
+    try {
+        # 1. 迁移旧结构（幂等）
+        if (Test-Path $FilePath) {
+            $null = Migrate-ManagedBlockToSubsections -FilePath $FilePath
+        }
+
+        # 2. 尝试子段 Upsert
+        $result = Set-ManagedSubsectionInFile -FilePath $FilePath -SectionName $SectionName -SectionContent $SectionContent
+
+        # 3. 降级：托管块不存在时创建新块
+        if (-not $result) {
+            $initialContent = @("# [CCQ:${SectionName}:BEGIN]")
+            $initialContent += @($SectionContent)
+            $initialContent += @("# [CCQ:${SectionName}:END]")
+            $result = Set-ManagedBlockInFile -FilePath $FilePath -Content $initialContent -CreateIfNotExists -AppendIfNoBlock
+        }
+
+        return $result
+
+    } catch {
+        Write-UiWarning "⚠ Profile 子段写入失败: $($_.Exception.Message)" -Level Debug
         return $false
     }
 }

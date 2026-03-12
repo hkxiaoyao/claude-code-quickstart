@@ -84,6 +84,10 @@ $script:StepRegistry = Get-StepRegistry
 
 $script:StepGroups = Get-StepGroups
 
+# ─── 进程级幂等标志 ──────────────────────────────────────────────────────────
+
+$script:CcqShortcutRegistered = $false
+
 # ─── 核心函数 ───────────────────────────────────────────────────────────────
 
 function Invoke-SilentStepTest {
@@ -289,8 +293,14 @@ function Register-CcqShortcut {
     注册 ccq 快捷命令（当前会话 + Profile 持久化）
     .DESCRIPTION
     非阻塞设计：失败仅输出 Debug 级警告，不影响安装主流程。
+    进程级幂等：同一进程内仅持久化一次，避免重复写入 Profile。
     #>
     param()
+
+    # 进程级幂等 guard：同一进程内仅持久化一次
+    if ($script:CcqShortcutRegistered) {
+        return
+    }
 
     $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1"
 
@@ -305,40 +315,31 @@ function Register-CcqShortcut {
             return
         }
 
-        $hasManagedBlock = $false
-        if (Test-Path $profilePath) {
-            $blockInfo = Get-ManagedBlockContent -FilePath $profilePath
-            $hasManagedBlock = [bool]$blockInfo.Found
-            # 先迁移旧结构（幂等）
-            $null = Migrate-ManagedBlockToSubsections -FilePath $profilePath
-        }
-
         $shortcutContent = @(
             "function ccq {"
             "    irm '$manageScriptUrl' | iex"
             "}"
         )
 
-        $saved = Set-ManagedSubsectionInFile -FilePath $profilePath -SectionName "SHORTCUTS" -SectionContent $shortcutContent
-        if (-not $saved -and -not $hasManagedBlock) {
-            # 托管块不存在时，创建仅包含 SHORTCUTS 的新托管块
-            $initialContent = @(
-                "# [CCQ:SHORTCUTS:BEGIN]"
-            )
-            $initialContent += @($shortcutContent)
-            $initialContent += @(
-                "# [CCQ:SHORTCUTS:END]"
-            )
-
-            $saved = Set-ManagedBlockInFile -FilePath $profilePath -Content $initialContent -CreateIfNotExists -AppendIfNoBlock
+        # 先迁移旧结构（幂等）
+        if (Test-Path $profilePath) {
+            $null = Migrate-ManagedBlockToSubsections -FilePath $profilePath
         }
 
-        if (-not $saved -and $hasManagedBlock) {
-            Write-UiWarning "⚠ SHORTCUTS 子段写入失败，检测到已有托管块，已跳过降级覆盖" -Level Debug
+        # 规范化写入 SHORTCUTS 子段（收敛历史重复 + 裸 ccq 函数清理）
+        $saved = Set-CcqShortcutSubsectionInFile -FilePath $profilePath -ShortcutContent $shortcutContent
+
+        # 降级：托管块不存在时创建新块
+        if (-not $saved) {
+            $saved = Write-ProfileSubsection -FilePath $profilePath -SectionName "SHORTCUTS" -SectionContent $shortcutContent
         }
+
 
         if (-not $saved) {
             Write-UiWarning "⚠ ccq 快捷命令持久化失败（不影响安装流程）" -Level Debug
+        } else {
+            # 成功后置位，确保同一进程内不会重复写盘
+            $script:CcqShortcutRegistered = $true
         }
 
     } catch {
@@ -371,6 +372,7 @@ function Invoke-GroupedInstall {
     if (-not $closure.FinalPlan -or $closure.FinalPlan.Count -eq 0) {
         Write-Host ""
         Write-UiSuccess "所有选定步骤已安装，无需操作"
+        # 即使无需安装，也执行 Profile 规范化（清理历史污染）
         Register-CcqShortcut
         return @{ Total = 0; Success = 0; Failed = 0; Skipped = 0 }
     }
