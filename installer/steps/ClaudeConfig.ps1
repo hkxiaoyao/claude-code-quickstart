@@ -327,7 +327,7 @@ function Update-ClaudeConfig {
             } elseif ($settings["env"][$key] -cne $entry.Value) {
                 $oldVal = $settings["env"][$key]
                 $settings["env"][$key] = $entry.Value
-                [void]$updatedItems.Add("config::env.${key}::${oldVal}->${entry.Value}")
+                [void]$updatedItems.Add("config::env.${key}::${oldVal}->$($entry.Value)")
             }
         }
 

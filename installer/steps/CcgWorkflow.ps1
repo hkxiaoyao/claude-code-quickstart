@@ -807,7 +807,7 @@ function Update-CcgWorkflow {
                     } elseif ($settings["env"][$key] -cne $entry.Value) {
                         $oldVal = $settings["env"][$key]
                         $settings["env"][$key] = $entry.Value
-                        $result.UpdatedItems += "config::env.${key}::${oldVal}->${entry.Value}"
+                        $result.UpdatedItems += "config::env.${key}::${oldVal}->$($entry.Value)"
                     }
                 }
 
