@@ -27,15 +27,22 @@ function Get-StepRegistry {
 
     $script:_registryCache = @(
         @{
-            StepId          = "NodeFnm"
-            StepName        = "Node.js (fnm)"
-            Description     = "通过 fnm 安装 Node.js，为 npm 包安装提供运行时支持"
-            StepFile        = "steps/NodeFnm.ps1"
-            TestFunction    = "Test-NodeFnmInstalled"
-            InstallFunction = "Install-NodeFnm"
-            VerifyFunction  = "Verify-NodeFnm"
+            StepId          = "NodeJS"
+            StepName        = "Node.js"
+            Description     = "安装 Node.js ，支持 nvm-windows / Node.js 二选一，并保留 fnm 检测与迁移能力"
+            StepFile        = "steps/NodeJS.ps1"
+            SubModules      = @(
+                "steps/NodeJS-Detect.ps1"
+                "steps/NodeJS-Common.ps1"
+                "steps/NodeJS-Fnm.ps1"
+                "steps/NodeJS-Nvm.ps1"
+                "steps/NodeJS-Direct.ps1"
+            )
+            TestFunction    = "Test-NodeJSInstalled"
+            InstallFunction = "Install-NodeJS"
+            VerifyFunction  = "Verify-NodeJS"
             UpdateFunction  = ""
-            SkipIfInstalled = $true
+            SkipIfInstalled = $false
             IsOptional      = $false
             Order           = 10
             Dependencies    = @()
@@ -68,7 +75,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 30
-            Dependencies    = @("NodeFnm")
+            Dependencies    = @("NodeJS")
             Group           = "Basic"
         },
         @{
@@ -158,7 +165,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 90
-            Dependencies    = @("NodeFnm")
+            Dependencies    = @("NodeJS")
             Group           = "Advanced"
         },
         @{
@@ -173,7 +180,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $false
             Order           = 100
-            Dependencies    = @("NodeFnm")
+            Dependencies    = @("NodeJS")
             Group           = "Advanced"
         },
         @{
@@ -203,7 +210,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 120
-            Dependencies    = @("NodeFnm")
+            Dependencies    = @("NodeJS")
             Group           = "Advanced"
         },
         @{
@@ -218,7 +225,7 @@ function Get-StepRegistry {
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 130
-            Dependencies    = @("NodeFnm")
+            Dependencies    = @("NodeJS")
             Group           = "Advanced"
         }
     )
@@ -308,11 +315,24 @@ function Get-StepFiles {
     <#
     .SYNOPSIS
     返回步骤文件相对路径列表（相对于 installer/ 目录，按 Order 排序）
+    .DESCRIPTION
+    若步骤注册了 SubModules，子模块文件会排在主步骤文件之前，
+    确保构建打包和运行时加载均能正确包含子模块内容。
     .RETURNS
     string[] - 步骤文件路径数组
     #>
     param()
 
     $registry = Get-StepRegistry
-    return @($registry | Sort-Object { $_.Order } | ForEach-Object { $_.StepFile })
+    $files = [System.Collections.Generic.List[string]]::new()
+    foreach ($step in ($registry | Sort-Object { $_.Order })) {
+        # 子模块排在主文件之前（构建时内联、运行时预加载）
+        if ($step.ContainsKey('SubModules') -and $step.SubModules.Count -gt 0) {
+            foreach ($sub in $step.SubModules) {
+                $files.Add($sub)
+            }
+        }
+        $files.Add($step.StepFile)
+    }
+    return @($files)
 }

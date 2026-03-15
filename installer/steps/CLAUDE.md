@@ -57,7 +57,7 @@ function Update-<StepId> {
 ```
 
 > 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、GeminiCli、OpenSpec。
-> 5 个步骤不可更新（UpdateFunction 为空）：NodeFnm、Git、ApiKey、CcSwitch、Mcp。
+> 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
@@ -67,25 +67,25 @@ function Update-<StepId> {
 
 | StepId | 名称 | 文件 | 可选 | SkipIfInstalled | 可更新 | 主要依赖 | 分组 |
 |--------|------|------|:----:|:---------------:|:------:|---------|------|
-| NodeFnm | Node.js (fnm) | `NodeFnm.ps1` | — | ✓ | — | 无 | 基础 |
+| NodeJS | Node.js (fnm) | `NodeJS.ps1` | — | ✓ | — | 无 | 基础 |
 | Git | Git | `Git.ps1` | — | ✓ | — | 无 | 基础 |
-| ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | ✓ | NodeFnm | 基础 |
+| ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | ✓ | NodeJS | 基础 |
 | ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | ✓ | — | ClaudeCode | 基础 |
 | Ccline | ccline | `Ccline.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
 | CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
-| CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeFnm | 进阶 |
-| CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
-| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | ✓ | NodeFnm | 进阶 |
-| OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeFnm | 进阶 |
+| CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
+| CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
+| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
+| OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 
 ---
 
-## NodeFnm — Node.js (fnm)
+## NodeJS — Node.js (fnm)
 
-**文件**：`NodeFnm.ps1`
+**文件**：`NodeJS.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`, `Profile.ps1`
 
 **安装流程**：
@@ -335,7 +335,7 @@ Install-ApiKey($state)
 ## CcgWorkflow — CCG 工作流
 
 **文件**：`CcgWorkflow.ps1`
-**依赖**：NodeFnm + ClaudeConfig
+**依赖**：NodeJS + ClaudeConfig
 
 **功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎，并写入 `rules/ccq-ccgworkflow.md`（多模型协作 + 工作流增强策略）。
 

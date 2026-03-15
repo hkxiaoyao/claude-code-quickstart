@@ -759,6 +759,7 @@ function Set-ManagedSubsectionInFile {
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
+        [AllowEmptyCollection()]
         [string[]]$SectionContent
     )
 
@@ -850,6 +851,7 @@ function Write-ProfileSubsection {
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
+        [AllowEmptyCollection()]
         [string[]]$SectionContent
     )
 
@@ -878,6 +880,106 @@ function Write-ProfileSubsection {
     }
 }
 
+function Remove-CcqSubsectionFromFile {
+    <#
+    .SYNOPSIS
+    从托管块中移除指定子段（标记 + 内容）
+    .DESCRIPTION
+    移除指定子段后，若托管块内无实质内容，则连同托管块整体移除。
+    .PARAMETER FilePath
+    Profile 文件路径
+    .PARAMETER SectionName
+    子段名称（如 FNM、SHORTCUTS）
+    .RETURNS
+    操作成功返回 $true，失败返回 $false
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$SectionName
+    )
+
+    try {
+        if (-not (Test-Path $FilePath)) {
+            return $true
+        }
+
+        # 迁移旧结构（幂等），确保子段标记存在
+        $null = Migrate-ManagedBlockToSubsections -FilePath $FilePath
+
+        $blockInfo = Get-ManagedBlockContent -FilePath $FilePath
+        if (-not $blockInfo.Found) {
+            return $true
+        }
+
+        $lines = @($blockInfo.Content.ToArray())
+        $beginMarker = "# [CCQ:${SectionName}:BEGIN]"
+        $endMarker = "# [CCQ:${SectionName}:END]"
+
+        # 检测子段是否存在
+        $hasBegin = $false
+        $hasEnd = $false
+        foreach ($line in $lines) {
+            $trimmed = ([string]$line).Trim()
+            if ($trimmed -eq $beginMarker) { $hasBegin = $true }
+            if ($trimmed -eq $endMarker) { $hasEnd = $true }
+        }
+
+        if (-not $hasBegin -and -not $hasEnd) {
+            return $true
+        }
+
+        # 剥离目标子段（标记 + 内容）
+        $newLines = [System.Collections.ArrayList]::new()
+        $inTargetSection = $false
+
+        foreach ($line in $lines) {
+            $trimmed = ([string]$line).Trim()
+
+            if ($trimmed -eq $beginMarker) {
+                $inTargetSection = $true
+                continue
+            }
+
+            if ($inTargetSection -and $trimmed -eq $endMarker) {
+                $inTargetSection = $false
+                continue
+            }
+
+            if (-not $inTargetSection) {
+                $null = $newLines.Add($line)
+            }
+        }
+
+        # 检查剩余内容是否有实质性内容（非空白行）
+        $hasContent = $false
+        foreach ($remainLine in $newLines) {
+            if (-not [string]::IsNullOrWhiteSpace([string]$remainLine)) {
+                $hasContent = $true
+                break
+            }
+        }
+
+        if (-not $hasContent) {
+            # 无实质内容，移除整个托管块
+            return (Remove-ManagedBlockFromFile -FilePath $FilePath)
+        }
+
+        # 修剪尾部空行
+        while ($newLines.Count -gt 0 -and [string]::IsNullOrWhiteSpace([string]$newLines[$newLines.Count - 1])) {
+            $newLines.RemoveAt($newLines.Count - 1)
+        }
+
+        return (Set-ManagedBlockInFile -FilePath $FilePath -Content $newLines.ToArray())
+
+    } catch {
+        Write-UiWarning "⚠ 子段移除失败 [${SectionName}]: $($_.Exception.Message)" -Level Debug
+        return $false
+    }
+}
+
 function Write-FileAtomically {
     <#
     .SYNOPSIS
@@ -897,6 +999,7 @@ function Write-FileAtomically {
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
+        [AllowEmptyCollection()]
         [string[]]$Content,
 
         [string]$Encoding = "UTF8"

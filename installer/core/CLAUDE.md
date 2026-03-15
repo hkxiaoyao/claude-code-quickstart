@@ -91,6 +91,10 @@ $script:DefaultTimeoutSeconds  = 300
 
 > **注意**：`Invoke-NpmGlobalInstall` **无 `-DisplayName` 参数**，步骤文件调用时不要传此参数。
 
+> **HC-WINGET-SILENT（强约束）**：`Invoke-WingetInstall` 传入 `-Silent` 时，内部自动切换为重定向模式（`RedirectStandardOutput/Error = $true`）并异步消费缓冲区，以抑制 winget 进度条噪音（如 `Removed N of M files`）。**禁止**在 `-Silent` 模式下将 `RedirectStandardOutput/RedirectStandardError` 设为 `$false`——否则进度条输出会泄漏到终端且可能死锁。
+
+> **HC-PS1-PATH-QUOTE（强约束）**：`Invoke-ExternalCommand` 对 `.ps1` 文件通过 `pwsh.exe -File` 执行时，若路径含空格**必须**加双引号包裹（`"`"$path"`"`），否则 `ProcessStartInfo.Arguments -join ' '` 拼接后路径被截断（如 `C:\Program Files\nodejs\npm.ps1` → `-File C:\Program`），退出码 64。
+
 ---
 
 ## Profile.ps1
@@ -192,19 +196,19 @@ class InstallState {
 ### 步骤依赖图（由 `Registry.ps1` 的 `Get-StepDependencies` 提供）
 
 ```powershell
-"NodeFnm"      = @()
+"NodeJS"      = @()
 "Git"           = @()
-"ClaudeCode"    = @("NodeFnm")
+"ClaudeCode"    = @("NodeJS")
 "ApiKey"        = @("ClaudeCode")
 "Ccline"        = @("ClaudeCode")
 "CcSwitch"      = @("ClaudeCode")
 "ClaudeConfig"  = @("ClaudeCode")
 "ClaudeMd"      = @()
 "Mcp"           = @("ClaudeCode")
-"CcgWorkflow"   = @("NodeFnm")
-"CodexCli"      = @("NodeFnm")
-"GeminiCli"     = @("NodeFnm")
-"OpenSpec"      = @("NodeFnm")
+"CcgWorkflow"   = @("NodeJS")
+"CodexCli"      = @("NodeJS")
+"GeminiCli"     = @("NodeJS")
+"OpenSpec"      = @("NodeJS")
 ```
 
 ### 主要函数

@@ -84,7 +84,12 @@ function Invoke-ExternalCommand {
             # 对于 .ps1 文件，通过 powershell 执行
             elseif ($extension -eq '.ps1') {
                 $actualFileName = 'pwsh.exe'
-                $actualArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $cmdInfo.Source) + $Arguments
+                # 路径含空格时必须加引号，否则 ProcessStartInfo.Arguments（-join ' '）拼接后路径被截断
+                $ps1Path = $cmdInfo.Source
+                if ($ps1Path -match '\s') {
+                    $ps1Path = "`"$ps1Path`""
+                }
+                $actualArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $ps1Path) + $Arguments
             }
             # 对于 .exe 文件，直接使用解析后的完整路径
             elseif ($extension -eq '.exe') {
@@ -269,18 +274,29 @@ function Invoke-WingetInstall {
                     Write-UiWarning "重试第 $($attempt - 1) 次安装: $PackageName"
                 }
 
-                # 使用 .NET Process 直通模式：不重定向输出，winget 进度条直接写入控制台
+                # 输出模式：-Silent 时重定向输出（抑制 winget 进度条噪音，如 "Removed N of M files"）
+                # 非 Silent 时直通模式，让 winget 进度条直接写入控制台
+                # !! 强约束 SC-WINGET-OUTPUT !!：禁止在 -Silent 模式下使用直通模式
+                # （RedirectStandardOutput=$false + RedirectStandardError=$false 会导致进度条输出泄漏到终端）
                 $procInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $procInfo.FileName = "winget"
                 $procInfo.Arguments = $arguments -join ' '
                 $procInfo.UseShellExecute = $false
-                $procInfo.RedirectStandardOutput = $false
-                $procInfo.RedirectStandardError = $false
-                $procInfo.CreateNoWindow = $false
+                $procInfo.RedirectStandardOutput = $Silent.IsPresent
+                $procInfo.RedirectStandardError = $Silent.IsPresent
+                $procInfo.CreateNoWindow = $Silent.IsPresent
 
                 $proc = New-Object System.Diagnostics.Process
                 $proc.StartInfo = $procInfo
                 [void]$proc.Start()
+
+                # -Silent 模式下已重定向输出，必须异步消费缓冲区，否则缓冲区满时 WaitForExit 会死锁
+                $outputTask = $null
+                $errorTask  = $null
+                if ($Silent.IsPresent) {
+                    $outputTask = $proc.StandardOutput.ReadToEndAsync()
+                    $errorTask  = $proc.StandardError.ReadToEndAsync()
+                }
 
                 # 超时保护：避免 winget 异常时无限等待
                 if (-not $proc.WaitForExit($timeoutSeconds * 1000)) {

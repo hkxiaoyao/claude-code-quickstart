@@ -21,7 +21,6 @@ Windows 平台的 Claude Code 开发环境自动化安装器。
 - [MCP Server](#mcp-server)
 - [项目结构](#项目结构)
 - [常见问题](#常见问题)
-- [开发者文档](#开发者文档)
 - [License](#license)
 
 ---
@@ -108,15 +107,15 @@ irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/downlo
 执行示例：
 
 ```powershell
-# 引导
+# 引导（PS 5.1+，管理员）
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\Bootstrap-ClaudeEnv.built.ps1
 
-# 安装
-pwsh -File ".\Install-ClaudeEnv.built.ps1"
+# 安装（PS 7+）
+.\Install-ClaudeEnv.built.ps1
 
-# 管理
-pwsh -File ".\Manage-ClaudeEnv.built.ps1"
+# 管理（PS 7+）
+.\Manage-ClaudeEnv.built.ps1
 ```
 
 ---
@@ -132,10 +131,16 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 .\installer\Bootstrap-ClaudeEnv.ps1
 
 # 安装（PS 7+）
-pwsh -File ".\installer\Install-ClaudeEnv.ps1"
+.\installer\Install-ClaudeEnv.ps1
 
 # 管理（PS 7+）
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
+.\installer\Manage-ClaudeEnv.ps1
+```
+
+模拟 `irm | iex`（可传参，如 `-OutputMode Developer` 全量输出）：
+
+```powershell
+& ([scriptblock]::Create((Get-Content "installer/build/dist/Install-ClaudeEnv.built.ps1" -Raw))) -OutputMode Developer
 ```
 
 ---
@@ -144,7 +149,7 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 
 ### 基础环境（必装）
 
-1. Node.js (fnm)
+1. Node.js
 2. Git
 3. Claude Code
 4. 第三方供应商配置
@@ -174,38 +179,16 @@ pwsh -File ".\installer\Manage-ClaudeEnv.ps1"
 - 更新前自动快照备份
 - 指纹预检（模板未变更自动跳过）
 
-CLI 示例：
-
-```powershell
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Update -ListUpdates
-```
-
 ### 2) 供应商管理（Provider）
 
 - 供应商 Profile 的新增 / 编辑 / 删除 / 切换
 - 支持从 settings.json 同步历史配置
-
-CLI 示例：
-
-```powershell
-# 查看供应商
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -ListProviders
-
-# 切换供应商
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Provider -Provider zhipu
-```
 
 ### 3) MCP 管理（Mcp）
 
 - 查看状态（Active / Disabled / Missing）
 - 启用 / 禁用 / 删除
 - 凭据通过 vault 持久化
-
-CLI 示例：
-
-```powershell
-pwsh -File ".\installer\Manage-ClaudeEnv.ps1" -Action Mcp
-```
 
 ---
 
@@ -293,14 +276,6 @@ claude-code-quickstart/
    . $PROFILE
    ccq
    ```
-
----
-
-## 开发者文档
-
-- [installer/CLAUDE.md](installer/CLAUDE.md)
-- [installer/core/CLAUDE.md](installer/core/CLAUDE.md)
-- [installer/steps/CLAUDE.md](installer/steps/CLAUDE.md)
 
 ---
 

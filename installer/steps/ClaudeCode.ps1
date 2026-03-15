@@ -70,7 +70,7 @@ function Install-ClaudeCode {
             Write-UiDim "💡 请尝试以下操作之一：" -Level Detail
             Write-UiDim "   1. 重新启动 PowerShell 后重新运行安装器" -Level Detail
             Write-UiDim "   2. 在当前窗口执行: . `$PROFILE 然后重新运行安装器" -Level Detail
-            throw "Node.js 未安装或不可用，请先完成 NodeFnm 步骤并重新启动 PowerShell"
+            throw "Node.js 未安装或不可用，请先完成 NodeJS 步骤并重新启动 PowerShell"
         }
 
         # 验证 npm
@@ -83,7 +83,7 @@ function Install-ClaudeCode {
             if ($npmDetails.ErrorMessage) {
                 Write-UiInfo "  错误详情: $($npmDetails.ErrorMessage)" -Level Detail
             }
-            throw "npm 未安装，请先完成 NodeFnm 步骤并重新启动 PowerShell"
+            throw "npm 未安装，请先完成 NodeJS 步骤并重新启动 PowerShell"
         }
 
         $nodeVersion = Get-CommandVersion -Command "node"

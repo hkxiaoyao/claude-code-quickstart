@@ -65,7 +65,7 @@ function Install-Ccline {
         # 验证 npm
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
         if (-not $npmDetails.Available) {
-            $errorMsg = "npm 未安装，请先完成 NodeFnm 步骤"
+            $errorMsg = "npm 未安装，请先完成 NodeJS 步骤"
             if ($npmDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
             }

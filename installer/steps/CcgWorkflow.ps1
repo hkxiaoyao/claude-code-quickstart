@@ -301,7 +301,7 @@ function Install-CcgWorkflow {
         # 验证 Node.js
         $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
         if (-not $nodeDetails.Available) {
-            $errorMsg = "未找到 node 命令，请检查 Node.js 安装 (NodeFnm)"
+            $errorMsg = "未找到 node 命令，请检查 Node.js 安装 (NodeJS)"
             if ($nodeDetails.ErrorMessage) {
                 $errorMsg += "`n  错误详情: $($nodeDetails.ErrorMessage)"
             }
@@ -311,7 +311,7 @@ function Install-CcgWorkflow {
         # 验证 npm
         $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
         if (-not $npmDetails.Available) {
-            $errorMsg = "未找到 npm 命令，请检查 Node.js 安装 (NodeFnm)"
+            $errorMsg = "未找到 npm 命令，请检查 Node.js 安装 (NodeJS)"
             if ($npmDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npmDetails.ResolvedPath)"
             }
@@ -324,7 +324,7 @@ function Install-CcgWorkflow {
         # 验证 npx
         $npxDetails = Test-CommandAvailable -Command "npx" -ReturnDetails
         if (-not $npxDetails.Available) {
-            $errorMsg = "未找到 npx 命令，请检查 Node.js 安装 (NodeFnm)"
+            $errorMsg = "未找到 npx 命令，请检查 Node.js 安装 (NodeJS)"
             if ($npxDetails.ResolvedPath) {
                 $errorMsg += "`n  解析路径: $($npxDetails.ResolvedPath)"
             }

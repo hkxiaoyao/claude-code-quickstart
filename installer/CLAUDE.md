@@ -10,7 +10,7 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 安装入口（推荐）：基础环境（NodeFnm~ApiKey）/ 进阶扩展（Ccline~OpenSpec）两级分组 |
+| `Install-ClaudeEnv.ps1` | **7.0+** | 安装入口（推荐）：基础环境（NodeJS~ApiKey）/ 进阶扩展（Ccline~OpenSpec）两级分组 |
 | `Manage-ClaudeEnv.ps1` | **7.0+** | 统一管理：更新已安装组件 / 供应商管理（CRUD + 切换）/ MCP Server 管理 |
 
 ---
@@ -71,7 +71,7 @@ foreach ($stepFile in $stepFiles) {
 
 | 分组 | 步骤 | 安装模式 |
 |------|------|----------|
-| **基础环境** | NodeFnm, Git, ClaudeCode, ApiKey | 仅一键安装 |
+| **基础环境** | NodeJS, Git, ClaudeCode, ApiKey | 仅一键安装 |
 | **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, GeminiCli, OpenSpec | 一键或多选 |
 
 ### 核心函数

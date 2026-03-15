@@ -420,9 +420,17 @@ function Invoke-GroupedInstall {
         $depCheck = Test-StepDependencies -StepId $stepId -State $State
         if (-not $depCheck.CanExecute) {
             if ($depCheck.FailedDependencies -and $depCheck.FailedDependencies.Count -gt 0) {
-                Write-UiDanger "前置依赖失败，跳过此步骤: $($depCheck.FailedDependencies -join ', ')"
+                $failedNames = $depCheck.FailedDependencies | ForEach-Object {
+                    $cfg = Get-StepConfigById -StepId $_
+                    if ($cfg) { $cfg.StepName } else { $_ }
+                }
+                Write-UiDanger "前置依赖失败，跳过此步骤: $($failedNames -join ', ')"
             } else {
-                Write-UiWarning "前置依赖未完成，跳过此步骤: $($depCheck.MissingDependencies -join ', ')"
+                $missingNames = $depCheck.MissingDependencies | ForEach-Object {
+                    $cfg = Get-StepConfigById -StepId $_
+                    if ($cfg) { $cfg.StepName } else { $_ }
+                }
+                Write-UiWarning "前置依赖未完成，跳过此步骤: $($missingNames -join ', ')"
             }
             $results.Skipped++
             continue
