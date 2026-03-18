@@ -22,6 +22,7 @@ Windows 平台的 Claude Code 开发环境自动化安装器。
 - [项目结构](#项目结构)
 - [常见问题](#常见问题)
 - [License](#license)
+- [友情链接](#友情链接)
 
 ---
 
@@ -282,3 +283,9 @@ claude-code-quickstart/
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## 友情链接
+
+- [LINUX DO](https://linux.do/)
