@@ -783,7 +783,9 @@ function Show-MultiSelectMenu {
                 }
                 'Enter' {
                     Write-Host ""
-                    return @($selectedItems.Keys | Sort-Object)
+                    # HC-13: 逗号阻止 PowerShell 展开空数组为 $null
+                    $result = @($selectedItems.Keys | Sort-Object)
+                    return ,$result
                 }
                 'Escape' {
                     Write-Host ""

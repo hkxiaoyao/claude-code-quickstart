@@ -464,8 +464,9 @@ function Invoke-GroupedInstall {
         }
     }
 
-    # 安装成功的指纹管理步骤 → 种子写入清单
-    # 避免首次更新检查误报"模板已变更"（Manage 的指纹预检依赖此清单）
+    # 指纹管理步骤 → 种子写入清单（Success + Skipped）
+    # Success: CCQ 刚安装/更新了此步骤，记录指纹
+    # Skipped: 步骤已安装但被跳过，同样需要种子，否则 Update 会因无指纹而误报"有更新"
     try {
         $fpManagedSteps = @("ClaudeMd", "ClaudeConfig", "CcgWorkflow")
         $manifest = Read-UpdateManifest
@@ -474,7 +475,7 @@ function Invoke-GroupedInstall {
         foreach ($sid in $orderedStepIds) {
             if ($sid -notin $fpManagedSteps) { continue }
             $sr = $State.StepResults[$sid]
-            if (-not $sr -or $sr.Status -ne [StepStatus]::Success) { continue }
+            if (-not $sr -or ($sr.Status -ne [StepStatus]::Success -and $sr.Status -ne [StepStatus]::Skipped)) { continue }
 
             $fnName = "Get-${sid}Fingerprint"
             if (-not (Get-Command $fnName -ErrorAction SilentlyContinue)) { continue }
