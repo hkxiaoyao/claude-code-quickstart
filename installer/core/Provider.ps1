@@ -709,6 +709,22 @@ function Add-Provider {
         # 内置供应商的 ModelMapping
         if ($template.ContainsKey("ModelMapping") -and $template.ModelMapping) {
             $providerProfile["modelMapping"] = $template.ModelMapping
+        } elseif ($selectedKey -eq "custom" -or $selectedKey -match '^custom-') {
+            # 自定义供应商：询问是否配置模型映射
+            $mappingIdx = Show-SingleSelectMenu -Title "是否配置模型别名映射？(可选，大多数供应商不需要)" -Options @("跳过", "配置映射")
+            if ($mappingIdx -eq 1) {
+                Write-UiDim "  模型映射将 Claude 模型别名 (opus/sonnet/haiku) 映射到供应商的实际模型名称"
+                $customMapping = @{}
+                foreach ($alias in @("opus", "sonnet", "haiku")) {
+                    $modelName = (Read-Host "  $alias 映射到 (留空跳过)").Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($modelName)) {
+                        $customMapping[$alias] = $modelName
+                    }
+                }
+                if ($customMapping.Count -gt 0) {
+                    $providerProfile["modelMapping"] = $customMapping
+                }
+            }
         }
 
         # 保存 Profile 到 ~/.claude/providers/
@@ -749,6 +765,79 @@ function Add-Provider {
     return $result
 }
 
+# ─── ModelMapping ─────────────────────────────────────────────────────────────
+
+function Edit-ModelMapping {
+    <#
+    .SYNOPSIS
+    交互式管理供应商的 modelMapping（查看/添加/修改/删除）
+    .PARAMETER ProfilePath
+    Profile JSON 文件路径
+    .RETURNS
+    hashtable|$null — 修改后的 modelMapping（$null 表示删除全部映射）
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$ProfilePath
+    )
+
+    $profileData = Get-Content $ProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    $mapping = if ($profileData.ContainsKey("modelMapping") -and $profileData["modelMapping"]) {
+        $clone = @{}
+        foreach ($k in $profileData["modelMapping"].Keys) { $clone[$k] = $profileData["modelMapping"][$k] }
+        $clone
+    } else { @{} }
+
+    $standardAliases = @("opus", "sonnet", "haiku")
+
+    while ($true) {
+        Write-Host ""
+        Write-UiPrimary "模型映射管理"
+        Write-Host ""
+
+        if ($mapping.Count -eq 0) {
+            Write-UiDim "  (无模型映射)"
+        } else {
+            foreach ($alias in $standardAliases) {
+                if ($mapping.ContainsKey($alias)) { Write-UiInfo "  $alias => $($mapping[$alias])" }
+            }
+        }
+
+        Write-Host ""
+        $options = @(
+            "设置模型映射 (opus/sonnet/haiku)"
+            "清除全部映射"
+            "返回"
+        )
+        $choice = Show-SingleSelectMenu -Title "选择操作：" -Options $options
+
+        switch ($choice) {
+            0 {
+                foreach ($alias in $standardAliases) {
+                    $current = if ($mapping.ContainsKey($alias)) { $mapping[$alias] } else { "(未设置)" }
+                    $newVal = (Read-Host "  $alias [$current] (留空保持不变，输入 - 删除)").Trim()
+                    if ($newVal -eq "-") {
+                        if ($mapping.ContainsKey($alias)) { $mapping.Remove($alias) }
+                    } elseif (-not [string]::IsNullOrWhiteSpace($newVal)) {
+                        $mapping[$alias] = $newVal
+                    }
+                }
+                Write-UiSuccess "模型映射已更新"
+            }
+            1 {
+                if ($mapping.Count -eq 0) { Write-UiDim "当前无映射，无需清除"; continue }
+                $confirmIdx = Show-SingleSelectMenu -Title "确认清除全部模型映射？" -Options @("是，清除", "否，取消")
+                if ($confirmIdx -eq 0) { $mapping = @{}; Write-UiSuccess "已清除全部模型映射" }
+            }
+            default { break }
+        }
+
+        if ($choice -eq 2 -or $choice -eq -1) { break }
+    }
+
+    if ($mapping.Count -eq 0) { return $null }
+    return $mapping
+}
+
 # ─── Update ────────────────────────────────────────────────────────────────────
 
 function Edit-Provider {
@@ -783,12 +872,22 @@ function Edit-Provider {
     Write-UiInfo "  供应商: $($meta["provider"])"
     Write-UiInfo "  Base URL: $($meta["baseUrl"])"
     Write-UiInfo "  API Key: $(Get-MaskedApiKey $envData["ANTHROPIC_AUTH_TOKEN"])"
+    # 显示当前 modelMapping 状态
+    $mappingStatus = if ($profile.ContainsKey("modelMapping") -and $profile["modelMapping"] -and $profile["modelMapping"].Count -gt 0) {
+        $mappingItems = @()
+        foreach ($k in @("opus", "sonnet", "haiku")) {
+            if ($profile["modelMapping"].ContainsKey($k)) { $mappingItems += "$k=$($profile["modelMapping"][$k])" }
+        }
+        $mappingItems -join ", "
+    } else { "未配置" }
+    Write-UiInfo "  模型映射: $mappingStatus"
     Write-Host ""
 
     $editOptions = @(
         "修改 API Key"
         "修改 Base URL"
         "修改供应商名称"
+        "配置模型映射"
         "全部重新配置"
     )
     $editChoice = Show-SingleSelectMenu -Title "选择修改项：" -Options $editOptions
@@ -854,6 +953,26 @@ function Edit-Provider {
             }
         }
         3 {
+            # 配置模型映射
+            $newMapping = Edit-ModelMapping -ProfilePath $profilePath
+            if ($null -eq $newMapping) {
+                if ($profile.ContainsKey("modelMapping")) { $profile.Remove("modelMapping") }
+            } else {
+                $profile["modelMapping"] = $newMapping
+            }
+            # 直接写入 Profile（不经过后续的 meta/env 合并路径）
+            $tempPath = "$profilePath.tmp"
+            $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+            Move-Item $tempPath $profilePath -Force
+            Write-UiSuccess "模型映射已保存"
+            # 若当前为活跃供应商，同步 settings.json
+            $activeNow = Get-ActiveProvider
+            if ($activeNow -and $activeNow.Key -eq $Key) {
+                Switch-Provider -Key $Key
+            }
+            return
+        }
+        4 {
             # 全部重新配置 → 备份旧配置，添加新配置，成功后清理旧备份
             $backupPath = "$profilePath.bak"
             try {
@@ -1135,6 +1254,8 @@ function Render-ActionBar {
         Write-UiDim "] 添加  [" -NoNewline
         Write-UiInfo "E" -NoNewline
         Write-UiDim "] 修改  [" -NoNewline
+        Write-UiInfo "M" -NoNewline
+        Write-UiDim "] 映射  [" -NoNewline
         Write-UiInfo "D" -NoNewline
         Write-UiDim "] 删除  [" -NoNewline
         Write-UiInfo "Esc" -NoNewline
@@ -1174,7 +1295,7 @@ function Show-ProviderDashboardFallback {
                 Write-Host ("  [{0}] {1} - {2} ({3})" -f ($i + 1), $p.Name, $p.BaseUrl, $statusTag)
             }
             Write-Host ""
-            Write-UiInfo "操作: [编号]=切换活跃  A=添加  E<编号>=修改  D<编号>=删除  Q=返回"
+            Write-UiInfo "操作: [编号]=切换活跃  A=添加  E<编号>=修改  M<编号>=映射  D<编号>=删除  Q=返回"
         }
 
         $userInput = Read-Host "请输入"
@@ -1197,6 +1318,29 @@ function Show-ProviderDashboardFallback {
             $idx = [int]$Matches[1] - 1
             if ($idx -ge 0 -and $idx -lt $profiles.Count) {
                 Edit-Provider -Key $profiles[$idx].Key
+            } else {
+                Write-UiDanger "编号超出范围"
+            }
+            continue
+        }
+        if ($userInput -match '^[Mm]\s*(\d+)$') {
+            $idx = [int]$Matches[1] - 1
+            if ($idx -ge 0 -and $idx -lt $profiles.Count) {
+                $targetKey = $profiles[$idx].Key
+                $mappingProfilePath = Join-Path (Get-ProviderProfilesDir) "$targetKey.json"
+                if (Test-Path $mappingProfilePath) {
+                    $newMapping = Edit-ModelMapping -ProfilePath $mappingProfilePath
+                    $mappingProfile = Get-Content $mappingProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                    if ($null -eq $newMapping) {
+                        if ($mappingProfile.ContainsKey("modelMapping")) { $mappingProfile.Remove("modelMapping") }
+                    } else {
+                        $mappingProfile["modelMapping"] = $newMapping
+                    }
+                    $tempMappingPath = "$mappingProfilePath.tmp"
+                    $mappingProfile | ConvertTo-Json -Depth 10 | Set-Content $tempMappingPath -Encoding UTF8
+                    Move-Item $tempMappingPath $mappingProfilePath -Force
+                    if ($profiles[$idx].IsActive) { Switch-Provider -Key $targetKey }
+                }
             } else {
                 Write-UiDanger "编号超出范围"
             }
@@ -1269,6 +1413,33 @@ function Show-ProviderDashboard {
                 Write-UiDim "  按 [A] 添加第一个供应商"
             } else {
                 Render-ProviderTable -Profiles $profiles -SelectedIndex $selectedIndex
+
+                # Detail Pane：展示选中供应商的 modelMapping
+                if ($profiles.Count -gt 0) {
+                    $selected = $profiles[$selectedIndex]
+                    $detailProfilePath = Join-Path (Get-ProviderProfilesDir) "$($selected.Key).json"
+                    Write-Host ""
+                    if (Test-Path $detailProfilePath) {
+                        try {
+                            $detailData = Get-Content $detailProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                            if ($null -ne $detailData -and $detailData.ContainsKey("modelMapping") -and
+                                $null -ne $detailData["modelMapping"] -and $detailData["modelMapping"].Count -gt 0) {
+                                $mappingParts = @()
+                                foreach ($alias in @("opus", "sonnet", "haiku")) {
+                                    if ($detailData["modelMapping"].ContainsKey($alias)) {
+                                        $mappingParts += "$alias=$($detailData["modelMapping"][$alias])"
+                                    }
+                                }
+                                foreach ($k in ($detailData["modelMapping"].Keys | Sort-Object)) {
+                                    if ($k -notin @("opus", "sonnet", "haiku")) { $mappingParts += "$k=$($detailData["modelMapping"][$k])" }
+                                }
+                                Write-UiDim "  映射: $($mappingParts -join ' | ')"
+                            } else {
+                                Write-UiDim "  映射: 无"
+                            }
+                        } catch { Write-UiDim "  映射: (读取失败)" }
+                    }
+                }
             }
 
             Render-ActionBar -HasProviders $data.HasProviders
@@ -1296,6 +1467,25 @@ function Show-ProviderDashboard {
                 'E' {
                     if ($profiles.Count -gt 0) {
                         Edit-Provider -Key $profiles[$selectedIndex].Key
+                    }
+                }
+                'M' {
+                    if ($profiles.Count -gt 0) {
+                        $selectedForMapping = $profiles[$selectedIndex]
+                        $mappingProfilePath = Join-Path (Get-ProviderProfilesDir) "$($selectedForMapping.Key).json"
+                        if (Test-Path $mappingProfilePath) {
+                            $newMapping = Edit-ModelMapping -ProfilePath $mappingProfilePath
+                            $mappingProfile = Get-Content $mappingProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                            if ($null -eq $newMapping) {
+                                if ($mappingProfile.ContainsKey("modelMapping")) { $mappingProfile.Remove("modelMapping") }
+                            } else {
+                                $mappingProfile["modelMapping"] = $newMapping
+                            }
+                            $tempMappingPath = "$mappingProfilePath.tmp"
+                            $mappingProfile | ConvertTo-Json -Depth 10 | Set-Content $tempMappingPath -Encoding UTF8
+                            Move-Item $tempMappingPath $mappingProfilePath -Force
+                            if ($selectedForMapping.IsActive) { Switch-Provider -Key $selectedForMapping.Key }
+                        }
                     }
                 }
                 'D' {

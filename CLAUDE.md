@@ -67,6 +67,7 @@ Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]
 | **HC-4** | `$PROFILE` 编辑使用标记块 `# >>> Claude Code Quickstart >>>` / `# <<< Claude Code Quickstart <<<` |
 | **HC-3** | 实时检测：每次运行都实时检测组件状态，无持久化状态文件 |
 | **HC-13** | **PowerShell 数组安全**：`Set-StrictMode -Version Latest` 下，`$null.Count` 会抛异常。接收函数/cmdlet/管道返回值时**必须**用 `@()` 包裹以强制数组上下文（如 `$items = @(SomeFunction)`），禁止裸赋值后直接访问 `.Count`。返回数组的函数应使用 `return ,$array`（逗号阻止展开） |
+| **HC-14** | **PS 版本约束**：`Bootstrap-ClaudeEnv.ps1` 兼容 PS 5.1+；`Install-ClaudeEnv.ps1` 和 `Manage-ClaudeEnv.ps1` 及其加载的所有 core/steps 模块**仅需兼容 PS 7.0+**，可安全使用 `ConvertFrom-Json -AsHashtable` 等 PS 7 专有特性 |
 | **SC-3** | 状态指示器：`[PASS]` / `[FAIL]` / `[SKIP]` |
 | **SC-5** | 错误展示：友好信息 + 按 `D` 展开技术详情 |
 

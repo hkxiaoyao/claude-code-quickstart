@@ -92,7 +92,7 @@ $script:StepRegistry = Get-StepRegistry
 
 # ─── 内容指纹管理（跳过模板未变更的步骤）─────────────────────────────────
 
-$script:FingerprintManagedSteps = @("ClaudeMd", "ClaudeConfig", "CcgWorkflow")
+$script:FingerprintManagedSteps = @("ClaudeMd", "CcgWorkflow")
 
 function Get-StepDesiredFingerprint {
     <#
@@ -290,6 +290,15 @@ function Get-UpdateStatus {
             } elseif ($testResult -is [bool] -and $testResult) {
                 $entry.IsInstalled = $true
             }
+            # ClaudeConfig 孤岛修复：settings.json 存在但字段不完整时，强制视为 IsInstalled
+            # 使 Update 列表能发现并修复部分安装状态
+            if (-not $entry.IsInstalled -and $step.StepId -eq "ClaudeConfig") {
+                $settingsPath = Get-ClaudeSettingsPath
+                if (Test-Path $settingsPath) {
+                    $entry.IsInstalled = $true
+                    $entry.CurrentVersion = ""
+                }
+            }
         } catch { }
 
         if ($entry.IsInstalled) {
@@ -315,6 +324,30 @@ function Get-UpdateStatus {
                     EngineNeedUpdate = $ccgComponents.EngineNeedUpdate
                     RulesNeedUpdate  = $ccgComponents.RulesNeedUpdate
                     EnvNeedUpdate    = $ccgComponents.EnvNeedUpdate
+                }
+            }
+            elseif ($step.StepId -eq "ClaudeConfig") {
+                # 声明式逐项对比（替代纯指纹比对）
+                $drift = Compare-ClaudeConfigDrift
+                if ($drift.HasDrift) {
+                    $entry.HasUpdate = $true
+                    $hints = @()
+                    if (@($drift.Details.MissingEnvKeys).Count -gt 0) {
+                        $hints += "缺失 $(@($drift.Details.MissingEnvKeys).Count) 个 env 键"
+                    }
+                    if (@($drift.Details.DriftedEnvKeys).Count -gt 0) {
+                        $hints += "$(@($drift.Details.DriftedEnvKeys).Count) 个 env 值偏移"
+                    }
+                    if (@($drift.Details.MissingPermissions).Count -gt 0) {
+                        $hints += "缺失 $(@($drift.Details.MissingPermissions).Count) 个 permissions"
+                    }
+                    if (@($drift.Details.DeprecatedEnvKeys).Count -gt 0) {
+                        $hints += "$(@($drift.Details.DeprecatedEnvKeys).Count) 个废弃 env 键"
+                    }
+                    if ($drift.Details.MissingLanguage) { $hints += "language 缺失" }
+                    $entry.StatusHint = $hints -join "; "
+                } else {
+                    $entry.HasUpdate = $false
                 }
             }
             elseif ($step.StepId -in $script:FingerprintManagedSteps) {
@@ -463,8 +496,8 @@ function Invoke-UpdateAction {
         foreach ($stepConfig in $plan) {
             $sid = $stepConfig.StepId
             if ($sid -notin $script:FingerprintManagedSteps) { continue }
-            # CcgWorkflow 不走通用指纹预检，避免"分量更新"被短路
-            if ($sid -eq "CcgWorkflow") { continue }
+            # CcgWorkflow/ClaudeConfig 不走通用指纹预检
+            if ($sid -eq "CcgWorkflow" -or $sid -eq "ClaudeConfig") { continue }
 
             $desiredFp = Get-StepDesiredFingerprint -StepId $sid
             if (-not $desiredFp) { continue }

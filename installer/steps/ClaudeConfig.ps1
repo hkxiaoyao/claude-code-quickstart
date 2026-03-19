@@ -59,27 +59,149 @@ function Get-ClaudeConfigFingerprint {
     return Get-StringFingerprint -Text ($parts -join "`n")
 }
 
+# ─── Drift Analysis ─────────────────────────────────────────────────────────
+
+function Compare-ClaudeConfigDrift {
+    <#
+    .SYNOPSIS
+    逐项对比 settings.json 实际内容与 ClaudeConfig 声明式模板，返回漂移分析结果
+    .RETURNS
+    hashtable — { HasDrift, NeedsInstallCompletion, NeedsUpdateAlignment, Details }
+    #>
+
+    $result = @{
+        HasDrift               = $false
+        NeedsInstallCompletion = $false
+        NeedsUpdateAlignment   = $false
+        Details                = @{
+            MissingEnvKeys     = @()
+            DriftedEnvKeys     = @()
+            MissingPermissions = @()
+            DeprecatedEnvKeys  = @()
+            MissingLanguage    = $false
+        }
+    }
+
+    $settingsPath = Get-ClaudeSettingsPath
+    if (-not (Test-Path $settingsPath)) {
+        $result.HasDrift               = $true
+        $result.NeedsInstallCompletion = $true
+        $result.Details.MissingLanguage    = $true
+        $result.Details.MissingEnvKeys     = @($script:ClaudeConfigEnvDefaults.Keys)
+        $result.Details.MissingPermissions = @($script:ClaudeConfigBasePermissions)
+        return $result
+    }
+
+    try {
+        $content  = Get-Content $settingsPath -Raw -Encoding UTF8
+        $settings = $content | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if (-not $settings) { $settings = @{} }
+    } catch {
+        $result.HasDrift               = $true
+        $result.NeedsInstallCompletion = $true
+        return $result
+    }
+
+    # 1. language 检查
+    if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
+        $result.Details.MissingLanguage = $true
+        $result.NeedsInstallCompletion  = $true
+    }
+
+    # 2. env 键检查
+    $envSection = if ($settings.ContainsKey("env") -and $settings["env"]) { $settings["env"] } else { @{} }
+    foreach ($entry in $script:ClaudeConfigEnvDefaults.GetEnumerator()) {
+        if (-not $envSection.ContainsKey($entry.Key) -or [string]::IsNullOrWhiteSpace([string]$envSection[$entry.Key])) {
+            $result.Details.MissingEnvKeys += $entry.Key
+            $result.NeedsInstallCompletion  = $true
+        } elseif ([string]$envSection[$entry.Key] -ne [string]$entry.Value) {
+            $result.Details.DriftedEnvKeys += @{ Key = $entry.Key; Expected = $entry.Value; Actual = [string]$envSection[$entry.Key] }
+            $result.NeedsUpdateAlignment    = $true
+        }
+    }
+
+    # 3. 废弃键检查
+    foreach ($deprecatedKey in $script:ClaudeConfigDeprecatedEnvKeys) {
+        if ($envSection.ContainsKey($deprecatedKey)) {
+            $result.Details.DeprecatedEnvKeys += $deprecatedKey
+            $result.NeedsUpdateAlignment       = $true
+        }
+    }
+
+    # 4. permissions 检查
+    $allowList = @()
+    if ($settings.ContainsKey("permissions") -and $settings["permissions"] -and
+        $settings["permissions"].ContainsKey("allow") -and $settings["permissions"]["allow"]) {
+        $allowList = @($settings["permissions"]["allow"])
+    }
+    foreach ($perm in $script:ClaudeConfigBasePermissions) {
+        if ($allowList -notcontains $perm) {
+            $result.Details.MissingPermissions += $perm
+            $result.NeedsInstallCompletion      = $true
+        }
+    }
+
+    $result.HasDrift = $result.NeedsInstallCompletion -or $result.NeedsUpdateAlignment
+    return $result
+}
+
 # ─── Test / Install / Verify ─────────────────────────────────────────────────
 
 function Test-ClaudeConfigInstalled {
     <#
     .SYNOPSIS
-    检测 ClaudeConfig 基础结构是否已配置（仅判断"已安装"，不要求模板完全一致）
+    检测 ClaudeConfig 是否完整安装（声明式逐项对比，替代原 Exists 浅检测）
     .DESCRIPTION
-    只检查 settings.json 存在 + language + env 节非空。
-    模板新增字段导致的漂移由 Update（指纹/声明式对齐）处理，
-    避免因新增模板字段而误判为"未安装"导致被踢出更新候选。
+    调用 Compare-ClaudeConfigDrift 进行完整漂移分析。
+    NeedsInstallCompletion=true（缺失 env 键/permissions/language）→ IsInstalled=false。
+    NeedsUpdateAlignment=true（值偏移/废弃键）→ IsInstalled=true，触发 Update 对齐。
     .RETURNS
     标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
+    $result = @{ IsInstalled = $false; Version = ""; Data = @{}; Message = "" }
+
     $settingsPath = Get-ClaudeSettingsPath
-    return Invoke-UnifiedCheck -StepId "ClaudeConfig" -DisplayName "Claude Code 常用配置" `
-        -ConfigFile $settingsPath `
-        -RequiredFields @(
-            @{ Path = "language"; MatchMode = "Exists" }
-            @{ Path = "env"; MatchMode = "Exists" }
-        ) -UseCache
+    if (-not (Test-Path $settingsPath)) {
+        $result.Message = "Claude Code 常用配置未安装: settings.json 不存在"
+        return $result
+    }
+
+    $drift = Compare-ClaudeConfigDrift
+    $result.Data["Drift"]              = $drift
+    $result.Data["MissingEnvKeys"]     = @($drift.Details.MissingEnvKeys)
+    $result.Data["DriftedEnvKeys"]     = @($drift.Details.DriftedEnvKeys)
+    $result.Data["MissingPermissions"] = @($drift.Details.MissingPermissions)
+    $result.Data["DeprecatedEnvKeys"]  = @($drift.Details.DeprecatedEnvKeys)
+    $result.Data["MissingLanguage"]    = [bool]$drift.Details.MissingLanguage
+
+    if (-not $drift.NeedsInstallCompletion) {
+        $result.IsInstalled = $true
+        $result.Message = if ($drift.NeedsUpdateAlignment) {
+            "Claude Code 常用配置已安装（检测到可对齐漂移）"
+        } else {
+            "Claude Code 常用配置已安装"
+        }
+        return $result
+    }
+
+    $issues = [System.Collections.ArrayList]::new()
+    if (@($drift.Details.MissingEnvKeys).Count -gt 0) {
+        [void]$issues.Add("env 缺少: $(@($drift.Details.MissingEnvKeys) -join ', ')")
+    }
+    if (@($drift.Details.MissingPermissions).Count -gt 0) {
+        [void]$issues.Add("permissions.allow 缺少: $(@($drift.Details.MissingPermissions).Count) 项")
+    }
+    if ($drift.Details.MissingLanguage) {
+        [void]$issues.Add("language 配置缺失")
+    }
+    $result.Message = if ($issues.Count -gt 0) {
+        "Claude Code 常用配置不完整: $(@($issues) -join '; ')"
+    } else {
+        "Claude Code 常用配置未完成安装"
+    }
+
+    return $result
 }
 
 function Install-ClaudeConfig {
