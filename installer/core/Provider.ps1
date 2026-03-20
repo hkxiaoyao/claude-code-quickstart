@@ -671,10 +671,6 @@ function Add-Provider {
                 Write-UiDanger "API Key 不能为空，请重新输入"
                 continue
             }
-            if ($apiKeyPlain.Length -lt 10) {
-                Write-UiDanger "API Key 长度过短，请检查后重新输入"
-                continue
-            }
             break
         } while ($true)
 
@@ -910,8 +906,8 @@ function Edit-Provider {
                     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
                 }
             }
-            if ([string]::IsNullOrWhiteSpace($newKeyPlain) -or $newKeyPlain.Length -lt 10) {
-                Write-UiDanger "API Key 无效，取消修改"
+            if ([string]::IsNullOrWhiteSpace($newKeyPlain)) {
+                Write-UiDanger "API Key 不能为空，取消修改"
                 $newKeyPlain = $null
                 return
             }
