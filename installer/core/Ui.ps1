@@ -802,13 +802,15 @@ function Show-MultiSelectMenu {
 function Show-StepProgress {
     <#
     .SYNOPSIS
-    显示步骤进度条或 Spinner
+    显示步骤进度条或统一结果文案
     .PARAMETER StepName
     步骤名称
     .PARAMETER Status
-    状态：Running, Success, Failed
+    状态：Running, Success, Failed, Skipped
     .PARAMETER ShowSpinner
     是否显示 Spinner 动画
+    .PARAMETER Message
+    自定义展示文案；为空时回退为默认状态指示器
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -818,22 +820,29 @@ function Show-StepProgress {
         [ValidateSet('Running', 'Success', 'Failed', 'Skipped')]
         [string]$Status,
 
-        [switch]$ShowSpinner
+        [switch]$ShowSpinner,
+
+        [string]$Message = ''
     )
 
     $statusIcon = switch ($Status) {
-        'Running' { if ($ShowSpinner) { "......" } else { "[......]" } }
-        'Success' { "[PASS]" }
-        'Failed'  { "[FAIL]" }
-        'Skipped' { "[SKIP]" }
+        'Running' { if ($ShowSpinner) { '......' } else { '[......]' } }
+        'Success' { '[PASS]' }
+        'Failed'  { '[FAIL]' }
+        'Skipped' { '[SKIP]' }
     }
 
-    $message = "  $statusIcon $StepName"
+    $displayMessage = if ([string]::IsNullOrWhiteSpace($Message)) {
+        "  $statusIcon $StepName"
+    } else {
+        "  $Message"
+    }
 
     switch ($Status) {
-        'Running' { Write-UiPrimary $message }
-        'Success' { Write-UiSuccess $message }
-        'Failed' { Write-UiDanger $message }
+        'Running' { Write-UiPrimary $displayMessage }
+        'Success' { Write-UiSuccess $displayMessage }
+        'Skipped' { Write-UiSuccess $displayMessage }
+        'Failed'  { Write-UiDanger $displayMessage }
     }
 }
 

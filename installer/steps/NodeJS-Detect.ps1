@@ -55,6 +55,17 @@ function Test-NodeJSInstalled {
         $directNodeRegistryExists = (Test-Path "HKLM:\SOFTWARE\Node.js") -or (Test-Path "HKLM:\SOFTWARE\WOW6432Node\Node.js")
         $directNodeDetected = $directNodeDirExists -or $directNodeRegistryExists
 
+        # nvm-windows 使用 C:\Program Files\nodejs 作为 symlink 目标
+        # 如果 nvm 已检测到，且 nodejs 目录是 symlink/junction，则不算 direct 安装
+        if ($nvmDetected -and $directNodeDirExists) {
+            $nodejsDirItem = Get-Item $directNodePath -Force -ErrorAction SilentlyContinue
+            if ($nodejsDirItem -and ($nodejsDirItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                $directNodeDetected = $false
+                $directNodeDirExists = $false
+                Write-UiInfo "  $directNodePath 是 nvm symlink，不算 direct 安装" -Level Debug
+            }
+        }
+
         # 检测 winget 安装记录（辅助信号）
         $wingetAvailable = Test-CommandAvailable -Command "winget"
         $wingetNodeInstalled = $false
@@ -187,8 +198,14 @@ function Test-NodeJSInstalled {
         # SkipIfInstalled = $true：仅在 providerHealthy 且非 mixed 时才真正跳过
         Write-UiInfo "Provider: $providerType, 健康: $providerHealthy" -Level Debug
         if ($providerType -eq "mixed") {
-            $result.IsInstalled = $false
-            $result.Message = "检测到混合 Node.js 环境，需要进入安装阶段选择 provider"
+            # mixed 但 node/npm/版本全部满足 → 视为已安装（避免自动补依赖时误入迁移流程）
+            if ($nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied) {
+                $result.IsInstalled = $true
+                $result.Message = "检测到混合 Node.js 环境，但运行时满足要求"
+            } else {
+                $result.IsInstalled = $false
+                $result.Message = "检测到混合 Node.js 环境，需要进入安装阶段选择 provider"
+            }
         } elseif ($providerHealthy) {
             $result.IsInstalled = $true
             $result.Message = "检测到健康 Node.js 环境（provider: $providerType），可直接跳过或进入迁移菜单"

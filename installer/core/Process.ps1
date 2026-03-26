@@ -1380,7 +1380,12 @@ function Complete-UnifiedCheck {
         [switch]$Quiet
     )
 
-    if (-not $Quiet) {
+    $suppressUnifiedCheckOutput = $false
+    if (Get-Variable -Scope Script -Name SuppressUnifiedCheckOutput -ErrorAction SilentlyContinue) {
+        $suppressUnifiedCheckOutput = [bool]$script:SuppressUnifiedCheckOutput
+    }
+
+    if (-not $Quiet -and -not $suppressUnifiedCheckOutput) {
         if ($Result.IsInstalled) {
             $versionSuffix = if (-not [string]::IsNullOrWhiteSpace($Result.Version)) { " (版本: $($Result.Version))" } else { "" }
             Write-UiSuccess "✓ $DisplayName 已安装$versionSuffix"

@@ -86,6 +86,64 @@ function Resolve-TestResultBool {
     else { return $false }
 }
 
+function Get-StepStatusMessage {
+    <#
+    .SYNOPSIS
+    生成统一的步骤状态文案（按需附带版本号）
+    .PARAMETER StepName
+    步骤显示名称
+    .PARAMETER Status
+    步骤状态：Success / Failed / Skipped
+    .PARAMETER Result
+    步骤结果对象
+    .PARAMETER ActionLabel
+    操作标签：安装 / 更新
+    .RETURNS
+    string
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$StepName,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('Success', 'Failed', 'Skipped')]
+        [string]$Status,
+
+        [Parameter(Mandatory = $true)]
+        [StepResult]$Result,
+
+        [string]$ActionLabel = '安装'
+    )
+
+    $version = ''
+    if ($Result.Data -and $Result.Data.ContainsKey('Version') -and -not [string]::IsNullOrWhiteSpace([string]$Result.Data['Version'])) {
+        $version = [string]$Result.Data['Version']
+    }
+
+    $versionSuffix = if ([string]::IsNullOrWhiteSpace($version)) { '' } else { " (版本: $version)" }
+
+    switch ($Status) {
+        'Success' {
+            return "✓ $StepName 已${ActionLabel}$versionSuffix"
+        }
+        'Skipped' {
+            if ($Result.Message -like '组件已安装*' -or $Result.Message -like '依赖已满足*') {
+                return "✓ $StepName 已安装$versionSuffix"
+            } else {
+                return "[SKIP] $StepName"
+            }
+        }
+        'Failed' {
+            $errorDetails = if (-not [string]::IsNullOrWhiteSpace($Result.ErrorDetails)) {
+                " - $($Result.ErrorDetails)"
+            } else {
+                ''
+            }
+            return "[FAIL] $StepName$errorDetails"
+        }
+    }
+}
+
 function Invoke-StepActionLifecycle {
     <#
     .SYNOPSIS
@@ -150,7 +208,21 @@ function Invoke-StepActionLifecycle {
 
         # 1. 执行测试阶段（实时检测，抑制 UI 输出避免 [FAIL] 噪音）
         Write-UiOutput "  🔍 测试阶段: $testFunction" -Level Debug -Type Info
-        $testResult = & $testFunction 6>$null
+        $previousSuppressUnifiedCheckOutput = $false
+        $hadSuppressUnifiedCheckOutput = [bool](Get-Variable -Scope Script -Name SuppressUnifiedCheckOutput -ErrorAction SilentlyContinue)
+        if ($hadSuppressUnifiedCheckOutput) {
+            $previousSuppressUnifiedCheckOutput = [bool]$script:SuppressUnifiedCheckOutput
+        }
+        $script:SuppressUnifiedCheckOutput = $true
+        try {
+            $testResult = & $testFunction 6>$null
+        } finally {
+            if ($hadSuppressUnifiedCheckOutput) {
+                $script:SuppressUnifiedCheckOutput = $previousSuppressUnifiedCheckOutput
+            } else {
+                Remove-Variable -Scope Script -Name SuppressUnifiedCheckOutput -ErrorAction SilentlyContinue
+            }
+        }
         $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
 
         if ($Action -eq "Install") {
@@ -187,9 +259,9 @@ function Invoke-StepActionLifecycle {
                 }
 
                 if ($skipBecauseSatisfiedAutoAddedDep) {
-                    Show-StepProgress -StepName $stepName -Status "Skipped" -Level Essential
+                    Show-StepProgress -StepName $stepName -Status "Skipped" -Message (Get-StepStatusMessage -StepName $stepName -Status "Skipped" -Result $stepResult -ActionLabel $actionLabel)
                 } else {
-                    Show-StepProgress -StepName $stepName -Status "Skipped" -Level Essential
+                    Show-StepProgress -StepName $stepName -Status "Skipped" -Message (Get-StepStatusMessage -StepName $stepName -Status "Skipped" -Result $stepResult -ActionLabel $actionLabel)
                 }
                 return $stepResult
             }
@@ -210,7 +282,7 @@ function Invoke-StepActionLifecycle {
                         $stepResult.Message = "组件未安装，更新失败"
                         $stepResult.ErrorDetails = "Not installed"
                         $stepResult.EndTime = Get-Date
-                        Show-StepProgress -StepName $stepName -Status "Failed" -Level Essential
+                        Show-StepProgress -StepName $stepName -Status "Failed" -Message (Get-StepStatusMessage -StepName $stepName -Status "Failed" -Result $stepResult -ActionLabel $actionLabel)
                         return $stepResult
                     }
                     "Install" {
@@ -313,7 +385,7 @@ function Invoke-StepActionLifecycle {
             $stepResult.Data["UpdatedItems"] = $actionResult["UpdatedItems"]
         }
 
-        Show-StepProgress -StepName $stepName -Status "Success" -Level Essential
+        Show-StepProgress -StepName $stepName -Status "Success" -Message (Get-StepStatusMessage -StepName $stepName -Status "Success" -Result $stepResult -ActionLabel $actionLabel)
 
     } catch {
         $stepResult.Status = [StepStatus]::Failed
@@ -321,12 +393,11 @@ function Invoke-StepActionLifecycle {
         $stepResult.ErrorDetails = $_.Exception.Message
         $stepResult.EndTime = Get-Date
 
-        Show-StepProgress -StepName $stepName -Status "Failed" -Level Essential
+        Show-StepProgress -StepName $stepName -Status "Failed" -Message (Get-StepStatusMessage -StepName $stepName -Status "Failed" -Result $stepResult -ActionLabel $actionLabel)
     }
 
     return $stepResult
 }
-
 function Invoke-StepLifecycle {
     <#
     .SYNOPSIS

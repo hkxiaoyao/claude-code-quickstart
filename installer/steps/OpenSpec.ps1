@@ -10,6 +10,26 @@ $ErrorActionPreference = 'Stop'
 
 # 依赖: Ui.ps1, Process.ps1（由入口脚本 dot-source 加载）
 
+function Get-OpenSpecVersionFromNpm {
+    <#
+    .SYNOPSIS
+    通过 npm list 获取 OpenSpec CLI 版本（避免 .ps1 wrapper 的 --version 参数被 PowerShell 拦截）
+    .RETURNS
+    版本字符串，未安装时返回空字符串
+    #>
+    try {
+        $npmResult = Invoke-ExternalCommand -Command "npm" `
+            -Arguments @("list", "-g", "@fission-ai/openspec", "--depth=0") `
+            -SuppressOutput -TimeoutSeconds 30 -RetryCount 0
+        if ($npmResult.Success -and $npmResult.Output -match '@fission-ai/openspec@(\S+)') {
+            return $matches[1]
+        }
+    } catch {
+        # npm list 失败，返回空
+    }
+    return ""
+}
+
 function Test-OpenSpecInstalled {
     <#
     .SYNOPSIS
@@ -18,7 +38,13 @@ function Test-OpenSpecInstalled {
     标准检测结果 hashtable（IsInstalled, Version, Data, Message）
     #>
 
-    return Invoke-UnifiedCheck -StepId "OpenSpec" -DisplayName "OpenSpec CLI" -Command "openspec" -UseCache
+    return Invoke-UnifiedCheck -StepId "OpenSpec" -DisplayName "OpenSpec CLI" -CustomVerify {
+        $ver = Get-OpenSpecVersionFromNpm
+        if (-not [string]::IsNullOrWhiteSpace($ver)) {
+            return $ver
+        }
+        return $false
+    } -UseCache
 }
 
 function Install-OpenSpec {
@@ -63,25 +89,15 @@ function Install-OpenSpec {
         Write-UiPrimary "刷新环境变量..." -Level Detail
         Refresh-SessionPath
 
-        # 验证安装
+        # 验证安装（通过 npm list 而非 Test-CommandAvailable，避免 .ps1 wrapper 问题）
         Start-Sleep -Seconds 2
-        $openspecDetails = Test-CommandAvailable -Command "openspec" -ReturnDetails
-        if (-not $openspecDetails.Available) {
-            $errorMsg = "安装后 openspec 命令仍不可用"
-            if ($openspecDetails.ResolvedPath) {
-                $errorMsg += "`n  解析路径: $($openspecDetails.ResolvedPath)"
-            }
-            if ($openspecDetails.ErrorMessage) {
-                $errorMsg += "`n  错误详情: $($openspecDetails.ErrorMessage)"
-            }
-            $errorMsg += "`n  建议: 请重新启动 PowerShell 后重试"
-            throw $errorMsg
+        $version = Get-OpenSpecVersionFromNpm
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "安装后 npm list 中未找到 @fission-ai/openspec"
         }
 
-        $version = Get-CommandVersion -Command "openspec"
         Write-UiSuccess "✓ OpenSpec CLI 安装成功" -Level Detail
         Write-UiInfo "版本: $version" -Level Detail
-        Write-UiInfo "命令: openspec --help" -Level Detail
 
         $result.Success          = $true
         $result.Data["Version"] = $version
@@ -109,27 +125,13 @@ function Verify-OpenSpec {
     }
 
     try {
-        # 验证命令可用性
-        if (-not (Test-CommandAvailable -Command "openspec")) {
-            throw "openspec 命令不可用"
-        }
-
-        # 验证版本信息
-        $version = Get-CommandVersion -Command "openspec"
+        # 通过 npm list 验证（避免 .ps1 wrapper 的 --version 参数问题）
+        $version = Get-OpenSpecVersionFromNpm
         if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "无法获取 openspec 版本信息"
+            throw "npm list 中未找到 @fission-ai/openspec"
         }
 
-        # 验证帮助信息
-        $helpResult = Invoke-ExternalCommand -Command "openspec" -Arguments @("--help") -SuppressOutput
-        if ($helpResult.ExitCode -ne 0) {
-            throw "openspec --help 执行失败"
-        }
-
-        Write-UiSuccess "✓ OpenSpec CLI 验证通过" -Level Detail
-        Write-UiInfo "  - 命令可用性: ✓" -Level Detail
-        Write-UiInfo "  - 版本信息: $version" -Level Detail
-        Write-UiInfo "  - 帮助信息: ✓" -Level Detail
+        Write-UiSuccess "✓ OpenSpec CLI 验证通过 (版本: $version)" -Level Detail
 
         $result.Success = $true
     }
@@ -159,8 +161,8 @@ function Update-OpenSpec {
     try {
         Write-UiPrimary "更新 OpenSpec CLI..." -Level Detail
 
-        # 获取当前版本
-        $oldVersion = Get-CommandVersion -Command "openspec"
+        # 获取当前版本（通过 npm list，避免 .ps1 wrapper 问题）
+        $oldVersion = Get-OpenSpecVersionFromNpm
         if ([string]::IsNullOrWhiteSpace($oldVersion)) {
             throw "无法获取当前 OpenSpec CLI 版本，请确认已安装"
         }
@@ -209,7 +211,8 @@ function Update-OpenSpec {
 
         Refresh-SessionPath
 
-        $newVersion = Get-CommandVersion -Command "openspec"
+        $newVersion = Get-OpenSpecVersionFromNpm
+        if ([string]::IsNullOrWhiteSpace($newVersion)) { $newVersion = $oldVersion }
         $result.Data["OldVersion"] = $oldVersion
         $result.Data["NewVersion"] = $newVersion
 
