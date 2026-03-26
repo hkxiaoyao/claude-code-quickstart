@@ -106,9 +106,13 @@ function Install-NodeJS {
             $shouldRestoreGlobalPackages = ($globalPkgChoice -eq 0)
             $result.Data["MigrationMode"] = if ($shouldRestoreGlobalPackages) { "MigrateWithRestore" } else { "FreshInstall" }
 
-            $currentProviderLabel = switch ($providerType) { "fnm" { "fnm" } "nvm" { "nvm-windows" } "direct" { "Node.js" } default { $providerType } }
+            $currentProviderLabel = switch ($providerType) { "fnm" { "fnm" } "nvm" { "nvm-windows" } "direct" { "Node.js" } "portable" { "绿色版 Node.js" } default { $providerType } }
             $targetProviderLabel = switch ($providerTarget) { "fnm" { "fnm" } "nvm" { "nvm-windows" } "direct" { "Node.js" } default { $providerTarget } }
-            $confirmTitle = "⚠ 将卸载当前的 [$currentProviderLabel] 并安装 [$targetProviderLabel]。"
+            if ($providerType -eq "portable") {
+                $confirmTitle = "⚠ 将清理当前绿色版 Node.js 的 PATH 并安装 [$targetProviderLabel]。"
+            } else {
+                $confirmTitle = "⚠ 将卸载当前的 [$currentProviderLabel] 并安装 [$targetProviderLabel]。"
+            }
             if ($shouldRestoreGlobalPackages) {
                 $confirmTitle += "`n  您的全局 npm 包将自动备份并恢复。"
             }
@@ -158,6 +162,7 @@ function Install-NodeJS {
             }
 
             $hasFnmSignal = [bool]$snapshot.Data["FnmAvailable"]
+            $hasPortableSignal = [bool]$snapshot.Data["PortableNodeDetected"]
             $hasOtherProviderSignal = [bool]$snapshot.Data["NvmDetected"] -or [bool]$snapshot.Data["DirectNodeDetected"]
 
             if ($hasFnmSignal -and $providerTarget -ne "fnm") {
@@ -179,6 +184,15 @@ function Install-NodeJS {
                 }
                 $result.Data["UninstallCompleted"] = $true
                 $result.Data["UninstallCleanedPaths"] = @($uninstallResult.CleanedPaths)
+            }
+
+            if ($hasPortableSignal) {
+                $portableCleanResult = Remove-PortableNodeFromPath -EnvSnapshot $snapshot.Data
+                if (-not $portableCleanResult.Success) {
+                    throw "清理绿色版 Node.js PATH 失败: $($portableCleanResult.ErrorMessage)"
+                }
+                $result.Data["PortablePathCleaned"] = ($portableCleanResult.CleanedPaths.Count -gt 0)
+                $result.Data["PortableCleanedPaths"] = @($portableCleanResult.CleanedPaths)
             }
 
             Refresh-SessionPath

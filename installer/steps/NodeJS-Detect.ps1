@@ -1,5 +1,5 @@
 # NodeJS-Detect.ps1 - Node.js 环境检测层
-# 职责：检测 fnm/nvm/direct 三种 provider 的安装状态
+# 职责：检测 fnm/nvm/direct/portable 四种 provider 的安装状态
 
 #Requires -Version 5.1
 Set-StrictMode -Version Latest
@@ -81,12 +81,19 @@ function Test-NodeJSInstalled {
             }
         }
 
+        # 检测绿色版（portable）Node.js：node/npm 可用但无任何已知 provider 信号
+        $portableNodeDetected = $nodeAvailable -and $npmAvailable -and
+            -not $fnmAvailable -and -not $nvmDetected -and -not $directNodeDetected
+
         # 核心检测数据
         $result.Data["FnmAvailable"] = $fnmAvailable
+        $result.Data["NodePath"] = $nodeDetails.ResolvedPath
+        $result.Data["NpmPath"] = $npmDetails.ResolvedPath
         $result.Data["NvmDetected"] = $nvmDetected
         $result.Data["NvmCommandAvailable"] = $nvmCommandAvailable
         $result.Data["NvmHome"] = $nvmHome
         $result.Data["DirectNodeDetected"] = $directNodeDetected
+        $result.Data["PortableNodeDetected"] = $portableNodeDetected
         $result.Data["WingetNodeInstalledId"] = $wingetNodeInstalledId
 
         # 输出检测结果
@@ -105,6 +112,13 @@ function Test-NodeJSInstalled {
             Write-UiWarning "⚠ 检测到直接安装的 Node.js 环境" -Level Detail
             if ($wingetNodeInstalledId) {
                 Write-UiInfo "  winget 安装记录: $wingetNodeInstalledId" -Level Detail
+            }
+        }
+
+        if ($portableNodeDetected) {
+            Write-UiInfo "✓ 检测到绿色版（portable）Node.js 环境" -Level Detail
+            if ($nodeDetails.ResolvedPath) {
+                Write-UiInfo "  路径: $($nodeDetails.ResolvedPath)" -Level Detail
             }
         }
 
@@ -150,6 +164,7 @@ function Test-NodeJSInstalled {
         if ($fnmAvailable) { $providerSignals["fnm"] = $true }
         if ($nvmDetected) { $providerSignals["nvm"] = $true }
         if ($directNodeDetected) { $providerSignals["direct"] = $true }
+        if ($portableNodeDetected) { $providerSignals["portable"] = $true }
 
         $providerType = "none"
         if ($providerSignals.Count -gt 1) {
@@ -160,9 +175,10 @@ function Test-NodeJSInstalled {
 
         $providerHealthy = $false
         switch ($providerType) {
-            "fnm"    { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $fnmAvailable }
-            "nvm"    { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $nvmDetected }
-            "direct" { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $directNodeDetected }
+            "fnm"      { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $fnmAvailable }
+            "nvm"      { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $nvmDetected }
+            "direct"   { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied -and $directNodeDetected }
+            "portable" { $providerHealthy = $nodeAvailable -and $npmAvailable -and $nodeVersionSatisfied }
         }
         $result.Data["ProviderType"] = $providerType
         $result.Data["ProviderHealthy"] = $providerHealthy

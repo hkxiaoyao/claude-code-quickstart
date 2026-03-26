@@ -276,7 +276,7 @@ function Show-NodeMigrationMenu {
     .SYNOPSIS
     已有 Node 环境时的保留/迁移菜单
     .PARAMETER CurrentProviderType
-    当前 provider（fnm/nvm/direct/mixed）
+    当前 provider（fnm/nvm/direct/portable/mixed）
     .PARAMETER ProviderHealthy
     当前 provider 是否健康
     .RETURNS
@@ -320,6 +320,22 @@ function Show-NodeMigrationMenu {
                 "迁移到 nvm-windows（推荐 - 可切换版本）"
             )
         }
+        "portable" {
+            if ($ProviderHealthy) {
+                $title = "检测到绿色版（portable）Node.js 环境，选择后续策略："
+                $options = @(
+                    "保留现有绿色版环境（最快 - 不迁移）",
+                    "迁移到 nvm-windows（推荐 - 可切换版本）",
+                    "迁移到 Node.js（直接安装，简单，但不能切换版本）"
+                )
+            } else {
+                $title = "检测到绿色版（portable）Node.js 环境，但版本不满足要求，请选择安装方式："
+                $options = @(
+                    "迁移到 nvm-windows（推荐 - 可切换版本）",
+                    "迁移到 Node.js（直接安装，简单，但不能切换版本）"
+                )
+            }
+        }
         "mixed" {
             $title = "检测到混合 Node.js 环境，建议迁移到单一 provider："
             $options = @(
@@ -357,6 +373,20 @@ function Show-NodeMigrationMenu {
                 1 { return "nvm" }
             }
         }
+        "portable" {
+            if ($ProviderHealthy) {
+                switch ($choice) {
+                    0 { return "keep" }
+                    1 { return "nvm" }
+                    2 { return "direct" }
+                }
+            } else {
+                switch ($choice) {
+                    0 { return "nvm" }
+                    1 { return "direct" }
+                }
+            }
+        }
         "mixed" {
             switch ($choice) {
                 0 { return "keep" }
@@ -367,6 +397,165 @@ function Show-NodeMigrationMenu {
     }
 
     return "cancel"
+}
+
+function Remove-PortableNodeFromPath {
+    <#
+    .SYNOPSIS
+    从持久化 PATH 中移除绿色版（portable）Node.js 路径
+    .DESCRIPTION
+    仅清理 PATH 条目，不删除文件/目录。适用于 portable → nvm/direct 迁移场景。
+    .PARAMETER EnvSnapshot
+    Test-NodeJSInstalled 返回的 Data 哈希表
+    .RETURNS
+    @{ Success; ErrorMessage; CleanedPaths }
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$EnvSnapshot
+    )
+
+    $result = @{
+        Success = $true
+        ErrorMessage = ""
+        CleanedPaths = @()
+    }
+
+    $targetMap = @{}
+    foreach ($key in @("NodePath", "NpmPath")) {
+        $resolvedPath = [string]$EnvSnapshot[$key]
+        if (-not [string]::IsNullOrWhiteSpace($resolvedPath) -and (Test-Path $resolvedPath -PathType Leaf)) {
+            $dir = (Split-Path -Parent $resolvedPath).Replace("/", "\").Trim().TrimEnd("\").ToLower()
+            if (-not [string]::IsNullOrWhiteSpace($dir)) {
+                $targetMap[$dir] = $true
+            }
+        }
+    }
+
+    if ($targetMap.Keys.Count -eq 0) {
+        $result.Success = $false
+        $result.ErrorMessage = "无法确定绿色版 Node.js 的实际路径，无法安全清理 PATH"
+        Write-UiWarning "⚠ $($result.ErrorMessage)" -Level Detail
+        return $result
+    }
+
+    # 清理当前会话 PATH
+    $sessionKept = @()
+    $sessionRemoved = @()
+    foreach ($entry in ($env:PATH -split ";")) {
+        $trimmed = $entry.Trim().Trim('"')
+        if (-not $trimmed) { continue }
+        $normalized = $trimmed.Replace("/", "\").TrimEnd("\").ToLower()
+        if ($targetMap.ContainsKey($normalized)) {
+            $sessionRemoved += $trimmed
+        } else {
+            $sessionKept += $trimmed
+        }
+    }
+    if ($sessionRemoved.Count -gt 0) {
+        $env:PATH = $sessionKept -join ";"
+        $result.CleanedPaths += $sessionRemoved
+    }
+
+    # 清理用户级 PATH
+    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+    if ($userPath) {
+        $userKept = @()
+        $userRemoved = @()
+        foreach ($entry in ($userPath -split ";")) {
+            $trimmed = $entry.Trim().Trim('"')
+            if (-not $trimmed) { continue }
+            $normalized = $trimmed.Replace("/", "\").TrimEnd("\").ToLower()
+            if ($targetMap.ContainsKey($normalized)) {
+                $userRemoved += $trimmed
+            } else {
+                $userKept += $trimmed
+            }
+        }
+        if ($userRemoved.Count -gt 0) {
+            [Environment]::SetEnvironmentVariable("PATH", ($userKept -join ";"), "User")
+            $result.CleanedPaths += $userRemoved
+        }
+    }
+
+    # 清理系统级 PATH
+    $machinePath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
+    if ($machinePath) {
+        $machineKept = @()
+        $machineRemoved = @()
+        foreach ($entry in ($machinePath -split ";")) {
+            $trimmed = $entry.Trim().Trim('"')
+            if (-not $trimmed) { continue }
+            $normalized = $trimmed.Replace("/", "\").TrimEnd("\").ToLower()
+            if ($targetMap.ContainsKey($normalized)) {
+                $machineRemoved += $trimmed
+            } else {
+                $machineKept += $trimmed
+            }
+        }
+        if ($machineRemoved.Count -gt 0) {
+            try {
+                [Environment]::SetEnvironmentVariable("PATH", ($machineKept -join ";"), "Machine")
+                $result.CleanedPaths += $machineRemoved
+                Write-UiSuccess "✓ 已清理系统级 PATH 中的绿色版 Node.js 路径" -Level Debug
+            } catch {
+                $result.Success = $false
+                $result.ErrorMessage = "清理系统级 PATH 失败（可能需要管理员权限）: $($_.Exception.Message)"
+                Write-UiWarning "⚠ $($result.ErrorMessage)" -Level Debug
+            }
+        }
+    }
+
+    # 广播 WM_SETTINGCHANGE（与 Uninstall-ExistingNode 一致）
+    if ($result.CleanedPaths.Count -gt 0) {
+        try {
+            if (-not ([System.Management.Automation.PSTypeName]'CCQ.EnvBroadcast').Type) {
+                Add-Type -Namespace CCQ -Name EnvBroadcast -MemberDefinition @"
+                    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+                    public static extern IntPtr SendMessageTimeout(
+                        IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
+                        uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);
+"@
+            }
+            $HWND_BROADCAST = [IntPtr]0xFFFF
+            $WM_SETTINGCHANGE = 0x001A
+            $SMTO_ABORTIFHUNG = 0x0002
+            $broadcastResult = [UIntPtr]::Zero
+            [CCQ.EnvBroadcast]::SendMessageTimeout(
+                $HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero,
+                "Environment", $SMTO_ABORTIFHUNG, 5000, [ref]$broadcastResult) | Out-Null
+        } catch {
+            Write-UiWarning "⚠ 广播环境变量变更通知失败: $($_.Exception.Message)" -Level Debug
+        }
+    }
+
+    # 残留检查：确认 portable 路径已从所有 PATH 作用域中移除
+    $residualPaths = @()
+    foreach ($scopeName in @("Process", "User", "Machine")) {
+        $scopePath = if ($scopeName -eq "Process") { $env:PATH } else { [Environment]::GetEnvironmentVariable("PATH", $scopeName) }
+        if (-not $scopePath) { continue }
+        foreach ($entry in ($scopePath -split ";")) {
+            $trimmed = $entry.Trim().Trim('"')
+            if (-not $trimmed) { continue }
+            $normalized = $trimmed.Replace("/", "\").TrimEnd("\").ToLower()
+            if ($targetMap.ContainsKey($normalized)) {
+                $residualPaths += "${scopeName}: $trimmed"
+            }
+        }
+    }
+    if ($residualPaths.Count -gt 0) {
+        $result.Success = $false
+        if ([string]::IsNullOrWhiteSpace($result.ErrorMessage)) {
+            $result.ErrorMessage = "绿色版 Node.js 路径仍残留在 PATH: $($residualPaths -join '; ')"
+        }
+        Write-UiWarning "⚠ $($result.ErrorMessage)" -Level Detail
+    }
+
+    if ($result.CleanedPaths.Count -gt 0 -and $result.Success) {
+        Write-UiSuccess "✓ 已从 PATH 移除绿色版 Node.js: $($result.CleanedPaths -join '; ')" -Level Detail
+    }
+
+    return $result
 }
 
 function Uninstall-ExistingNode {
@@ -824,6 +1013,50 @@ function Complete-NodeRuntimeInstall {
         $npmVersion = Get-CommandVersion -Command "npm"
         Write-UiSuccess "✓ Node.js $nodeVersion 可用" -Level Detail
         Write-UiSuccess "✓ npm $npmVersion 可用" -Level Detail
+
+        $nodeDetails = Test-CommandAvailable -Command "node" -ReturnDetails
+        $npmDetails = Test-CommandAvailable -Command "npm" -ReturnDetails
+        $nodeResolvedPath = [string]$nodeDetails.ResolvedPath
+        $npmResolvedPath = [string]$npmDetails.ResolvedPath
+        if (-not [string]::IsNullOrWhiteSpace($nodeResolvedPath)) {
+            $Result.Data["NodePath"] = $nodeResolvedPath
+            Write-UiInfo "  Node.js 路径: $nodeResolvedPath" -Level Debug
+        }
+        if (-not [string]::IsNullOrWhiteSpace($npmResolvedPath)) {
+            $Result.Data["NpmPath"] = $npmResolvedPath
+            Write-UiInfo "  npm 路径: $npmResolvedPath" -Level Debug
+        }
+
+        $expectedProviderRoot = switch ($ProviderType) {
+            "nvm" {
+                $nvmSymlink = [Environment]::GetEnvironmentVariable("NVM_SYMLINK", "Process")
+                if ([string]::IsNullOrWhiteSpace($nvmSymlink)) { $nvmSymlink = [Environment]::GetEnvironmentVariable("NVM_SYMLINK", "User") }
+                if ([string]::IsNullOrWhiteSpace($nvmSymlink)) { $nvmSymlink = [Environment]::GetEnvironmentVariable("NVM_SYMLINK", "Machine") }
+                if ([string]::IsNullOrWhiteSpace($nvmSymlink)) {
+                    $nvmHome = [string]$Result.Data["NvmHome"]
+                    if ([string]::IsNullOrWhiteSpace($nvmHome)) { $nvmHome = [Environment]::GetEnvironmentVariable("NVM_HOME", "Process") }
+                    if ([string]::IsNullOrWhiteSpace($nvmHome)) { $nvmHome = [Environment]::GetEnvironmentVariable("NVM_HOME", "User") }
+                    if ([string]::IsNullOrWhiteSpace($nvmHome)) { $nvmHome = [Environment]::GetEnvironmentVariable("NVM_HOME", "Machine") }
+                    if ([string]::IsNullOrWhiteSpace($nvmHome)) { $null } else { $nvmHome.Replace("/", "\").TrimEnd("\").ToLower() }
+                } else {
+                    $nvmSymlink.Replace("/", "\").TrimEnd("\").ToLower()
+                }
+            }
+            "direct" {
+                (Join-Path $env:ProgramFiles "nodejs").Replace("/", "\").TrimEnd("\").ToLower()
+            }
+            default { $null }
+        }
+        if ($expectedProviderRoot -and -not [string]::IsNullOrWhiteSpace($nodeResolvedPath)) {
+            $resolvedNodeDir = (Split-Path -Parent $nodeResolvedPath).Replace("/", "\").TrimEnd("\").ToLower()
+            if ($ProviderType -eq "nvm") {
+                if ($resolvedNodeDir -ne $expectedProviderRoot) {
+                    throw "Node.js 当前实际路径为 $resolvedNodeDir，未切换到目标 provider [$ProviderType]"
+                }
+            } elseif ($resolvedNodeDir -ne $expectedProviderRoot) {
+                throw "Node.js 当前实际路径为 $resolvedNodeDir，未切换到目标 provider [$ProviderType]"
+            }
+        }
 
         $Result.Version = $nodeVersion
         $Result.Data["Version"] = $nodeVersion
