@@ -208,7 +208,7 @@ function Get-DependencyClosure {
     }
 
     # 不在此处过滤已安装步骤，避免与 Test-StepDependencies 的状态判定冲突
-    # 已安装步骤由 Invoke-StepLifecycle 的 SkipIfInstalled 机制自动处理
+    # 已安装步骤由 Invoke-StepLifecycle 的跳过机制自动处理（SkipIfInstalled / AutoAdded skip）
 
     # 安全地将 HashSet 转换为数组
     $allRequiredArray = @()
@@ -390,6 +390,10 @@ function Invoke-GroupedInstall {
 
     # 拓扑排序
     $orderedStepIds = @(Get-ExecutionOrder -StepIds $closure.FinalPlan)
+    $autoAddedSet = @{}
+    foreach ($sid in @($closure.AutoAdded)) {
+        $autoAddedSet[$sid] = $true
+    }
 
     $results = @{
         Total           = $orderedStepIds.Count
@@ -450,6 +454,12 @@ function Invoke-GroupedInstall {
         }
         if ($stepConfig.SkipIfInstalled) {
             $stepParams.SkipIfInstalled = $true
+        }
+        if ($stepConfig.ContainsKey("SkipIfInstalledWhenAutoAdded") -and [bool]$stepConfig["SkipIfInstalledWhenAutoAdded"]) {
+            $stepParams.SkipIfInstalledWhenAutoAdded = $true
+        }
+        if ([bool]$autoAddedSet[$stepId]) {
+            $stepParams.IsAutoAddedDependency = $true
         }
 
         $stepResult = Invoke-StepLifecycle @stepParams

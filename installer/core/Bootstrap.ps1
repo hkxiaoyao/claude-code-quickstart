@@ -98,6 +98,8 @@ function Invoke-StepActionLifecycle {
     安装状态对象
     .PARAMETER OnMissing
     未安装时处理策略（仅 Update 模式有效）："Ask" / "Skip" / "Install" / "Fail"
+    .PARAMETER IsAutoAddedDependency
+    当前步骤是否为自动补齐的依赖（仅 Install 模式生效）
     .RETURNS
     StepResult 对象
     #>
@@ -112,7 +114,9 @@ function Invoke-StepActionLifecycle {
         [Parameter(Mandatory = $true)]
         [InstallState]$State,
 
-        [string]$OnMissing = "Ask"
+        [string]$OnMissing = "Ask",
+
+        [switch]$IsAutoAddedDependency
     )
 
     $stepId = $StepConfig.StepId
@@ -150,10 +154,20 @@ function Invoke-StepActionLifecycle {
         $isInstalled = Resolve-TestResultBool -TestResult $testResult -PropertyName "IsInstalled"
 
         if ($Action -eq "Install") {
-            # Install 模式：已安装且 SkipIfInstalled → 跳过
-            if ($isInstalled -and $StepConfig.SkipIfInstalled) {
+            $skipBecauseInstalled = $isInstalled -and $StepConfig.SkipIfInstalled
+            $skipBecauseSatisfiedAutoAddedDep = $isInstalled -and
+                $IsAutoAddedDependency -and
+                $StepConfig.ContainsKey("SkipIfInstalledWhenAutoAdded") -and
+                [bool]$StepConfig["SkipIfInstalledWhenAutoAdded"]
+
+            # Install 模式：已安装且满足跳过策略 → 跳过
+            if ($skipBecauseInstalled -or $skipBecauseSatisfiedAutoAddedDep) {
                 $stepResult.Status = [StepStatus]::Skipped
-                $stepResult.Message = "组件已安装，跳过安装"
+                $stepResult.Message = if ($skipBecauseSatisfiedAutoAddedDep) {
+                    "依赖已满足，跳过交互式安装"
+                } else {
+                    "组件已安装，跳过安装"
+                }
                 $stepResult.EndTime = Get-Date
 
                 # 合并 testResult 的版本和数据（跳过路径也需要版本信息）
@@ -172,7 +186,11 @@ function Invoke-StepActionLifecycle {
                     }
                 }
 
-                Write-UiOutput "✓ 组件已安装，跳过" -Level Essential -Type Warning
+                if ($skipBecauseSatisfiedAutoAddedDep) {
+                    Show-StepProgress -StepName $stepName -Status "Skipped" -Level Essential
+                } else {
+                    Show-StepProgress -StepName $stepName -Status "Skipped" -Level Essential
+                }
                 return $stepResult
             }
         } else {
@@ -192,7 +210,7 @@ function Invoke-StepActionLifecycle {
                         $stepResult.Message = "组件未安装，更新失败"
                         $stepResult.ErrorDetails = "Not installed"
                         $stepResult.EndTime = Get-Date
-                        Write-UiOutput "✗ 组件未安装 (OnMissing=Fail)" -Level Essential -Type Danger
+                        Show-StepProgress -StepName $stepName -Status "Failed" -Level Essential
                         return $stepResult
                     }
                     "Install" {
@@ -295,7 +313,7 @@ function Invoke-StepActionLifecycle {
             $stepResult.Data["UpdatedItems"] = $actionResult["UpdatedItems"]
         }
 
-        Write-UiOutput "✓ $stepName ${actionLabel}成功" -Level Essential -Type Success
+        Show-StepProgress -StepName $stepName -Status "Success" -Level Essential
 
     } catch {
         $stepResult.Status = [StepStatus]::Failed
@@ -303,7 +321,7 @@ function Invoke-StepActionLifecycle {
         $stepResult.ErrorDetails = $_.Exception.Message
         $stepResult.EndTime = Get-Date
 
-        Write-UiOutput "✗ $stepName ${actionLabel}失败: $($_.Exception.Message)" -Level Essential -Type Danger
+        Show-StepProgress -StepName $stepName -Status "Failed" -Level Essential
     }
 
     return $stepResult
@@ -329,6 +347,10 @@ function Invoke-StepLifecycle {
     安装状态对象（仅用于本次会话内的结果记录）
     .PARAMETER SkipIfInstalled
     如果已安装是否跳过
+    .PARAMETER SkipIfInstalledWhenAutoAdded
+    自动补齐依赖且已满足时是否允许跳过交互式安装
+    .PARAMETER IsAutoAddedDependency
+    当前步骤是否为自动补齐的依赖
     .RETURNS
     步骤执行结果对象
     #>
@@ -350,21 +372,26 @@ function Invoke-StepLifecycle {
         [Parameter(Mandatory = $true)]
         [InstallState]$State,
 
-        [switch]$SkipIfInstalled
+        [switch]$SkipIfInstalled,
+
+        [switch]$SkipIfInstalledWhenAutoAdded,
+
+        [switch]$IsAutoAddedDependency
     )
 
     # 构建步骤配置 hashtable
     $stepConfig = @{
-        StepId          = $StepId
-        StepName        = $StepName
-        TestFunction    = $TestFunction
-        InstallFunction = $InstallFunction
-        VerifyFunction  = $VerifyFunction
-        UpdateFunction  = ""
-        SkipIfInstalled = [bool]$SkipIfInstalled
+        StepId                        = $StepId
+        StepName                      = $StepName
+        TestFunction                  = $TestFunction
+        InstallFunction               = $InstallFunction
+        VerifyFunction                = $VerifyFunction
+        UpdateFunction                = ""
+        SkipIfInstalled               = [bool]$SkipIfInstalled
+        SkipIfInstalledWhenAutoAdded  = [bool]$SkipIfInstalledWhenAutoAdded
     }
 
-    return Invoke-StepActionLifecycle -StepConfig $stepConfig -Action Install -State $State
+    return Invoke-StepActionLifecycle -StepConfig $stepConfig -Action Install -State $State -IsAutoAddedDependency:$IsAutoAddedDependency
 }
 
 function Invoke-UpdateLifecycle {

@@ -42,7 +42,8 @@ function Get-StepRegistry {
             InstallFunction = "Install-NodeJS"
             VerifyFunction  = "Verify-NodeJS"
             UpdateFunction  = ""
-            SkipIfInstalled = $false
+            SkipIfInstalled                = $false
+            SkipIfInstalledWhenAutoAdded   = $true
             IsOptional      = $false
             Order           = 10
             Dependencies    = @()
