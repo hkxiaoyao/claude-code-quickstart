@@ -288,7 +288,6 @@ function Invoke-StepActionLifecycle {
                     "Install" {
                         Write-UiOutput "📦 组件未安装，执行安装..." -Level Essential -Type Info
                         $actionFunction = $StepConfig.InstallFunction
-                        $actionLabel = "安装"
                     }
                     "Ask" {
                         Write-UiOutput "❓ [$stepName] 未安装。" -Level Essential -Type Warning
@@ -301,7 +300,6 @@ function Invoke-StepActionLifecycle {
                             return $stepResult
                         } else {
                             $actionFunction = $StepConfig.InstallFunction
-                            $actionLabel = "安装"
                         }
                     }
                 }

@@ -606,7 +606,8 @@ function Invoke-UpdateAction {
             Write-Host ""
             Write-UiPrimary "─── 更新: $($stepConfig.StepName) ───"
 
-            $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing "Ask"
+            $onMissing = if ($stepId -eq "ClaudeConfig") { "Install" } else { "Ask" }
+            $stepResult = Invoke-UpdateLifecycle -StepConfig $stepConfig -State $state -OnMissing $onMissing
 
             $executedStepIds += $stepId
 

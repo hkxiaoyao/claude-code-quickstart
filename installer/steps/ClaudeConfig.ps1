@@ -241,6 +241,7 @@ function Install-ClaudeConfig {
         Success      = $false
         ErrorMessage = ""
         Data         = @{}
+        UpdatedItems = @()
     }
 
     try {
@@ -248,6 +249,7 @@ function Install-ClaudeConfig {
 
         $settingsPath = Get-ClaudeSettingsPath
         $settings = @{}
+        $updatedItems = [System.Collections.ArrayList]::new()
 
         if (Test-Path $settingsPath) {
             try {
@@ -264,24 +266,32 @@ function Install-ClaudeConfig {
         # 确保 env 节存在
         if (-not $settings.ContainsKey("env")) {
             $settings["env"] = @{}
+            [void]$updatedItems.Add("config::env::section-added")
         }
 
         # 补齐 ClaudeConfig 管辖的 env 键（仅缺失时写入）
         foreach ($entry in $script:ClaudeConfigEnvDefaults.GetEnumerator()) {
             if (-not $settings["env"].ContainsKey($entry.Key)) {
                 $settings["env"][$entry.Key] = $entry.Value
+                [void]$updatedItems.Add("config::env.$($entry.Key)::added")
+            } elseif ([string]::IsNullOrWhiteSpace([string]$settings["env"][$entry.Key])) {
+                $settings["env"][$entry.Key] = $entry.Value
+                [void]$updatedItems.Add("config::env.$($entry.Key)::filled")
             }
         }
 
         # 语言与 thinking 设置（仅缺失时填充）
         if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
             $settings["language"] = "简体中文"
+            [void]$updatedItems.Add("config::language::added")
         }
         if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
             $settings["alwaysThinkingEnabled"] = $true
+            [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
         }
         if (-not $settings.ContainsKey("showThinkingSummaries")) {
             $settings["showThinkingSummaries"] = $true
+            [void]$updatedItems.Add("config::showThinkingSummaries::added")
         }
 
         # 模型设置：不自动填充，由用户自行选择
@@ -289,9 +299,11 @@ function Install-ClaudeConfig {
         # 权限配置：保留用户已有项，补齐基础权限，保留 deny
         if (-not $settings.ContainsKey("permissions") -or -not $settings["permissions"]) {
             $settings["permissions"] = @{}
+            [void]$updatedItems.Add("config::permissions::section-added")
         }
         if (-not $settings["permissions"].ContainsKey("allow") -or -not $settings["permissions"]["allow"]) {
             $settings["permissions"]["allow"] = @()
+            [void]$updatedItems.Add("config::permissions.allow::section-added")
         }
         if (-not $settings["permissions"].ContainsKey("deny") -or $null -eq $settings["permissions"]["deny"]) {
             $settings["permissions"]["deny"] = @()
@@ -306,6 +318,7 @@ function Install-ClaudeConfig {
         foreach ($perm in $script:ClaudeConfigBasePermissions) {
             if ($allowList -notcontains $perm) {
                 [void]$allowList.Add($perm)
+                [void]$updatedItems.Add("config::permissions.allow.$perm::added")
             }
         }
         $settings["permissions"]["allow"] = @($allowList)
@@ -316,6 +329,7 @@ function Install-ClaudeConfig {
                 "commit" = ""
                 "pr"     = ""
             }
+            [void]$updatedItems.Add("config::attribution::added")
         }
 
         # 确保目录存在
@@ -337,6 +351,12 @@ function Install-ClaudeConfig {
         Write-UiInfo "  - 权限项: $($settings['permissions']['allow'].Count) 项" -Level Detail
         Write-UiInfo "  - 环境变量: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
 
+        if ($updatedItems.Count -eq 0) {
+            $result.UpdatedItems = @("noop::ClaudeConfig::no-change")
+        } else {
+            $result.UpdatedItems = @($updatedItems)
+        }
+        $result.Data["UpdatedItems"] = @($result.UpdatedItems)
         $result.Success = $true
     }
     catch {
