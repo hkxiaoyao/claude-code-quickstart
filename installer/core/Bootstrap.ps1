@@ -124,13 +124,13 @@ function Get-StepStatusMessage {
 
     switch ($Status) {
         'Success' {
-            return "✓ $StepName 已${ActionLabel}$versionSuffix"
+            return "✅ $StepName 已${ActionLabel}$versionSuffix"
         }
         'Skipped' {
             if ($Result.Message -like '组件已安装*' -or $Result.Message -like '依赖已满足*') {
-                return "✓ $StepName 已安装$versionSuffix"
+                return "✅ $StepName 已安装$versionSuffix"
             } else {
-                return "[SKIP] $StepName"
+                return "⏭ $StepName 已跳过"
             }
         }
         'Failed' {
@@ -139,7 +139,7 @@ function Get-StepStatusMessage {
             } else {
                 ''
             }
-            return "[FAIL] $StepName$errorDetails"
+            return "❌ $StepName ${ActionLabel}失败$errorDetails"
         }
     }
 }

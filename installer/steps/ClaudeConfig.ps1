@@ -56,6 +56,9 @@ function Get-ClaudeConfigFingerprint {
     }
     $parts += "deprecated:" + (($script:ClaudeConfigDeprecatedEnvKeys | Sort-Object) -join ",")
     $parts += "permissions:" + (($script:ClaudeConfigBasePermissions | Sort-Object) -join ",")
+    $parts += "top-level:language"
+    $parts += "top-level:alwaysThinkingEnabled"
+    $parts += "top-level:showThinkingSummaries"
     return Get-StringFingerprint -Text ($parts -join "`n")
 }
 
@@ -74,21 +77,25 @@ function Compare-ClaudeConfigDrift {
         NeedsInstallCompletion = $false
         NeedsUpdateAlignment   = $false
         Details                = @{
-            MissingEnvKeys     = @()
-            DriftedEnvKeys     = @()
-            MissingPermissions = @()
-            DeprecatedEnvKeys  = @()
-            MissingLanguage    = $false
+            MissingEnvKeys               = @()
+            DriftedEnvKeys               = @()
+            MissingPermissions           = @()
+            DeprecatedEnvKeys            = @()
+            MissingLanguage              = $false
+            MissingAlwaysThinkingEnabled = $false
+            MissingShowThinkingSummaries = $false
         }
     }
 
     $settingsPath = Get-ClaudeSettingsPath
     if (-not (Test-Path $settingsPath)) {
-        $result.HasDrift               = $true
-        $result.NeedsInstallCompletion = $true
-        $result.Details.MissingLanguage    = $true
-        $result.Details.MissingEnvKeys     = @($script:ClaudeConfigEnvDefaults.Keys)
-        $result.Details.MissingPermissions = @($script:ClaudeConfigBasePermissions)
+        $result.HasDrift                          = $true
+        $result.NeedsInstallCompletion            = $true
+        $result.Details.MissingLanguage           = $true
+        $result.Details.MissingAlwaysThinkingEnabled = $true
+        $result.Details.MissingShowThinkingSummaries = $true
+        $result.Details.MissingEnvKeys            = @($script:ClaudeConfigEnvDefaults.Keys)
+        $result.Details.MissingPermissions        = @($script:ClaudeConfigBasePermissions)
         return $result
     }
 
@@ -102,10 +109,18 @@ function Compare-ClaudeConfigDrift {
         return $result
     }
 
-    # 1. language 检查
+    # 1. language / thinking 顶层配置检查
     if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
         $result.Details.MissingLanguage = $true
         $result.NeedsInstallCompletion  = $true
+    }
+    if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
+        $result.Details.MissingAlwaysThinkingEnabled = $true
+        $result.NeedsInstallCompletion               = $true
+    }
+    if (-not $settings.ContainsKey("showThinkingSummaries")) {
+        $result.Details.MissingShowThinkingSummaries = $true
+        $result.NeedsInstallCompletion               = $true
     }
 
     # 2. env 键检查
@@ -168,12 +183,14 @@ function Test-ClaudeConfigInstalled {
     }
 
     $drift = Compare-ClaudeConfigDrift
-    $result.Data["Drift"]              = $drift
-    $result.Data["MissingEnvKeys"]     = @($drift.Details.MissingEnvKeys)
-    $result.Data["DriftedEnvKeys"]     = @($drift.Details.DriftedEnvKeys)
-    $result.Data["MissingPermissions"] = @($drift.Details.MissingPermissions)
-    $result.Data["DeprecatedEnvKeys"]  = @($drift.Details.DeprecatedEnvKeys)
-    $result.Data["MissingLanguage"]    = [bool]$drift.Details.MissingLanguage
+    $result.Data["Drift"]                      = $drift
+    $result.Data["MissingEnvKeys"]             = @($drift.Details.MissingEnvKeys)
+    $result.Data["DriftedEnvKeys"]             = @($drift.Details.DriftedEnvKeys)
+    $result.Data["MissingPermissions"]         = @($drift.Details.MissingPermissions)
+    $result.Data["DeprecatedEnvKeys"]          = @($drift.Details.DeprecatedEnvKeys)
+    $result.Data["MissingLanguage"]            = [bool]$drift.Details.MissingLanguage
+    $result.Data["MissingAlwaysThinkingEnabled"] = [bool]$drift.Details.MissingAlwaysThinkingEnabled
+    $result.Data["MissingShowThinkingSummaries"] = [bool]$drift.Details.MissingShowThinkingSummaries
 
     if (-not $drift.NeedsInstallCompletion) {
         $result.IsInstalled = $true
@@ -194,6 +211,12 @@ function Test-ClaudeConfigInstalled {
     }
     if ($drift.Details.MissingLanguage) {
         [void]$issues.Add("language 配置缺失")
+    }
+    if ($drift.Details.MissingAlwaysThinkingEnabled) {
+        [void]$issues.Add("alwaysThinkingEnabled 配置缺失")
+    }
+    if ($drift.Details.MissingShowThinkingSummaries) {
+        [void]$issues.Add("showThinkingSummaries 配置缺失")
     }
     $result.Message = if ($issues.Count -gt 0) {
         "Claude Code 常用配置不完整: $(@($issues) -join '; ')"
@@ -250,9 +273,15 @@ function Install-ClaudeConfig {
             }
         }
 
-        # 语言设置（仅缺失时填充）
+        # 语言与 thinking 设置（仅缺失时填充）
         if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
             $settings["language"] = "简体中文"
+        }
+        if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
+            $settings["alwaysThinkingEnabled"] = $true
+        }
+        if (-not $settings.ContainsKey("showThinkingSummaries")) {
+            $settings["showThinkingSummaries"] = $true
         }
 
         # 模型设置：不自动填充，由用户自行选择
@@ -340,10 +369,22 @@ function Verify-ClaudeConfig {
 
         $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
 
-        # 验证 language
+        # 验证 language / thinking 顶层配置
         if (-not ($settings.PSObject.Properties.Name -contains "language") -or
             [string]::IsNullOrWhiteSpace([string]$settings.language)) {
             throw "language 配置缺失"
+        }
+        if (-not ($settings.PSObject.Properties.Name -contains "alwaysThinkingEnabled")) {
+            throw "alwaysThinkingEnabled 配置缺失"
+        }
+        if ($settings.alwaysThinkingEnabled -isnot [bool]) {
+            throw "alwaysThinkingEnabled 必须为布尔值，当前值: $($settings.alwaysThinkingEnabled)"
+        }
+        if (-not ($settings.PSObject.Properties.Name -contains "showThinkingSummaries")) {
+            throw "showThinkingSummaries 配置缺失"
+        }
+        if ($settings.showThinkingSummaries -isnot [bool]) {
+            throw "showThinkingSummaries 必须为布尔值，当前值: $($settings.showThinkingSummaries)"
         }
 
         # 验证 permissions.allow 存在且包含基础权限
@@ -380,6 +421,8 @@ function Verify-ClaudeConfig {
 
         Write-UiSuccess "✓ Claude Code 常用配置验证通过" -Level Detail
         Write-UiInfo "  - language: $($settings.language)" -Level Detail
+        Write-UiInfo "  - alwaysThinkingEnabled: $($settings.alwaysThinkingEnabled)" -Level Detail
+        Write-UiInfo "  - showThinkingSummaries: $($settings.showThinkingSummaries)" -Level Detail
         Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项" -Level Detail
         Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
 
@@ -486,10 +529,18 @@ function Update-ClaudeConfig {
         }
         $settings["permissions"]["allow"] = @($allowList)
 
-        # language / attribution：仅补缺失（model 不自动填充，由用户自行选择）
+        # language / thinking / attribution：仅补缺失（model 不自动填充，由用户自行选择）
         if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
             $settings["language"] = "简体中文"
             [void]$updatedItems.Add("config::language::added")
+        }
+        if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
+            $settings["alwaysThinkingEnabled"] = $true
+            [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
+        }
+        if (-not $settings.ContainsKey("showThinkingSummaries")) {
+            $settings["showThinkingSummaries"] = $true
+            [void]$updatedItems.Add("config::showThinkingSummaries::added")
         }
         if (-not $settings.ContainsKey("attribution") -or -not $settings["attribution"]) {
             $settings["attribution"] = @{ "commit" = ""; "pr" = "" }

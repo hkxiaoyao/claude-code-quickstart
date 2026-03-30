@@ -55,14 +55,36 @@ $script:EmojiMap = @{
     "✓" = "[成功]"
     "✗" = "[失败]"
     "🔐" = "[权限]"
+    "🔄" = "[执行]"
+    "✅" = "[通过]"
+    "❌" = "[错误]"
+    "📦" = "[安装]"
+    "❓" = "[确认]"
+    "⏭" = "[跳过]"
+    "►" = ">"
+    "╔" = "+"
+    "═" = "-"
+    "╗" = "+"
+    "║" = "|"
+    "╚" = "+"
+    "╝" = "+"
+    "┌" = "+"
+    "┬" = "+"
+    "┐" = "+"
+    "├" = "+"
+    "┼" = "+"
+    "┤" = "+"
+    "└" = "+"
+    "┴" = "+"
+    "┘" = "+"
 }
 
 function Convert-EmojiToText {
     <#
     .SYNOPSIS
-    将 Emoji 转换为纯文本（如果终端不支持 Emoji）
+    将 Emoji 和 Unicode 符号转换为纯文本（如果终端不支持）
     .PARAMETER Text
-    包含 Emoji 的文本
+    包含 Emoji 或 Unicode 符号的文本
     .RETURNS
     转换后的文本
     #>
@@ -75,7 +97,7 @@ function Convert-EmojiToText {
         return $Text
     }
 
-    # 替换所有 Emoji
+    # 替换所有 Emoji 和 Unicode 符号
     $result = $Text
     foreach ($emoji in $script:EmojiMap.Keys) {
         $result = $result -replace [regex]::Escape($emoji), $script:EmojiMap[$emoji]
@@ -826,10 +848,10 @@ function Show-StepProgress {
     )
 
     $statusIcon = switch ($Status) {
-        'Running' { if ($ShowSpinner) { '......' } else { '[......]' } }
-        'Success' { '[PASS]' }
-        'Failed'  { '[FAIL]' }
-        'Skipped' { '[SKIP]' }
+        'Running' { if ($ShowSpinner) { '......' } else { '⚪' } }
+        'Success' { '✅' }
+        'Failed'  { '❌' }
+        'Skipped' { '⏭' }
     }
 
     $displayMessage = if ([string]::IsNullOrWhiteSpace($Message)) {
@@ -873,14 +895,16 @@ function Show-InstallSummary {
     $statusWidth = [Math]::Max($statusWidth, 8)
     $versionWidth = [Math]::Max($versionWidth, 8)
 
-    # 表格边框
-    $separator = "+" + ("-" * ($nameWidth + 2)) + "+" + ("-" * ($statusWidth + 2)) + "+" + ("-" * ($versionWidth + 2)) + "+"
+    # 表格边框组件
+    $topBorder = "┌" + ("─" * ($nameWidth + 2)) + "┬" + ("─" * ($statusWidth + 2)) + "┬" + ("─" * ($versionWidth + 2)) + "┐"
+    $midBorder = "├" + ("─" * ($nameWidth + 2)) + "┼" + ("─" * ($statusWidth + 2)) + "┼" + ("─" * ($versionWidth + 2)) + "┤"
+    $bottomBorder = "└" + ("─" * ($nameWidth + 2)) + "┴" + ("─" * ($statusWidth + 2)) + "┴" + ("─" * ($versionWidth + 2)) + "┘"
 
     # 表头（使用 CJK 感知填充）
-    Write-UiDim $separator
-    $header = "| $(Format-DisplayPad "组件" $nameWidth) | $(Format-DisplayPad "状态" $statusWidth) | $(Format-DisplayPad "版本" $versionWidth) |"
+    Write-UiDim $topBorder
+    $header = "│ $(Format-DisplayPad "组件" $nameWidth) │ $(Format-DisplayPad "状态" $statusWidth) │ $(Format-DisplayPad "版本" $versionWidth) │"
     Write-UiInfo $header
-    Write-UiDim $separator
+    Write-UiDim $midBorder
 
     # 数据行（使用 CJK 感知填充）
     foreach ($item in $Items) {
@@ -888,18 +912,18 @@ function Show-InstallSummary {
         $status = Format-DisplayPad $item.Status $statusWidth
         $version = Format-DisplayPad $item.Version $versionWidth
 
-        $row = "| $name | $status | $version |"
+        $row = "│ $name │ $status │ $version │"
 
         # 根据状态着色
         switch ($item.Status) {
-            { $_ -match "成功|已安装|✓" } { Write-UiSuccess $row }
-            { $_ -match "失败|错误|✗" } { Write-UiDanger $row }
-            { $_ -match "警告|跳过" } { Write-UiWarning $row }
+            { $_ -match "成功|已安装|✓|✅" } { Write-UiSuccess $row }
+            { $_ -match "失败|错误|✗|❌" } { Write-UiDanger $row }
+            { $_ -match "警告|跳过|⏭" } { Write-UiWarning $row }
             default { Write-UiInfo $row }
         }
     }
 
-    Write-UiDim $separator
+    Write-UiDim $bottomBorder
 }
 
 function Show-ErrorDetails {
