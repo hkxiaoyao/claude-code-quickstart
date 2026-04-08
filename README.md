@@ -202,7 +202,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 - Kimi / Moonshot（moonshot）
 - 自定义供应商（custom）
 
-配置会写入 `~/.claude/settings.json`（`env` + 可选 `modelMapping`），并将 Profile 保存到 `~/.claude/providers/`。
+配置会写入 `~/.claude/settings.json`（`env`，包含供应商认证/Base URL 与可选模型环境键），并将 Profile 保存到 `~/.claude/providers/`。
 
 ---
 

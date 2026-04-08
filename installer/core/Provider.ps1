@@ -7,6 +7,18 @@ Set-StrictMode -Version Latest
 
 # ─── 内置供应商模板（单一数据源，ApiKey.ps1 也引用此处）───────────────────────
 
+$script:ProviderManagedModelEnvKeys = @(
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL"
+)
+$script:ProviderModelEnvLabels = @{
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "Haiku 模型"
+    "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "Opus 模型"
+    "ANTHROPIC_DEFAULT_SONNET_MODEL" = "Sonnet 模型"
+}
+$script:LegacyProviderModelKey = "model" + "Mapping"
+
 $script:BuiltinProviders = @{
     "zhipu" = @{
         Name        = "智谱 GLM"
@@ -19,10 +31,10 @@ $script:BuiltinProviders = @{
         Description = "MiniMax API，支持 M2.5 系列模型"
         BaseUrl     = "https://api.minimaxi.com/anthropic"
         PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
-        ModelMapping = @{
-            "opus"   = "MiniMax-M2.5"
-            "sonnet" = "MiniMax-M2.5"
-            "haiku"  = "MiniMax-M2.5"
+        ModelEnv    = @{
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M2.5"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M2.5"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M2.5"
         }
     }
     "moonshot" = @{
@@ -30,10 +42,10 @@ $script:BuiltinProviders = @{
         Description = "月之暗面 Kimi，支持 K2.5 系列模型"
         BaseUrl     = "https://api.moonshot.cn/anthropic"
         PlatformUrl = "https://platform.moonshot.cn/console/api-keys"
-        ModelMapping = @{
-            "opus"   = "kimi-k2.5"
-            "sonnet" = "kimi-k2.5"
-            "haiku"  = "kimi-k2.5"
+        ModelEnv    = @{
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "kimi-k2.5"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "kimi-k2.5"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "kimi-k2.5"
         }
     }
     "custom" = @{
@@ -52,6 +64,136 @@ function Get-ProviderSettingsPath {
 
 function Get-ProviderProfilesDir {
     return "$(Get-UserHome)\.claude\providers"
+}
+
+function Get-ProviderManagedModelEnvFromLegacyAliases {
+    <#
+    .SYNOPSIS
+    将旧版别名映射（opus/sonnet/haiku）转换为受管模型 env 键
+    #>
+    param([hashtable]$LegacyAliases)
+
+    $result = @{}
+    if (-not $LegacyAliases) { return $result }
+
+    if ($LegacyAliases.ContainsKey("haiku") -and -not [string]::IsNullOrWhiteSpace([string]$LegacyAliases["haiku"])) {
+        $result["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = [string]$LegacyAliases["haiku"]
+    }
+    if ($LegacyAliases.ContainsKey("opus") -and -not [string]::IsNullOrWhiteSpace([string]$LegacyAliases["opus"])) {
+        $result["ANTHROPIC_DEFAULT_OPUS_MODEL"] = [string]$LegacyAliases["opus"]
+    }
+    if ($LegacyAliases.ContainsKey("sonnet") -and -not [string]::IsNullOrWhiteSpace([string]$LegacyAliases["sonnet"])) {
+        $result["ANTHROPIC_DEFAULT_SONNET_MODEL"] = [string]$LegacyAliases["sonnet"]
+    }
+
+    return $result
+}
+
+function Get-ProviderManagedModelEnv {
+    <#
+    .SYNOPSIS
+    从 provider profile 中提取受管模型 env 键，并兼容旧版别名映射字段
+    #>
+    param([hashtable]$Profile)
+
+    $result = @{}
+    if (-not $Profile) { return $result }
+
+    if ($Profile.ContainsKey("modelEnv") -and $Profile["modelEnv"]) {
+        foreach ($key in $script:ProviderManagedModelEnvKeys) {
+            if ($Profile["modelEnv"].ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$Profile["modelEnv"][$key])) {
+                $result[$key] = [string]$Profile["modelEnv"][$key]
+            }
+        }
+        if ($result.Count -gt 0) { return $result }
+    }
+
+    if ($Profile.ContainsKey($script:LegacyProviderModelKey) -and $Profile[$script:LegacyProviderModelKey]) {
+        return (Get-ProviderManagedModelEnvFromLegacyAliases -LegacyAliases $Profile[$script:LegacyProviderModelKey])
+    }
+
+    if ($Profile.ContainsKey("env") -and $Profile["env"]) {
+        foreach ($key in $script:ProviderManagedModelEnvKeys) {
+            if ($Profile["env"].ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$Profile["env"][$key])) {
+                $result[$key] = [string]$Profile["env"][$key]
+            }
+        }
+    }
+
+    return $result
+}
+
+function Set-ProviderManagedModelEnv {
+    <#
+    .SYNOPSIS
+    将受管模型 env 键写入 provider profile，并清理旧版别名映射字段
+    #>
+    param(
+        [Parameter(Mandatory)] [hashtable]$Profile,
+        [hashtable]$ModelEnv
+    )
+
+    if ($Profile.ContainsKey($script:LegacyProviderModelKey)) {
+        $Profile.Remove($script:LegacyProviderModelKey)
+    }
+
+    if ($Profile.ContainsKey("env") -and $Profile["env"]) {
+        foreach ($key in $script:ProviderManagedModelEnvKeys) {
+            if ($Profile["env"].ContainsKey($key)) {
+                $Profile["env"].Remove($key)
+            }
+        }
+    }
+
+    if ($null -eq $ModelEnv -or $ModelEnv.Count -eq 0) {
+        if ($Profile.ContainsKey("modelEnv")) {
+            $Profile.Remove("modelEnv")
+        }
+        return
+    }
+
+    $normalized = @{}
+    foreach ($key in $script:ProviderManagedModelEnvKeys) {
+        if ($ModelEnv.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$ModelEnv[$key])) {
+            $normalized[$key] = [string]$ModelEnv[$key]
+        }
+    }
+
+    if ($normalized.Count -eq 0) {
+        if ($Profile.ContainsKey("modelEnv")) {
+            $Profile.Remove("modelEnv")
+        }
+        return
+    }
+
+    $Profile["modelEnv"] = $normalized
+}
+
+function Get-ProviderManagedModelSummary {
+    <#
+    .SYNOPSIS
+    生成人类可读的模型配置摘要
+    #>
+    param([hashtable]$Profile)
+
+    $modelEnv = Get-ProviderManagedModelEnv -Profile $Profile
+    if ($modelEnv.Count -eq 0) { return "未配置" }
+
+    $orderedKeys = @(
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL"
+    )
+
+    $parts = @()
+    foreach ($key in $orderedKeys) {
+        if ($modelEnv.ContainsKey($key)) {
+            $label = $script:ProviderModelEnvLabels[$key]
+            $parts += "$label=$($modelEnv[$key])"
+        }
+    }
+
+    return ($parts -join ", ")
 }
 
 function Read-SettingsJson {
@@ -277,10 +419,19 @@ function Sync-ProviderFromSettings {
         }
     }
 
-    # 检查是否有 modelMapping
-    if ($settings.ContainsKey("modelMapping") -and $settings["modelMapping"]) {
-        $newProfile["modelMapping"] = $settings["modelMapping"]
+    # 兼容迁移：从 settings 顶层旧版别名映射字段 / env 受管模型键同步到 Profile
+    $managedModelEnv = @{}
+    if ($settings.ContainsKey($script:LegacyProviderModelKey) -and $settings[$script:LegacyProviderModelKey]) {
+        $managedModelEnv = Get-ProviderManagedModelEnvFromLegacyAliases -LegacyAliases $settings[$script:LegacyProviderModelKey]
     }
+    if ($settings.ContainsKey("env") -and $settings["env"]) {
+        foreach ($key in $script:ProviderManagedModelEnvKeys) {
+            if ($settings["env"].ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$settings["env"][$key])) {
+                $managedModelEnv[$key] = [string]$settings["env"][$key]
+            }
+        }
+    }
+    Set-ProviderManagedModelEnv -Profile $newProfile -ModelEnv $managedModelEnv
 
     # 原子写入 Profile
     if (-not (Test-Path $profilesDir)) {
@@ -301,7 +452,7 @@ function Get-ProviderProfiles {
     .SYNOPSIS
     扫描 ~/.claude/providers/*.json，返回 Profile 哈希表数组
     .RETURNS
-    hashtable[] — 每项包含: Key, Name, BaseUrl, ConfiguredAt, HasModelMapping, AuthToken
+    hashtable[] — 每项包含: Key, Name, BaseUrl, ConfiguredAt, HasManagedModelConfig, AuthToken
     #>
 
     $profilesDir = Get-ProviderProfilesDir
@@ -323,7 +474,7 @@ function Get-ProviderProfiles {
                 Name            = if ($meta.ContainsKey("provider")) { $meta["provider"] } else { "未知" }
                 BaseUrl         = if ($meta.ContainsKey("baseUrl")) { $meta["baseUrl"] } else { "" }
                 ConfiguredAt    = if ($meta.ContainsKey("configuredAt")) { $meta["configuredAt"] } else { "" }
-                HasModelMapping = $profile.ContainsKey("modelMapping") -and $null -ne $profile["modelMapping"]
+                HasManagedModelConfig = (Get-ProviderManagedModelEnv -Profile $profile).Count -gt 0
                 AuthToken       = if ($profile.ContainsKey("env") -and $profile["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) { $profile["env"]["ANTHROPIC_AUTH_TOKEN"] } else { "" }
                 ProfilePath     = $f.FullName
             }
@@ -702,24 +853,23 @@ function Add-Provider {
             }
         }
 
-        # 内置供应商的 ModelMapping
-        if ($template.ContainsKey("ModelMapping") -and $template.ModelMapping) {
-            $providerProfile["modelMapping"] = $template.ModelMapping
+        # 内置供应商的模型配置
+        if ($template.ContainsKey("ModelEnv") -and $template.ModelEnv) {
+            Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $template.ModelEnv
         } elseif ($selectedKey -eq "custom" -or $selectedKey -match '^custom-') {
-            # 自定义供应商：询问是否配置模型映射
-            $mappingIdx = Show-SingleSelectMenu -Title "是否配置模型别名映射？(可选，大多数供应商不需要)" -Options @("跳过", "配置映射")
+            # 自定义供应商：询问是否配置模型环境键
+            $mappingIdx = Show-SingleSelectMenu -Title "是否配置模型环境键？(可选，大多数供应商不需要)" -Options @("跳过", "配置模型")
             if ($mappingIdx -eq 1) {
-                Write-UiDim "  模型映射将 Claude 模型别名 (opus/sonnet/haiku) 映射到供应商的实际模型名称"
-                $customMapping = @{}
-                foreach ($alias in @("opus", "sonnet", "haiku")) {
-                    $modelName = (Read-Host "  $alias 映射到 (留空跳过)").Trim()
+                Write-UiDim "  将写入 settings.env 的 3 个模型键；留空表示不设置该键"
+                $customModelEnv = @{}
+                foreach ($modelEnvKey in $script:ProviderManagedModelEnvKeys) {
+                    $label = $script:ProviderModelEnvLabels[$modelEnvKey]
+                    $modelName = (Read-Host "  $label ($modelEnvKey) (留空跳过)").Trim()
                     if (-not [string]::IsNullOrWhiteSpace($modelName)) {
-                        $customMapping[$alias] = $modelName
+                        $customModelEnv[$modelEnvKey] = $modelName
                     }
                 }
-                if ($customMapping.Count -gt 0) {
-                    $providerProfile["modelMapping"] = $customMapping
-                }
+                Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $customModelEnv
             }
         }
 
@@ -761,68 +911,73 @@ function Add-Provider {
     return $result
 }
 
-# ─── ModelMapping ─────────────────────────────────────────────────────────────
+# ─── Model Config ─────────────────────────────────────────────────────────────
 
-function Edit-ModelMapping {
+function Edit-ManagedModelEnv {
     <#
     .SYNOPSIS
-    交互式管理供应商的 modelMapping（查看/添加/修改/删除）
+    交互式管理供应商的模型环境键（查看/添加/修改/删除）
     .PARAMETER ProfilePath
     Profile JSON 文件路径
     .RETURNS
-    hashtable|$null — 修改后的 modelMapping（$null 表示删除全部映射）
+    hashtable|$null — 修改后的模型环境键（$null 表示清空全部）
     #>
     param(
         [Parameter(Mandatory)] [string]$ProfilePath
     )
 
     $profileData = Get-Content $ProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-    $mapping = if ($profileData.ContainsKey("modelMapping") -and $profileData["modelMapping"]) {
-        $clone = @{}
-        foreach ($k in $profileData["modelMapping"].Keys) { $clone[$k] = $profileData["modelMapping"][$k] }
-        $clone
-    } else { @{} }
-
-    $standardAliases = @("opus", "sonnet", "haiku")
+    $modelEnv = Get-ProviderManagedModelEnv -Profile $profileData
+    $editableEnv = @{}
+    foreach ($key in $script:ProviderManagedModelEnvKeys) {
+        if ($modelEnv.ContainsKey($key)) {
+            $editableEnv[$key] = $modelEnv[$key]
+        }
+    }
 
     while ($true) {
         Write-Host ""
-        Write-UiPrimary "模型映射管理"
+        Write-UiPrimary "模型配置管理"
         Write-Host ""
 
-        if ($mapping.Count -eq 0) {
-            Write-UiDim "  (无模型映射)"
+        if ($editableEnv.Count -eq 0) {
+            Write-UiDim "  (无模型配置)"
         } else {
-            foreach ($alias in $standardAliases) {
-                if ($mapping.ContainsKey($alias)) { Write-UiInfo "  $alias => $($mapping[$alias])" }
+            foreach ($key in $script:ProviderManagedModelEnvKeys) {
+                if ($editableEnv.ContainsKey($key)) {
+                    $label = $script:ProviderModelEnvLabels[$key]
+                    Write-UiInfo "  $label ($key) => $($editableEnv[$key])"
+                }
             }
         }
 
         Write-Host ""
         $options = @(
-            "设置模型映射 (opus/sonnet/haiku)"
-            "清除全部映射"
+            "设置模型环境键"
+            "清除全部模型配置"
             "返回"
         )
         $choice = Show-SingleSelectMenu -Title "选择操作：" -Options $options
 
         switch ($choice) {
             0 {
-                foreach ($alias in $standardAliases) {
-                    $current = if ($mapping.ContainsKey($alias)) { $mapping[$alias] } else { "(未设置)" }
-                    $newVal = (Read-Host "  $alias [$current] (留空保持不变，输入 - 删除)").Trim()
+                foreach ($key in $script:ProviderManagedModelEnvKeys) {
+                    $label = $script:ProviderModelEnvLabels[$key]
+                    $current = if ($editableEnv.ContainsKey($key)) { $editableEnv[$key] } else { "(未设置)" }
+                    $newVal = (Read-Host "  $label ($key) [$current] (留空保持不变，输入 - 删除)").Trim()
                     if ($newVal -eq "-") {
-                        if ($mapping.ContainsKey($alias)) { $mapping.Remove($alias) }
+                        if ($editableEnv.ContainsKey($key)) { $editableEnv.Remove($key) }
                     } elseif (-not [string]::IsNullOrWhiteSpace($newVal)) {
-                        $mapping[$alias] = $newVal
+                        $editableEnv[$key] = $newVal
                     }
                 }
-                Write-UiSuccess "模型映射已更新"
+                Write-UiSuccess "模型配置已更新"
+                break
             }
             1 {
-                if ($mapping.Count -eq 0) { Write-UiDim "当前无映射，无需清除"; continue }
-                $confirmIdx = Show-SingleSelectMenu -Title "确认清除全部模型映射？" -Options @("是，清除", "否，取消")
-                if ($confirmIdx -eq 0) { $mapping = @{}; Write-UiSuccess "已清除全部模型映射" }
+                if ($editableEnv.Count -eq 0) { Write-UiDim "当前无模型配置，无需清除"; continue }
+                $confirmIdx = Show-SingleSelectMenu -Title "确认清除全部模型配置？" -Options @("是，清除", "否，取消")
+                if ($confirmIdx -eq 0) { $editableEnv = @{}; Write-UiSuccess "已清除全部模型配置" }
             }
             default { break }
         }
@@ -830,8 +985,8 @@ function Edit-ModelMapping {
         if ($choice -eq 2 -or $choice -eq -1) { break }
     }
 
-    if ($mapping.Count -eq 0) { return $null }
-    return $mapping
+    if ($editableEnv.Count -eq 0) { return $null }
+    return $editableEnv
 }
 
 # ─── Update ────────────────────────────────────────────────────────────────────
@@ -868,22 +1023,16 @@ function Edit-Provider {
     Write-UiInfo "  供应商: $($meta["provider"])"
     Write-UiInfo "  Base URL: $($meta["baseUrl"])"
     Write-UiInfo "  API Key: $(Get-MaskedApiKey $envData["ANTHROPIC_AUTH_TOKEN"])"
-    # 显示当前 modelMapping 状态
-    $mappingStatus = if ($profile.ContainsKey("modelMapping") -and $profile["modelMapping"] -and $profile["modelMapping"].Count -gt 0) {
-        $mappingItems = @()
-        foreach ($k in @("opus", "sonnet", "haiku")) {
-            if ($profile["modelMapping"].ContainsKey($k)) { $mappingItems += "$k=$($profile["modelMapping"][$k])" }
-        }
-        $mappingItems -join ", "
-    } else { "未配置" }
-    Write-UiInfo "  模型映射: $mappingStatus"
+    # 显示当前模型配置状态
+    $modelSummary = Get-ProviderManagedModelSummary -Profile $profile
+    Write-UiInfo "  模型配置: $modelSummary"
     Write-Host ""
 
     $editOptions = @(
         "修改 API Key"
         "修改 Base URL"
         "修改供应商名称"
-        "配置模型映射"
+        "配置模型环境键"
         "全部重新配置"
     )
     $editChoice = Show-SingleSelectMenu -Title "选择修改项：" -Options $editOptions
@@ -949,18 +1098,14 @@ function Edit-Provider {
             }
         }
         3 {
-            # 配置模型映射
-            $newMapping = Edit-ModelMapping -ProfilePath $profilePath
-            if ($null -eq $newMapping) {
-                if ($profile.ContainsKey("modelMapping")) { $profile.Remove("modelMapping") }
-            } else {
-                $profile["modelMapping"] = $newMapping
-            }
+            # 配置模型环境键
+            $newModelEnv = Edit-ManagedModelEnv -ProfilePath $profilePath
+            Set-ProviderManagedModelEnv -Profile $profile -ModelEnv $newModelEnv
             # 直接写入 Profile（不经过后续的 meta/env 合并路径）
             $tempPath = "$profilePath.tmp"
             $profile | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
             Move-Item $tempPath $profilePath -Force
-            Write-UiSuccess "模型映射已保存"
+            Write-UiSuccess "模型配置已保存"
             # 若当前为活跃供应商，同步 settings.json
             $activeNow = Get-ActiveProvider
             if ($activeNow -and $activeNow.Key -eq $Key) {
@@ -1158,11 +1303,21 @@ function Switch-Provider {
         }
     }
 
-    # modelMapping 处理
-    if ($profile.ContainsKey("modelMapping") -and $profile["modelMapping"]) {
-        $settings["modelMapping"] = $profile["modelMapping"]
-    } elseif ($settings.ContainsKey("modelMapping")) {
-        $settings.Remove("modelMapping")
+    # 清理旧版顶层别名映射字段，避免新旧状态并存
+    if ($settings.ContainsKey($script:LegacyProviderModelKey)) {
+        $settings.Remove($script:LegacyProviderModelKey)
+    }
+
+    # 先清理所有受管模型键，再写入当前 Profile 的模型配置
+    foreach ($modelEnvKey in $script:ProviderManagedModelEnvKeys) {
+        if ($settings["env"].ContainsKey($modelEnvKey)) {
+            $settings["env"].Remove($modelEnvKey)
+        }
+    }
+
+    $managedModelEnv = Get-ProviderManagedModelEnv -Profile $profile
+    foreach ($entry in $managedModelEnv.GetEnumerator()) {
+        $settings["env"][$entry.Key] = $entry.Value
     }
 
     # 原子写入
@@ -1251,7 +1406,7 @@ function Render-ActionBar {
         Write-UiInfo "E" -NoNewline
         Write-UiDim "] 修改  [" -NoNewline
         Write-UiInfo "M" -NoNewline
-        Write-UiDim "] 映射  [" -NoNewline
+        Write-UiDim "] 模型  [" -NoNewline
         Write-UiInfo "D" -NoNewline
         Write-UiDim "] 删除  [" -NoNewline
         Write-UiInfo "Esc" -NoNewline
@@ -1291,7 +1446,7 @@ function Show-ProviderDashboardFallback {
                 Write-Host ("  [{0}] {1} - {2} ({3})" -f ($i + 1), $p.Name, $p.BaseUrl, $statusTag)
             }
             Write-Host ""
-            Write-UiInfo "操作: [编号]=切换活跃  A=添加  E<编号>=修改  M<编号>=映射  D<编号>=删除  Q=返回"
+            Write-UiInfo "操作: [编号]=切换活跃  A=添加  E<编号>=修改  M<编号>=模型配置  D<编号>=删除  Q=返回"
         }
 
         $userInput = Read-Host "请输入"
@@ -1323,18 +1478,14 @@ function Show-ProviderDashboardFallback {
             $idx = [int]$Matches[1] - 1
             if ($idx -ge 0 -and $idx -lt $profiles.Count) {
                 $targetKey = $profiles[$idx].Key
-                $mappingProfilePath = Join-Path (Get-ProviderProfilesDir) "$targetKey.json"
-                if (Test-Path $mappingProfilePath) {
-                    $newMapping = Edit-ModelMapping -ProfilePath $mappingProfilePath
-                    $mappingProfile = Get-Content $mappingProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-                    if ($null -eq $newMapping) {
-                        if ($mappingProfile.ContainsKey("modelMapping")) { $mappingProfile.Remove("modelMapping") }
-                    } else {
-                        $mappingProfile["modelMapping"] = $newMapping
-                    }
-                    $tempMappingPath = "$mappingProfilePath.tmp"
-                    $mappingProfile | ConvertTo-Json -Depth 10 | Set-Content $tempMappingPath -Encoding UTF8
-                    Move-Item $tempMappingPath $mappingProfilePath -Force
+                $modelProfilePath = Join-Path (Get-ProviderProfilesDir) "$targetKey.json"
+                if (Test-Path $modelProfilePath) {
+                    $newModelEnv = Edit-ManagedModelEnv -ProfilePath $modelProfilePath
+                    $modelProfile = Get-Content $modelProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                    Set-ProviderManagedModelEnv -Profile $modelProfile -ModelEnv $newModelEnv
+                    $tempModelPath = "$modelProfilePath.tmp"
+                    $modelProfile | ConvertTo-Json -Depth 10 | Set-Content $tempModelPath -Encoding UTF8
+                    Move-Item $tempModelPath $modelProfilePath -Force
                     if ($profiles[$idx].IsActive) { Switch-Provider -Key $targetKey }
                 }
             } else {
@@ -1410,7 +1561,7 @@ function Show-ProviderDashboard {
             } else {
                 Render-ProviderTable -Profiles $profiles -SelectedIndex $selectedIndex
 
-                # Detail Pane：展示选中供应商的 modelMapping
+                # Detail Pane：展示选中供应商的模型配置
                 if ($profiles.Count -gt 0) {
                     $selected = $profiles[$selectedIndex]
                     $detailProfilePath = Join-Path (Get-ProviderProfilesDir) "$($selected.Key).json"
@@ -1418,22 +1569,9 @@ function Show-ProviderDashboard {
                     if (Test-Path $detailProfilePath) {
                         try {
                             $detailData = Get-Content $detailProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-                            if ($null -ne $detailData -and $detailData.ContainsKey("modelMapping") -and
-                                $null -ne $detailData["modelMapping"] -and $detailData["modelMapping"].Count -gt 0) {
-                                $mappingParts = @()
-                                foreach ($alias in @("opus", "sonnet", "haiku")) {
-                                    if ($detailData["modelMapping"].ContainsKey($alias)) {
-                                        $mappingParts += "$alias=$($detailData["modelMapping"][$alias])"
-                                    }
-                                }
-                                foreach ($k in ($detailData["modelMapping"].Keys | Sort-Object)) {
-                                    if ($k -notin @("opus", "sonnet", "haiku")) { $mappingParts += "$k=$($detailData["modelMapping"][$k])" }
-                                }
-                                Write-UiDim "  映射: $($mappingParts -join ' | ')"
-                            } else {
-                                Write-UiDim "  映射: 无"
-                            }
-                        } catch { Write-UiDim "  映射: (读取失败)" }
+                            $modelSummary = Get-ProviderManagedModelSummary -Profile $detailData
+                            Write-UiDim "  模型配置: $modelSummary"
+                        } catch { Write-UiDim "  模型配置: (读取失败)" }
                     }
                 }
             }
@@ -1467,20 +1605,16 @@ function Show-ProviderDashboard {
                 }
                 'M' {
                     if ($profiles.Count -gt 0) {
-                        $selectedForMapping = $profiles[$selectedIndex]
-                        $mappingProfilePath = Join-Path (Get-ProviderProfilesDir) "$($selectedForMapping.Key).json"
-                        if (Test-Path $mappingProfilePath) {
-                            $newMapping = Edit-ModelMapping -ProfilePath $mappingProfilePath
-                            $mappingProfile = Get-Content $mappingProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-                            if ($null -eq $newMapping) {
-                                if ($mappingProfile.ContainsKey("modelMapping")) { $mappingProfile.Remove("modelMapping") }
-                            } else {
-                                $mappingProfile["modelMapping"] = $newMapping
-                            }
-                            $tempMappingPath = "$mappingProfilePath.tmp"
-                            $mappingProfile | ConvertTo-Json -Depth 10 | Set-Content $tempMappingPath -Encoding UTF8
-                            Move-Item $tempMappingPath $mappingProfilePath -Force
-                            if ($selectedForMapping.IsActive) { Switch-Provider -Key $selectedForMapping.Key }
+                        $selectedForModels = $profiles[$selectedIndex]
+                        $modelProfilePath = Join-Path (Get-ProviderProfilesDir) "$($selectedForModels.Key).json"
+                        if (Test-Path $modelProfilePath) {
+                            $newModelEnv = Edit-ManagedModelEnv -ProfilePath $modelProfilePath
+                            $modelProfile = Get-Content $modelProfilePath -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                            Set-ProviderManagedModelEnv -Profile $modelProfile -ModelEnv $newModelEnv
+                            $tempModelPath = "$modelProfilePath.tmp"
+                            $modelProfile | ConvertTo-Json -Depth 10 | Set-Content $tempModelPath -Encoding UTF8
+                            Move-Item $tempModelPath $modelProfilePath -Force
+                            if ($selectedForModels.IsActive) { Switch-Provider -Key $selectedForModels.Key }
                         }
                     }
                 }

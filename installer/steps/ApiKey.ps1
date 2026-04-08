@@ -137,18 +137,20 @@ function Verify-ApiKey {
             throw "env.ANTHROPIC_BASE_URL 未配置或为空"
         }
 
-        # 验证模型映射配置（可选）
-        if ($settings.ContainsKey("modelMapping") -and $settings["modelMapping"]) {
-            $requiredModels = @("opus", "sonnet", "haiku")
-            $missingModels = @()
-            foreach ($model in $requiredModels) {
-                if (-not $settings["modelMapping"].ContainsKey($model) -or -not $settings["modelMapping"][$model]) {
-                    $missingModels += $model
-                }
+        # 验证旧版别名映射字段是否已迁移（仅提示，不阻断）
+        $legacyKey = "model" + "Mapping"
+        if ($settings.ContainsKey($legacyKey) -and $settings[$legacyKey]) {
+            Write-UiWarning "检测到旧版 settings 别名映射字段，切换供应商后将自动迁移为 env 模型键" -Level Detail
+        }
+
+        $configuredModelEnvKeys = @()
+        foreach ($modelEnvKey in $script:ProviderManagedModelEnvKeys) {
+            if ($settings["env"].ContainsKey($modelEnvKey) -and -not [string]::IsNullOrWhiteSpace([string]$settings["env"][$modelEnvKey])) {
+                $configuredModelEnvKeys += $modelEnvKey
             }
-            if ($missingModels.Count -gt 0) {
-                Write-UiWarning "模型映射不完整，缺少: $($missingModels -join ', ')" -Level Detail
-            }
+        }
+        if ($configuredModelEnvKeys.Count -gt 0) {
+            Write-UiInfo "检测到模型环境键: $($configuredModelEnvKeys -join ', ')" -Level Detail
         }
 
         # HC-12 合规检查
