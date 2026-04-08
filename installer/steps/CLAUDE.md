@@ -157,8 +157,9 @@ Install-ApiKey($state)
 | Key | Name | 模型配置 |
 |-----|------|----------|
 | `zhipu` | 智谱 GLM | 无（服务端自动路由） |
-| `minimax` | MiniMax | 3 个模型环境键均写入 `MiniMax-M2.5` |
+| `minimax` | MiniMax | 3 个模型环境键均写入 `MiniMax-M2.7` |
 | `moonshot` | Kimi (Moonshot) | 3 个模型环境键均写入 `kimi-k2.5` |
+| `bailian` | 阿里云百炼 | 用户自行配置（RequireModelConfig） |
 | `custom` | 自定义供应商 | 无（用户按需配置） |
 
 ### 写入格式（HC-12）

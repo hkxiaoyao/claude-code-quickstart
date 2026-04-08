@@ -28,13 +28,13 @@ $script:BuiltinProviders = @{
     }
     "minimax" = @{
         Name        = "MiniMax"
-        Description = "MiniMax API，支持 M2.5 系列模型"
+        Description = "MiniMax API，支持 M2.7 系列模型"
         BaseUrl     = "https://api.minimaxi.com/anthropic"
         PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M2.5"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M2.5"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M2.5"
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M2.7"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M2.7"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M2.7"
         }
     }
     "moonshot" = @{
@@ -47,6 +47,13 @@ $script:BuiltinProviders = @{
             "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "kimi-k2.5"
             "ANTHROPIC_DEFAULT_SONNET_MODEL" = "kimi-k2.5"
         }
+    }
+    "bailian" = @{
+        Name              = "阿里云百炼"
+        Description       = "阿里云百炼平台，需用户自行配置模型"
+        BaseUrl           = "https://coding.dashscope.aliyuncs.com/apps/anthropic"
+        PlatformUrl       = "https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail"
+        RequireModelConfig = $true
     }
     "custom" = @{
         Name        = "自定义供应商"
@@ -637,7 +644,7 @@ function Add-Provider {
 
     # HC-13: @() 包裹 — 扫描已有 profiles，为内置供应商菜单标注已配置状态
     $existingProfiles = @(Get-ProviderProfiles)
-    $builtinKeys = @("zhipu", "minimax", "moonshot")
+    $builtinKeys = @("zhipu", "minimax", "moonshot", "bailian")
     $configuredTags = @{}
     foreach ($bk in $builtinKeys) {
         $matched = @(Find-BuiltinProviderProfiles -BuiltinKey $bk -Profiles $existingProfiles)
@@ -658,11 +665,12 @@ function Add-Provider {
     # 构建菜单
     $providerLabels = @(
         "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型$($configuredTags['zhipu'])"
-        "MiniMax        - MiniMax API，支持 M2.5 系列$($configuredTags['minimax'])"
+        "MiniMax        - MiniMax API，支持 M2.7 系列$($configuredTags['minimax'])"
         "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列$($configuredTags['moonshot'])"
+        "阿里云百炼      - 阿里云百炼平台，需配置模型$($configuredTags['bailian'])"
         "自定义供应商    - 手动配置 Base URL 和 API Key"
     )
-    $providerKeys = @("zhipu", "minimax", "moonshot", "custom")
+    $providerKeys = @("zhipu", "minimax", "moonshot", "bailian", "custom")
 
     Write-UiPrimary "请选择 API 供应商:"
     $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
@@ -856,6 +864,22 @@ function Add-Provider {
         # 内置供应商的模型配置
         if ($template.ContainsKey("ModelEnv") -and $template.ModelEnv) {
             Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $template.ModelEnv
+        } elseif ($template.ContainsKey("RequireModelConfig") -and $template.RequireModelConfig) {
+            # 需要用户自行配置模型的内置供应商（如阿里云百炼）
+            Write-Host ""
+            Write-UiPrimary "此供应商需要配置模型名称"
+            Write-UiDim "  将写入 settings.env 的 3 个模型键；留空表示不设置该键"
+            $customModelEnv = @{}
+            foreach ($modelEnvKey in $script:ProviderManagedModelEnvKeys) {
+                $label = $script:ProviderModelEnvLabels[$modelEnvKey]
+                $modelName = (Read-Host "  $label ($modelEnvKey)").Trim()
+                if (-not [string]::IsNullOrWhiteSpace($modelName)) {
+                    $customModelEnv[$modelEnvKey] = $modelName
+                }
+            }
+            if ($customModelEnv.Count -gt 0) {
+                Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $customModelEnv
+            }
         } elseif ($selectedKey -eq "custom" -or $selectedKey -match '^custom-') {
             # 自定义供应商：询问是否配置模型环境键
             $mappingIdx = Show-SingleSelectMenu -Title "是否配置模型环境键？(可选，大多数供应商不需要)" -Options @("跳过", "配置模型")

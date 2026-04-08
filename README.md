@@ -200,6 +200,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 - 智谱 GLM（zhipu）
 - MiniMax（minimax）
 - Kimi / Moonshot（moonshot）
+- 阿里云百炼（bailian）
 - 自定义供应商（custom）
 
 配置会写入 `~/.claude/settings.json`（`env`，包含供应商认证/Base URL 与可选模型环境键），并将 Profile 保存到 `~/.claude/providers/`。
