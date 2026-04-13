@@ -261,6 +261,7 @@ Install-ApiKey($state)
 | 字段 | 默认值 | 写入策略 |
 |------|--------|----------|
 | `language` | `简体中文` | 仅补缺失 |
+| `plansDirectory` | `.claude/plan` | Install 补缺失 / Update 对齐 |
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
