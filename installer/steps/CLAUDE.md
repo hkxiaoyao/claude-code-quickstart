@@ -111,7 +111,7 @@ function Update-<StepId> {
 **文件**：`ClaudeCode.ps1`
 **依赖核心模块**：`Process.ps1`, `Ui.ps1`
 
-**安装流程**：`npm install -g @anthropic-ai/claude-code` → 验证 `claude --version`
+**安装流程**：`npm install -g @anthropic-ai/claude-code@2.1.112` → 验证 `claude --version`
 
 ---
 

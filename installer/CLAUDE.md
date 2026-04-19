@@ -149,7 +149,7 @@ Main()
 
 | StepId | UpdateFunction | 更新策略 |
 |--------|---------------|---------|
-| ClaudeCode | Update-ClaudeCode | npm install @latest + 版本回退 |
+| ClaudeCode | Update-ClaudeCode | 固定到 2.1.112 + 版本回退 |
 | ClaudeConfig | Update-ClaudeConfig | 声明式对齐 env 键 + 废弃键清理 |
 | ClaudeMd | Update-ClaudeMd | 原子覆写 CLAUDE.md + ccq- rules |
 | Ccline | Update-Ccline | npm @latest + 重新 patch |
