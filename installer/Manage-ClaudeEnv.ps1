@@ -304,18 +304,7 @@ function Get-UpdateStatus {
         if ($entry.IsInstalled) {
             $npmPkg = $script:NpmPackageMap[$step.StepId]
             if ($npmPkg) {
-                if ($step.StepId -eq "ClaudeCode") {
-                    try {
-                        $pinnedClaudeVersion = Get-ClaudeCodeTargetVersion
-                    } catch {
-                        $pinnedClaudeVersion = "2.1.112"
-                    }
-                    # $entry.LatestVersion = $outdated[$npmPkg].Latest
-                    # $entry.HasUpdate = $true
-                    $entry.LatestVersion = $pinnedClaudeVersion
-                    $entry.HasUpdate = ($entry.CurrentVersion -ne $pinnedClaudeVersion)
-                }
-                elseif ($outdated.ContainsKey($npmPkg)) {
+                if ($outdated.ContainsKey($npmPkg)) {
                     $entry.LatestVersion = $outdated[$npmPkg].Latest
                     $entry.HasUpdate = $true
                 }
