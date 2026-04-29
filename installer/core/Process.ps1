@@ -429,9 +429,7 @@ function Get-NpmOutdatedGlobal {
     $outdated = @{}
 
     try {
-        # fnm multishell 修正：fnm 的 multishell 临时目录是多层 junction 链
-        # (multishell → aliases/default → aliases/lts-* → node-versions/vX/installation)
-        # npm outdated -g 在 multishell 目录下返回空结果，需解析到最终真实路径
+        # fnm/nvm 链接前缀修正：链接目录下 npm outdated -g 可能返回空结果
         $arguments = @("outdated", "-g", "--json")
         try {
             $prefixResult = Invoke-ExternalCommand -Command "npm" `
@@ -439,12 +437,10 @@ function Get-NpmOutdatedGlobal {
                 -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
             if ($prefixResult.Success -and $prefixResult.Output) {
                 $prefix = $prefixResult.Output.Trim()
-                if ($prefix -match 'fnm_multishells') {
-                    # ResolveLinkTarget($path, $true) 递归解析整条 junction 链（.NET 6+ / PS 7+）
-                    $resolved = [System.IO.Directory]::ResolveLinkTarget($prefix, $true)
-                    if ($null -ne $resolved -and (Test-Path $resolved.FullName)) {
-                        $arguments += @("--prefix", $resolved.FullName)
-                    }
+                # ResolveLinkTarget($path, $true) 递归解析 junction/symlink 链（.NET 6+ / PS 7+）
+                $resolved = [System.IO.Directory]::ResolveLinkTarget($prefix, $true)
+                if ($null -ne $resolved -and (Test-Path $resolved.FullName) -and $resolved.FullName -ne $prefix) {
+                    $arguments += @("--prefix", $resolved.FullName)
                 }
             }
         } catch {
