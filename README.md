@@ -197,13 +197,14 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 支持内置供应商：
 
-- 智谱 GLM（zhipu）
+- 智谱 GLM（zhipu，默认 GLM-5.1）
 - MiniMax（minimax）
-- Kimi / Moonshot（moonshot）
+- Kimi Code（moonshot，兼容旧 key，需 sk-kimi- Key）
+- DeepSeek（deepseek）
 - 阿里云百炼（bailian）
 - 自定义供应商（custom）
 
-配置会写入 `~/.claude/settings.json`（`env`，包含供应商认证/Base URL 与可选模型环境键），并将 Profile 保存到 `~/.claude/providers/`。
+配置会写入 `~/.claude/settings.json`（`env`，包含供应商认证/Base URL、可选模型环境键与供应商受管额外 env），并将 Profile 保存到 `~/.claude/providers/`。
 
 ---
 

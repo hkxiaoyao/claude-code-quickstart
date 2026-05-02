@@ -17,14 +17,30 @@ $script:ProviderModelEnvLabels = @{
     "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "Opus 模型"
     "ANTHROPIC_DEFAULT_SONNET_MODEL" = "Sonnet 模型"
 }
+$script:ProviderManagedExtraEnvKeys = @(
+    "ANTHROPIC_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+    "CLAUDE_CODE_EFFORT_LEVEL",
+    "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK",
+    "API_TIMEOUT_MS",
+    "ENABLE_TOOL_SEARCH"
+)
 $script:LegacyProviderModelKey = "model" + "Mapping"
 
 $script:BuiltinProviders = @{
     "zhipu" = @{
         Name        = "智谱 GLM"
-        Description = "智谱 AI，服务端自动路由到最新 GLM 模型"
+        Description = "智谱 GLM Coding Plan，默认使用 GLM-5.1 系列模型"
         BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
         PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
+        ModelEnv    = @{
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "glm-4.5-air"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "glm-5.1"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "glm-5.1"
+        }
+        ExtraEnv    = @{
+            "API_TIMEOUT_MS" = "3000000"
+        }
     }
     "minimax" = @{
         Name        = "MiniMax"
@@ -36,16 +52,42 @@ $script:BuiltinProviders = @{
             "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M2.7"
             "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M2.7"
         }
+        ExtraEnv    = @{
+            "ANTHROPIC_MODEL" = "MiniMax-M2.7"
+            "API_TIMEOUT_MS"  = "3000000"
+        }
     }
     "moonshot" = @{
-        Name        = "Kimi (Moonshot)"
-        Description = "月之暗面 Kimi，支持 K2.5 系列模型"
-        BaseUrl     = "https://api.moonshot.cn/anthropic"
-        PlatformUrl = "https://platform.moonshot.cn/console/api-keys"
+        Name        = "Kimi Code"
+        Description = "Kimi Code 会员专属 API，使用 sk-kimi- 前缀 Key"
+        BaseUrl     = "https://api.kimi.com/coding/"
+        PlatformUrl = "https://www.kimi.com/code/console"
         ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "kimi-k2.5"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "kimi-k2.5"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "kimi-k2.5"
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "kimi-for-coding"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "kimi-for-coding"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "kimi-for-coding"
+        }
+        ExtraEnv    = @{
+            "ANTHROPIC_MODEL"              = "kimi-for-coding"
+            "CLAUDE_CODE_SUBAGENT_MODEL"   = "kimi-for-coding"
+            "ENABLE_TOOL_SEARCH"           = "false"
+        }
+    }
+    "deepseek" = @{
+        Name        = "DeepSeek"
+        Description = "DeepSeek Anthropic API，支持 V4 Pro/Flash 与 1M 上下文"
+        BaseUrl     = "https://api.deepseek.com/anthropic"
+        PlatformUrl = "https://platform.deepseek.com/api_keys"
+        ModelEnv    = @{
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "deepseek-v4-flash"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "deepseek-v4-pro[1m]"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "deepseek-v4-pro[1m]"
+        }
+        ExtraEnv    = @{
+            "ANTHROPIC_MODEL"                           = "deepseek-v4-pro[1m]"
+            "CLAUDE_CODE_SUBAGENT_MODEL"                = "deepseek-v4-flash"
+            "CLAUDE_CODE_EFFORT_LEVEL"                  = "max"
+            "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK" = "1"
         }
     }
     "bailian" = @{
@@ -176,6 +218,54 @@ function Set-ProviderManagedModelEnv {
     $Profile["modelEnv"] = $normalized
 }
 
+function Get-ProviderManagedExtraEnv {
+    <#
+    .SYNOPSIS
+    从 provider profile 中提取供应商受管的额外 env 键
+    #>
+    param([hashtable]$Profile)
+
+    $result = @{}
+    if (-not $Profile -or -not $Profile.ContainsKey("env") -or -not $Profile["env"]) { return $result }
+
+    foreach ($key in $script:ProviderManagedExtraEnvKeys) {
+        if ($Profile["env"].ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$Profile["env"][$key])) {
+            $result[$key] = [string]$Profile["env"][$key]
+        }
+    }
+
+    return $result
+}
+
+function Set-ProviderManagedExtraEnv {
+    <#
+    .SYNOPSIS
+    将供应商受管的额外 env 键写入 provider profile
+    #>
+    param(
+        [Parameter(Mandatory)] [hashtable]$Profile,
+        [hashtable]$ExtraEnv
+    )
+
+    if (-not $Profile.ContainsKey("env") -or -not $Profile["env"]) {
+        $Profile["env"] = @{}
+    }
+
+    foreach ($key in $script:ProviderManagedExtraEnvKeys) {
+        if ($Profile["env"].ContainsKey($key)) {
+            $Profile["env"].Remove($key)
+        }
+    }
+
+    if ($null -eq $ExtraEnv -or $ExtraEnv.Count -eq 0) { return }
+
+    foreach ($key in $script:ProviderManagedExtraEnvKeys) {
+        if ($ExtraEnv.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$ExtraEnv[$key])) {
+            $Profile["env"][$key] = [string]$ExtraEnv[$key]
+        }
+    }
+}
+
 function Get-ProviderManagedModelSummary {
     <#
     .SYNOPSIS
@@ -296,7 +386,7 @@ function Get-NextAvailableKey {
     .SYNOPSIS
     计算 baseKey 的下一个可用递增 key（如 zhipu → zhipu-2 → zhipu-3）
     .PARAMETER BaseKey
-    基础 key（如 zhipu / minimax / moonshot）
+    基础 key（如 zhipu / minimax / moonshot / deepseek）
     .RETURNS
     string — 下一个可用 key
     #>
@@ -330,7 +420,7 @@ function Find-BuiltinProviderProfiles {
     .SYNOPSIS
     从 profiles 列表中查找属于指定内置供应商的所有实例
     .PARAMETER BuiltinKey
-    内置供应商基础 key（zhipu / minimax / moonshot）
+    内置供应商基础 key（zhipu / minimax / moonshot / deepseek）
     .PARAMETER Profiles
     Get-ProviderProfiles 返回的 hashtable 数组
     .RETURNS
@@ -343,6 +433,54 @@ function Find-BuiltinProviderProfiles {
 
     # 精确匹配 key 或前缀匹配 key-N（仅数字后缀）
     return @($Profiles | Where-Object { $_.Key -eq $BuiltinKey -or $_.Key -match "^$([regex]::Escape($BuiltinKey))-\d+$" })
+}
+
+function Get-BuiltinProviderKeyFromProfileKey {
+    <#
+    .SYNOPSIS
+    从 Profile 文件 key 解析内置供应商基础 key，兼容 key-N 副本
+    #>
+    param([string]$Key)
+
+    if ([string]::IsNullOrWhiteSpace($Key)) { return "" }
+    foreach ($builtinKey in $script:BuiltinProviders.Keys) {
+        if ($builtinKey -eq "custom") { continue }
+        if ($Key -eq $builtinKey -or $Key -match "^$([regex]::Escape($builtinKey))-\d+$") {
+            return $builtinKey
+        }
+    }
+    return ""
+}
+
+function Get-ProviderEffectiveManagedExtraEnv {
+    <#
+    .SYNOPSIS
+    合并内置模板默认 ExtraEnv 与 Profile 自身 ExtraEnv，Profile 值优先
+    #>
+    param(
+        [Parameter(Mandatory)] [string]$Key,
+        [Parameter(Mandatory)] [hashtable]$Profile
+    )
+
+    $result = @{}
+    $builtinKey = Get-BuiltinProviderKeyFromProfileKey -Key $Key
+    if (-not [string]::IsNullOrWhiteSpace($builtinKey)) {
+        $template = $script:BuiltinProviders[$builtinKey]
+        if ($template.ContainsKey("ExtraEnv") -and $template.ExtraEnv) {
+            foreach ($entry in $template.ExtraEnv.GetEnumerator()) {
+                if ($script:ProviderManagedExtraEnvKeys -contains [string]$entry.Key) {
+                    $result[$entry.Key] = [string]$entry.Value
+                }
+            }
+        }
+    }
+
+    $profileExtraEnv = Get-ProviderManagedExtraEnv -Profile $Profile
+    foreach ($entry in $profileExtraEnv.GetEnumerator()) {
+        $result[$entry.Key] = $entry.Value
+    }
+
+    return $result
 }
 
 # ─── Sync（自动同步）──────────────────────────────────────────────────────────
@@ -439,6 +577,25 @@ function Sync-ProviderFromSettings {
         }
     }
     Set-ProviderManagedModelEnv -Profile $newProfile -ModelEnv $managedModelEnv
+
+    # 兼容迁移：内置供应商先带入默认额外 env，再允许 settings 中已有值覆盖
+    $managedExtraEnv = @{}
+    if ($script:BuiltinProviders.ContainsKey($migrateKey)) {
+        $template = $script:BuiltinProviders[$migrateKey]
+        if ($template.ContainsKey("ExtraEnv") -and $template.ExtraEnv) {
+            foreach ($entry in $template.ExtraEnv.GetEnumerator()) {
+                $managedExtraEnv[$entry.Key] = [string]$entry.Value
+            }
+        }
+    }
+    if ($settings.ContainsKey("env") -and $settings["env"]) {
+        foreach ($key in $script:ProviderManagedExtraEnvKeys) {
+            if ($settings["env"].ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace([string]$settings["env"][$key])) {
+                $managedExtraEnv[$key] = [string]$settings["env"][$key]
+            }
+        }
+    }
+    Set-ProviderManagedExtraEnv -Profile $newProfile -ExtraEnv $managedExtraEnv
 
     # 原子写入 Profile
     if (-not (Test-Path $profilesDir)) {
@@ -644,7 +801,7 @@ function Add-Provider {
 
     # HC-13: @() 包裹 — 扫描已有 profiles，为内置供应商菜单标注已配置状态
     $existingProfiles = @(Get-ProviderProfiles)
-    $builtinKeys = @("zhipu", "minimax", "moonshot", "bailian")
+    $builtinKeys = @("zhipu", "minimax", "moonshot", "deepseek", "bailian")
     $configuredTags = @{}
     foreach ($bk in $builtinKeys) {
         $matched = @(Find-BuiltinProviderProfiles -BuiltinKey $bk -Profiles $existingProfiles)
@@ -664,13 +821,14 @@ function Add-Provider {
 
     # 构建菜单
     $providerLabels = @(
-        "智谱 GLM       - 智谱 AI，服务端自动路由最新 GLM 模型$($configuredTags['zhipu'])"
+        "智谱 GLM       - GLM Coding Plan，默认 GLM-5.1$($configuredTags['zhipu'])"
         "MiniMax        - MiniMax API，支持 M2.7 系列$($configuredTags['minimax'])"
-        "Kimi (Moonshot) - 月之暗面 Kimi，支持 K2.5 系列$($configuredTags['moonshot'])"
+        "Kimi Code      - Kimi 会员专属 API，需 sk-kimi- Key$($configuredTags['moonshot'])"
+        "DeepSeek       - DeepSeek Anthropic API，支持 V4 Pro/Flash$($configuredTags['deepseek'])"
         "阿里云百炼      - 阿里云百炼平台，需配置模型$($configuredTags['bailian'])"
         "自定义供应商    - 手动配置 Base URL 和 API Key"
     )
-    $providerKeys = @("zhipu", "minimax", "moonshot", "bailian", "custom")
+    $providerKeys = @("zhipu", "minimax", "moonshot", "deepseek", "bailian", "custom")
 
     Write-UiPrimary "请选择 API 供应商:"
     $selectedIndex = Show-SingleSelectMenu -Options $providerLabels -Title "API 供应商选择"
@@ -838,6 +996,10 @@ function Add-Provider {
         Write-UiWarning "即将写入以下配置："
         Write-UiInfo "  供应商: $providerName"
         Write-UiInfo "  Base URL: $providerBaseUrl"
+        if ($template.ContainsKey("ExtraEnv") -and $template.ExtraEnv) {
+            $extraSummary = @($template.ExtraEnv.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ", "
+            Write-UiInfo "  额外 env: $extraSummary"
+        }
         Write-UiInfo "  Key 摘要: $(Get-MaskedApiKey $apiKeyPlain)"
         Write-Host ""
 
@@ -895,6 +1057,10 @@ function Add-Provider {
                 }
                 Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $customModelEnv
             }
+        }
+
+        if ($template.ContainsKey("ExtraEnv") -and $template.ExtraEnv) {
+            Set-ProviderManagedExtraEnv -Profile $providerProfile -ExtraEnv $template.ExtraEnv
         }
 
         # 保存 Profile 到 ~/.claude/providers/
@@ -1341,6 +1507,18 @@ function Switch-Provider {
 
     $managedModelEnv = Get-ProviderManagedModelEnv -Profile $profile
     foreach ($entry in $managedModelEnv.GetEnumerator()) {
+        $settings["env"][$entry.Key] = $entry.Value
+    }
+
+    # 清理并写入供应商受管的额外 env，避免切换供应商后残留
+    foreach ($extraEnvKey in $script:ProviderManagedExtraEnvKeys) {
+        if ($settings["env"].ContainsKey($extraEnvKey)) {
+            $settings["env"].Remove($extraEnvKey)
+        }
+    }
+
+    $managedExtraEnv = Get-ProviderEffectiveManagedExtraEnv -Key $Key -Profile $profile
+    foreach ($entry in $managedExtraEnv.GetEnumerator()) {
         $settings["env"][$entry.Key] = $entry.Value
     }
 

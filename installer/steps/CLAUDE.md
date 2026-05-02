@@ -156,9 +156,10 @@ Install-ApiKey($state)
 
 | Key | Name | 模型配置 |
 |-----|------|----------|
-| `zhipu` | 智谱 GLM | 无（服务端自动路由） |
-| `minimax` | MiniMax | 3 个模型环境键均写入 `MiniMax-M2.7` |
-| `moonshot` | Kimi (Moonshot) | 3 个模型环境键均写入 `kimi-k2.5` |
+| `zhipu` | 智谱 GLM | Haiku=`glm-4.5-air`，Opus/Sonnet=`glm-5.1`，额外写入 `API_TIMEOUT_MS=3000000` |
+| `minimax` | MiniMax | 3 个模型环境键和 `ANTHROPIC_MODEL` 均写入 `MiniMax-M2.7`，额外写入 `API_TIMEOUT_MS=3000000` |
+| `moonshot` | Kimi Code | 3 个模型环境键、`ANTHROPIC_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 均写入 `kimi-for-coding`，额外写入 `ENABLE_TOOL_SEARCH=false` |
+| `deepseek` | DeepSeek | Haiku/Subagent=`deepseek-v4-flash`，Opus/Sonnet/主模型=`deepseek-v4-pro[1m]`，额外写入 `CLAUDE_CODE_EFFORT_LEVEL=max` |
 | `bailian` | 阿里云百炼 | 用户自行配置（RequireModelConfig） |
 | `custom` | 自定义供应商 | 无（用户按需配置） |
 
@@ -172,12 +173,17 @@ Install-ApiKey($state)
     "ANTHROPIC_BASE_URL": "<BaseUrl>",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "<HaikuModel>",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "<OpusModel>",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "<SonnetModel>"
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "<SonnetModel>",
+    "ANTHROPIC_MODEL": "<ProviderMainModel>",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "<ProviderSubagentModel>",
+    "CLAUDE_CODE_EFFORT_LEVEL": "<ProviderEffort>",
+    "API_TIMEOUT_MS": "<ProviderTimeout>",
+    "ENABLE_TOOL_SEARCH": "<ProviderToolSearch>"
   }
 }
 ```
 
-> 若某供应商不需要模型覆盖，则只写入 `ANTHROPIC_AUTH_TOKEN` 与 `ANTHROPIC_BASE_URL`。历史旧版别名映射字段会在切换供应商时自动迁移为上述 env 键。
+> 若某供应商不需要模型覆盖，则只写入 `ANTHROPIC_AUTH_TOKEN` 与 `ANTHROPIC_BASE_URL`。Kimi Code 额外写入 `ENABLE_TOOL_SEARCH=false`；DeepSeek 额外写入主模型、子代理模型和 effort 配置；切换到其他供应商时会清理这些受管额外 env。历史旧版别名映射字段会在切换供应商时自动迁移为上述 env 键。
 
 **~/.claude.json**：
 ```json
@@ -265,7 +271,7 @@ Install-ApiKey($state)
 | `permissions.allow` | 14 项基础权限 | 合并（只添加缺失项，不删除已有项） |
 | `attribution` | `{ commit: "", pr: "" }` | 仅补缺失 |
 
-**ClaudeConfig 不触碰的字段**：`model`（用户自行选择）、`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`env.ANTHROPIC_DEFAULT_HAIKU_MODEL`/`env.ANTHROPIC_DEFAULT_OPUS_MODEL`/`env.ANTHROPIC_DEFAULT_SONNET_MODEL`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`/`env.BASH_DEFAULT_TIMEOUT_MS`/`env.BASH_MAX_TIMEOUT_MS`（CcgWorkflow）
+**ClaudeConfig 不触碰的字段**：`model`（用户自行选择）、`statusLine`（Ccline）、`hooks`（用户/插件）、`outputStyle`（用户自定义）、`mcpServers`（Mcp）、`env.ANTHROPIC_AUTH_TOKEN`/`env.ANTHROPIC_BASE_URL`/`env.ANTHROPIC_DEFAULT_HAIKU_MODEL`/`env.ANTHROPIC_DEFAULT_OPUS_MODEL`/`env.ANTHROPIC_DEFAULT_SONNET_MODEL`/`env.ANTHROPIC_MODEL`/`env.CLAUDE_CODE_SUBAGENT_MODEL`/`env.CLAUDE_CODE_EFFORT_LEVEL`/`env.CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK`/`env.API_TIMEOUT_MS`/`env.ENABLE_TOOL_SEARCH`（ApiKey）、`env.CODEAGENT_POST_MESSAGE_DELAY`/`env.CODEX_TIMEOUT`/`env.BASH_DEFAULT_TIMEOUT_MS`/`env.BASH_MAX_TIMEOUT_MS`（CcgWorkflow）
 
 > **注意**：statusLine 配置完全由 Ccline 步骤负责，ClaudeConfig 不触碰 statusLine 字段。
 
