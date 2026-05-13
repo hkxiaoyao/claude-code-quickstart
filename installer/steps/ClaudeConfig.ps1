@@ -58,7 +58,6 @@ function Get-ClaudeConfigFingerprint {
     $parts += "permissions:" + (($script:ClaudeConfigBasePermissions | Sort-Object) -join ",")
     $parts += "top-level:language"
     $parts += "top-level:alwaysThinkingEnabled"
-    $parts += "top-level:showThinkingSummaries"
     $parts += "top-level:plansDirectory=.claude/plan"
     return Get-StringFingerprint -Text ($parts -join "`n")
 }
@@ -84,7 +83,6 @@ function Compare-ClaudeConfigDrift {
             DeprecatedEnvKeys            = @()
             MissingLanguage              = $false
             MissingAlwaysThinkingEnabled = $false
-            MissingShowThinkingSummaries = $false
             MissingPlansDirectory        = $false
         }
     }
@@ -95,7 +93,6 @@ function Compare-ClaudeConfigDrift {
         $result.NeedsInstallCompletion               = $true
         $result.Details.MissingLanguage              = $true
         $result.Details.MissingAlwaysThinkingEnabled = $true
-        $result.Details.MissingShowThinkingSummaries = $true
         $result.Details.MissingPlansDirectory        = $true
         $result.Details.MissingEnvKeys               = @($script:ClaudeConfigEnvDefaults.Keys)
         $result.Details.MissingPermissions           = @($script:ClaudeConfigBasePermissions)
@@ -119,10 +116,6 @@ function Compare-ClaudeConfigDrift {
     }
     if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
         $result.Details.MissingAlwaysThinkingEnabled = $true
-        $result.NeedsInstallCompletion               = $true
-    }
-    if (-not $settings.ContainsKey("showThinkingSummaries")) {
-        $result.Details.MissingShowThinkingSummaries = $true
         $result.NeedsInstallCompletion               = $true
     }
     if (-not $settings.ContainsKey("plansDirectory") -or [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
@@ -199,7 +192,6 @@ function Test-ClaudeConfigInstalled {
     $result.Data["DeprecatedEnvKeys"]          = @($drift.Details.DeprecatedEnvKeys)
     $result.Data["MissingLanguage"]            = [bool]$drift.Details.MissingLanguage
     $result.Data["MissingAlwaysThinkingEnabled"] = [bool]$drift.Details.MissingAlwaysThinkingEnabled
-    $result.Data["MissingShowThinkingSummaries"] = [bool]$drift.Details.MissingShowThinkingSummaries
     $result.Data["MissingPlansDirectory"]      = [bool]$drift.Details.MissingPlansDirectory
 
     if (-not $drift.NeedsInstallCompletion) {
@@ -224,9 +216,6 @@ function Test-ClaudeConfigInstalled {
     }
     if ($drift.Details.MissingAlwaysThinkingEnabled) {
         [void]$issues.Add("alwaysThinkingEnabled 配置缺失")
-    }
-    if ($drift.Details.MissingShowThinkingSummaries) {
-        [void]$issues.Add("showThinkingSummaries 配置缺失")
     }
     if ($drift.Details.MissingPlansDirectory) {
         [void]$issues.Add("plansDirectory 配置缺失")
@@ -301,10 +290,6 @@ function Install-ClaudeConfig {
         if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
             $settings["alwaysThinkingEnabled"] = $true
             [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
-        }
-        if (-not $settings.ContainsKey("showThinkingSummaries")) {
-            $settings["showThinkingSummaries"] = $true
-            [void]$updatedItems.Add("config::showThinkingSummaries::added")
         }
         if (-not $settings.ContainsKey("plansDirectory") -or [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
             $settings["plansDirectory"] = ".claude/plan"
@@ -417,12 +402,6 @@ function Verify-ClaudeConfig {
         if ($settings.alwaysThinkingEnabled -isnot [bool]) {
             throw "alwaysThinkingEnabled 必须为布尔值，当前值: $($settings.alwaysThinkingEnabled)"
         }
-        if (-not ($settings.PSObject.Properties.Name -contains "showThinkingSummaries")) {
-            throw "showThinkingSummaries 配置缺失"
-        }
-        if ($settings.showThinkingSummaries -isnot [bool]) {
-            throw "showThinkingSummaries 必须为布尔值，当前值: $($settings.showThinkingSummaries)"
-        }
         if (-not ($settings.PSObject.Properties.Name -contains "plansDirectory") -or
             [string]::IsNullOrWhiteSpace([string]$settings.plansDirectory)) {
             throw "plansDirectory 配置缺失"
@@ -465,7 +444,6 @@ function Verify-ClaudeConfig {
         Write-UiSuccess "✓ Claude Code 常用配置验证通过" -Level Detail
         Write-UiInfo "  - language: $($settings.language)" -Level Detail
         Write-UiInfo "  - alwaysThinkingEnabled: $($settings.alwaysThinkingEnabled)" -Level Detail
-        Write-UiInfo "  - showThinkingSummaries: $($settings.showThinkingSummaries)" -Level Detail
         Write-UiInfo "  - permissions.allow: $($settings.permissions.allow.Count) 项" -Level Detail
         Write-UiInfo "  - env: $($script:ClaudeConfigEnvDefaults.Count) 项" -Level Detail
 
@@ -580,10 +558,6 @@ function Update-ClaudeConfig {
         if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
             $settings["alwaysThinkingEnabled"] = $true
             [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
-        }
-        if (-not $settings.ContainsKey("showThinkingSummaries")) {
-            $settings["showThinkingSummaries"] = $true
-            [void]$updatedItems.Add("config::showThinkingSummaries::added")
         }
         if (-not $settings.ContainsKey("plansDirectory") -or
             [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
