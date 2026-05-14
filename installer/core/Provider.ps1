@@ -84,10 +84,9 @@ $script:BuiltinProviders = @{
             "ANTHROPIC_DEFAULT_SONNET_MODEL" = "deepseek-v4-pro[1m]"
         }
         ExtraEnv    = @{
-            "ANTHROPIC_MODEL"                           = "deepseek-v4-pro[1m]"
-            "CLAUDE_CODE_SUBAGENT_MODEL"                = "deepseek-v4-flash"
-            "CLAUDE_CODE_EFFORT_LEVEL"                  = "max"
-            "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK" = "1"
+            "ANTHROPIC_MODEL"            = "deepseek-v4-pro[1m]"
+            "CLAUDE_CODE_SUBAGENT_MODEL" = "deepseek-v4-flash"
+            "CLAUDE_CODE_EFFORT_LEVEL"   = "max"
         }
     }
     "bailian" = @{
