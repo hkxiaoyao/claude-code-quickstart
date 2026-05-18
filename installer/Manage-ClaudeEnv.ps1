@@ -314,7 +314,7 @@ function Get-UpdateStatus {
                 }
             }
             elseif ($step.StepId -eq "CcgWorkflow") {
-                # 分量检测：引擎版本 + 规则文件独立判定
+                # 分量检测：引擎版本 + 历史规则清理 + env 独立判定
                 $ccgComponents = Get-CcgWorkflowUpdateComponents -LatestVersion $ccgLatest
                 $entry.LatestVersion = $ccgComponents.LatestVersion
                 $entry.HasUpdate = ($ccgComponents.EngineNeedUpdate -or $ccgComponents.RulesNeedUpdate -or $ccgComponents.EnvNeedUpdate)
@@ -633,8 +633,8 @@ function Invoke-UpdateAction {
                                 }
                             }
                             $manifestEntry["components"] = @{
-                                engineVersion    = $engineVer
-                                rulesFingerprint = Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate
+                                engineVersion           = $engineVer
+                                managedRuleFilesCleanup = ($script:CcgWorkflowManagedRuleFiles -join ",")
                             }
                         }
                         $manifest["steps"][$stepId] = $manifestEntry

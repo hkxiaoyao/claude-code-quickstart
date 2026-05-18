@@ -21,74 +21,20 @@ $script:CcgWorkflowEnvDefaults = @{
     "BASH_MAX_TIMEOUT_MS"          = "3600000"
 }
 
-# CCG 规则文件模板（整合原 ccq-multimodel.md + ccq-workflow.md + ccq-tools.md 流程策略）
-$script:CcgWorkflowRuleTemplate = @'
-# 多模型协作 + 工作流增强（CCG）
-
-> 自动生成，请勿手动编辑。由 CCG Workflow 步骤管理。
-
-## 后端任务 → Codex
-
-```powershell
-"[任务描述]" | codeagent-wrapper --backend codex - [工作目录]
-```
-
-适用：后端 logic、算法实现、数据库操作、API 开发、性能优化、调试分析
-
-## 前端任务 → Gemini
-
-```powershell
-"[任务描述]" | codeagent-wrapper --backend gemini - [工作目录]
-```
-
-适用：UI/UX 组件、CSS 样式、响应式布局、前端交互逻辑
-
-## 会话复用
-
-每次调用返回 `SESSION_ID: xxx`，后续用 `resume xxx` 复用上下文：
-
-```powershell
-"[后续任务]" | codeagent-wrapper --backend <codex|gemini> resume <SESSION_ID> - [工作目录]
-```
-
-## 并行调用
-
-使用 `run_in_background: true` 启动后台任务，用 `TaskOutput` 等待结果。
-必须等所有模型返回后才能进入下一阶段。
-
-```python
-# 示例：并行启动 Codex 和 Gemini
-Bash(command='"任务描述" | codeagent-wrapper --backend codex ...', run_in_background=True)
-Bash(command='"任务描述" | codeagent-wrapper --backend gemini ...', run_in_background=True)
-
-# 等待结果
-TaskOutput(task_id="<TASK_ID>", block=True, timeout=600000)
-```
-
-## 知识获取（强制）
-
-遇到不熟悉的知识、库或 API，必须使用搜索工具联网验证，严禁猜测。
-
-## 上下文检索（生成代码前执行）
-
-**检索策略**：
-
-1. 优先使用语义检索工具，构建全局理解
-2. 辅以精确匹配工具（Grep/Glob）定位具体逻辑
-3. 根据所用工具特性补充精确过滤参数，提升检索召回率
-4. 若上下文不足，递归检索直至信息完整
-
-## 需求对齐
-
-若检索后需求仍有模糊空间，输出引导性问题列表，直至需求边界清晰（无遗漏、无冗余）。
-'@
+# CCG 旧规则文件已并入 ClaudeMd 主模板；此步骤只负责清理历史生成物
+$script:CcgWorkflowManagedRuleFiles = @(
+    "ccq-ccgworkflow.md",
+    "ccq-multimodel.md",
+    "ccq-tools.md",
+    "ccq-workflow.md"
+)
 
 function Get-CcgWorkflowFingerprint {
     <#
     .SYNOPSIS
-    计算 CcgWorkflow 步骤的组合内容指纹（引擎版本 + 规则模板哈希）
+    计算 CcgWorkflow 步骤的组合内容指纹（引擎版本 + 历史规则清理清单）
     .DESCRIPTION
-    组合指纹确保引擎版本变更或规则模板变更都能触发更新检测。
+    组合指纹确保引擎版本变更、历史规则清理清单变更或 env 默认值变更都能触发更新检测。
     引擎版本统一从 config.toml 读取（与 Get-CcgWorkflowUpdateComponents 保持一致）。
     .RETURNS
     string - 组合指纹字符串，或空字符串（未安装时）
@@ -106,8 +52,8 @@ function Get-CcgWorkflowFingerprint {
     }
     $parts += "engine:$engineVersion"
 
-    # 规则模板分量
-    $parts += "rules:" + (Get-StringFingerprint -Text $script:CcgWorkflowRuleTemplate)
+    # 规则清理分量
+    $parts += "rules-cleanup:" + ($script:CcgWorkflowManagedRuleFiles -join ",")
 
     # env 默认值分量
     $envParts = @()
@@ -122,9 +68,9 @@ function Get-CcgWorkflowFingerprint {
 function Get-CcgWorkflowUpdateComponents {
     <#
     .SYNOPSIS
-    独立检测 CcgWorkflow 的引擎版本与规则文件漂移状态
+    独立检测 CcgWorkflow 的引擎版本、历史规则文件清理状态与 env 漂移状态
     .DESCRIPTION
-    拆分检测引擎（npm 版本）和规则（文件内容+旧文件迁移）两个分量，
+    拆分检测引擎（npm 版本）、历史规则文件清理和 env 三个分量，
     使 Get-UpdateStatus 和 Update-CcgWorkflow 能精准区分更新类型。
     .PARAMETER LatestVersion
     可选：预查询的 npm 最新版本（避免重复查询）
@@ -171,30 +117,17 @@ function Get-CcgWorkflowUpdateComponents {
         $result.EngineNeedUpdate = $true
     }
 
-    # ── 规则分量：文件内容对比 + 遗留旧文件检查 ──
+    # ── 规则分量：历史规则文件清理 ──
     $rulesDir = "$script:ClaudeDir\rules"
-    $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
-
-    # 检查目标规则文件是否存在且内容一致
-    $ruleContentMatch = $false
-    if (Test-Path $ccgRulePath) {
-        $existingRule = Get-Content $ccgRulePath -Raw -ErrorAction SilentlyContinue
-        $ruleNormalized = $script:CcgWorkflowRuleTemplate -replace "`r`n", "`n"
-        $existingNormalized = if ($existingRule) { $existingRule -replace "`r`n", "`n" } else { "" }
-        $ruleContentMatch = ($ruleNormalized.Trim() -eq $existingNormalized.Trim())
-    }
-
-    # 检查遗留旧规则文件（需迁移删除）
-    $legacyRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
-    $legacyFilesExist = $false
-    foreach ($f in $legacyRuleFiles) {
+    $managedRulesExist = $false
+    foreach ($f in $script:CcgWorkflowManagedRuleFiles) {
         if (Test-Path (Join-Path $rulesDir $f)) {
-            $legacyFilesExist = $true
+            $managedRulesExist = $true
             break
         }
     }
 
-    if (-not $ruleContentMatch -or $legacyFilesExist) {
+    if ($managedRulesExist) {
         $result.RulesNeedUpdate = $true
     }
 
@@ -223,11 +156,11 @@ function Get-CcgWorkflowUpdateComponents {
     }
 
     # ── 综合判定 ──
-    # env 变更归入 rules 更新分支触发 UpdateKind
+    # env 变更沿用 rules-only 更新通道；RulesNeedUpdate 仅表示需要清理历史规则文件
     $rulesOrEnvNeedUpdate = $result.RulesNeedUpdate -or $result.EnvNeedUpdate
     if ($result.EngineNeedUpdate -and $rulesOrEnvNeedUpdate) {
         $result.UpdateKind = "engine+rules"
-        $result.StatusHint = "引擎与规则均需更新"
+        $result.StatusHint = "引擎与规则/env 均需更新"
     } elseif ($result.EngineNeedUpdate) {
         $result.UpdateKind = "engine-only"
         if (-not $result.LocalVersion) {
@@ -238,11 +171,11 @@ function Get-CcgWorkflowUpdateComponents {
     } elseif ($rulesOrEnvNeedUpdate) {
         $result.UpdateKind = "rules-only"
         if ($result.RulesNeedUpdate -and $result.EnvNeedUpdate) {
-            $result.StatusHint = "规则文件与 env 配置更新"
+            $result.StatusHint = "历史规则文件清理与 env 配置更新"
         } elseif ($result.EnvNeedUpdate) {
             $result.StatusHint = "env 配置更新"
         } else {
-            $result.StatusHint = "规则文件更新"
+            $result.StatusHint = "历史规则文件清理"
         }
     }
 
@@ -380,17 +313,20 @@ function Install-CcgWorkflow {
 
         Write-UiSuccess "成功部署 CCG 目录结构与配置文件" -Level Detail
 
-        # ── 写入 CCG 规则文件 ──
+        # ── 清理历史 CCG 规则文件（相关原则已并入 ClaudeMd 主模板）──
         $rulesDir = "$script:ClaudeDir\rules"
-        if (-not (Test-Path $rulesDir)) {
-            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
-        }
-        $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
-        $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
-        if (-not $ruleWriteResult) {
-            Write-UiWarning "CCG 规则文件写入失败，但不影响主安装" -Level Detail
-        } else {
-            Write-UiInfo "已写入: rules/ccq-ccgworkflow.md" -Level Detail
+        if (Test-Path $rulesDir) {
+            foreach ($ruleFile in $script:CcgWorkflowManagedRuleFiles) {
+                $rulePath = Join-Path $rulesDir $ruleFile
+                if (Test-Path $rulePath) {
+                    try {
+                        Remove-Item $rulePath -Force -ErrorAction Stop
+                        Write-UiInfo "已清理历史规则文件: rules/$ruleFile" -Level Detail
+                    } catch {
+                        Write-UiWarning "无法清理历史规则文件: rules/$ruleFile" -Level Debug
+                    }
+                }
+            }
         }
 
         # ── 写入 CCG env 配置到 settings.json ──
@@ -754,36 +690,22 @@ function Update-CcgWorkflow {
             $result.Data["NewVersion"] = $oldVersion
         }
 
-        # ── 规则更新分支 ──
+        # ── 规则清理分支 ──
         if ($components.RulesNeedUpdate) {
             $rulesDir = "$script:ClaudeDir\rules"
-            if (-not (Test-Path $rulesDir)) {
-                New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
-            }
-
-            # 迁移：删除旧的 rules 文件（CcgWorkflow 所有权范围内的显式名单）
-            $legacyRuleFiles = @("ccq-multimodel.md", "ccq-tools.md", "ccq-workflow.md")
-            foreach ($oldFile in $legacyRuleFiles) {
-                $oldPath = Join-Path $rulesDir $oldFile
-                if (Test-Path $oldPath) {
-                    try {
-                        Remove-Item $oldPath -Force -ErrorAction Stop
-                        $result.UpdatedItems += "file::rules/${oldFile}::migrated-deleted"
-                        Write-UiInfo "已删除旧文件: rules/$oldFile（已整合）" -Level Detail
-                    } catch {
-                        Write-UiWarning "无法删除旧文件: $oldFile" -Level Debug
+            if (Test-Path $rulesDir) {
+                foreach ($ruleFile in $script:CcgWorkflowManagedRuleFiles) {
+                    $rulePath = Join-Path $rulesDir $ruleFile
+                    if (Test-Path $rulePath) {
+                        try {
+                            Remove-Item $rulePath -Force -ErrorAction Stop
+                            $result.UpdatedItems += "file::rules/${ruleFile}::deleted"
+                            Write-UiInfo "已删除历史规则文件: rules/$ruleFile（规则已并入 CLAUDE.md）" -Level Detail
+                        } catch {
+                            Write-UiWarning "无法删除历史规则文件: rules/$ruleFile" -Level Debug
+                        }
                     }
                 }
-            }
-
-            # 写入/更新 CCG 规则文件
-            $ccgRulePath = Join-Path $rulesDir "ccq-ccgworkflow.md"
-            $ruleWriteResult = Write-FileAtomically -FilePath $ccgRulePath -Content $script:CcgWorkflowRuleTemplate
-            if ($ruleWriteResult) {
-                $result.UpdatedItems += "file::rules/ccq-ccgworkflow.md::overwritten"
-                Write-UiSuccess "CCG Workflow 规则文件已更新" -Level Detail
-            } else {
-                throw "CCG Workflow 规则文件写入失败: $ccgRulePath"
             }
         }
 

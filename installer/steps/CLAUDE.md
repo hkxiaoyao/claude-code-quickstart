@@ -283,7 +283,7 @@ Install-ApiKey($state)
 **目标**：`$env:USERPROFILE\.claude\CLAUDE.md`
 **依赖**：无（不依赖 Claude 基础配置）
 
-**功能**：生成全局 Claude Code 工作规范主文件。~80 行（确保在 token 截断限制内完整可见）。详细的工具速查由 McpManager 动态渲染到 `rules/ccq-mcp-*.md`，多模型协作/工作流增强由 CcgWorkflow 管理到 `rules/ccq-ccgworkflow.md`。
+**功能**：生成全局 Claude Code 工作规范主文件。~100 行（确保在 token 截断限制内完整可见）。详细的工具速查由 McpManager 动态渲染到 `rules/ccq-mcp-*.md`；通用工作流原则已并入主 `CLAUDE.md`。
 
 **命名约定**：CCQ 管理的 rules 文件统一使用 `ccq-` 前缀，与用户自定义 rules 隔离。
 
@@ -335,7 +335,7 @@ Install-ApiKey($state)
 **文件**：`CcgWorkflow.ps1`
 **依赖**：NodeJS + ClaudeConfig
 
-**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎，并写入 `rules/ccq-ccgworkflow.md`（多模型协作 + 工作流增强策略）。
+**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎，并清理已迁移到主 `CLAUDE.md` 的历史 CCG rules 文件。
 
 **安装命令**：
 ```powershell
@@ -347,13 +347,13 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - `~/.claude/agents/ccg/` — Agent 模板
 - `~/.claude/.ccg/` — CCG 配置目录（含 config.toml）
 - `~/.claude/bin/codeagent-wrapper.exe` — 核心二进制
-- `~/.claude/rules/ccq-ccgworkflow.md` — CCG 工作流规则文件
+- 历史 CCG rules 文件会被清理，通用工作流原则由 ClaudeMd 主模板统一管理
 
 **关键机制**：
 - `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Mcp 步骤的 MCP 配置
 - 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
 - 安装后立即调用 `Refresh-SessionPath`
-- 规则文件更新：更新时会清理遗留文件 `ccq-multimodel.md` / `ccq-tools.md` / `ccq-workflow.md`
+- 规则文件清理：更新时会清理历史文件 `ccq-ccgworkflow.md` / `ccq-multimodel.md` / `ccq-tools.md` / `ccq-workflow.md`
 
 **CcgWorkflow 管辖的 env 字段**：
 
