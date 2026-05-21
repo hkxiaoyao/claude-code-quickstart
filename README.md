@@ -286,8 +286,3 @@ claude-code-quickstart/
 
 [MIT](LICENSE)
 
----
-
-## 友情链接
-
-- [LINUX DO](https://linux.do/)
