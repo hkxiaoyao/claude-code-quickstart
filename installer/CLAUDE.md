@@ -72,7 +72,7 @@ foreach ($stepFile in $stepFiles) {
 | 分组 | 步骤 | 安装模式 |
 |------|------|----------|
 | **基础环境** | NodeJS, Git, ClaudeCode, ApiKey | 仅一键安装 |
-| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, GeminiCli, OpenSpec | 一键或多选 |
+| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, AntigravityCli, OpenSpec | 一键或多选 |
 
 ### 核心函数
 
@@ -117,7 +117,7 @@ Main()
 |------|------|
 | CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
-| GeminiCli | Google Gemini CLI，多模型协作使用 |
+| AntigravityCli | Google Antigravity CLI，多模型协作使用 |
 
 在 Staged 模式下，用户通过**单选迭代式菜单**逐个选择步骤执行，每次执行后返回菜单。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，**全部包含**。
 
@@ -155,7 +155,7 @@ Main()
 | Ccline | Update-Ccline | npm @latest + 重新 patch |
 | CcgWorkflow | Update-CcgWorkflow | npx ccg-workflow@latest init |
 | CodexCli | Update-CodexCli | npm install @latest |
-| GeminiCli | Update-GeminiCli | npm install @latest |
+| AntigravityCli | Update-AntigravityCli | agy update（失败回退官方安装脚本） |
 | OpenSpec | Update-OpenSpec | npm install @latest |
 
 ### 核心机制

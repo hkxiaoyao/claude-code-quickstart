@@ -234,7 +234,6 @@ $script:NpmPackageMap = @{
     "ClaudeCode"  = "@anthropic-ai/claude-code"
     "Ccline"      = "@cometix/ccline"
     "CodexCli"    = "@openai/codex"
-    "GeminiCli"   = "@google/gemini-cli"
     "OpenSpec"    = "@fission-ai/openspec"
 }
 
@@ -361,6 +360,11 @@ function Get-UpdateStatus {
                     }
                 }
             }
+            elseif ($step.StepId -eq "AntigravityCli") {
+                # 非 npm 包：无法获取远程最新版本，无法判断是否有更新，执行 agy update 由官方 CLI 自行判断
+                $entry.HasUpdate = $null
+                $entry.StatusHint = "无法获取更新状态，执行 agy update 更新"
+            }
         }
 
         $statusList += $entry
@@ -418,7 +422,8 @@ function Select-UpdateSteps {
             $hint = @{ Text = $versionText; Color = "DarkGray" }
         }
         else {
-            $hint = @{ Text = "(已安装)"; Color = "DarkGray" }
+            $hintText = if (-not [string]::IsNullOrWhiteSpace($entry.StatusHint)) { "($($entry.StatusHint))" } else { "(已安装)" }
+            $hint = @{ Text = $hintText; Color = "DarkGray" }
             $defaultSelected += $i
         }
         $options += $label

@@ -32,7 +32,7 @@ graph TD
     C --> C3["Bootstrap / McpManager / Provider"]
     D --> D1["NodeJS (5 子模块) / Git / ClaudeCode / ApiKey"]
     D --> D2["Ccline / ClaudeConfig / ClaudeMd / Mcp / CcgWorkflow / OpenSpec"]
-    D --> D3["CcSwitch / CodexCli / GeminiCli (可选)"]
+    D --> D3["CcSwitch / CodexCli / AntigravityCli (可选)"]
     click C "./installer/core/CLAUDE.md"
     click D "./installer/steps/CLAUDE.md"
 ```
@@ -43,7 +43,7 @@ graph TD
 
 ```
 NodeJS ─── ClaudeCode ─── ApiKey / Ccline / ClaudeConfig / Mcp
-       ├── CcgWorkflow / OpenSpec / CodexCli [可选] / GeminiCli [可选]
+       ├── CcgWorkflow / OpenSpec / CodexCli [可选] / AntigravityCli [可选]
 Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]
 ```
 

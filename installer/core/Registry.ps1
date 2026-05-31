@@ -215,18 +215,18 @@ function Get-StepRegistry {
             Group           = "Advanced"
         },
         @{
-            StepId          = "GeminiCli"
-            StepName        = "Gemini CLI"
-            Description     = "安装 Google Gemini CLI（多模型协作可选工具）"
-            StepFile        = "steps/GeminiCli.ps1"
-            TestFunction    = "Test-GeminiCliInstalled"
-            InstallFunction = "Install-GeminiCli"
-            VerifyFunction  = "Verify-GeminiCli"
-            UpdateFunction  = "Update-GeminiCli"
+            StepId          = "AntigravityCli"
+            StepName        = "Antigravity CLI"
+            Description     = "安装 Google Antigravity CLI（多模型协作可选工具）"
+            StepFile        = "steps/AntigravityCli.ps1"
+            TestFunction    = "Test-AntigravityCliInstalled"
+            InstallFunction = "Install-AntigravityCli"
+            VerifyFunction  = "Verify-AntigravityCli"
+            UpdateFunction  = "Update-AntigravityCli"
             SkipIfInstalled = $true
             IsOptional      = $true
             Order           = 130
-            Dependencies    = @("NodeJS")
+            Dependencies    = @()
             Group           = "Advanced"
         }
     )

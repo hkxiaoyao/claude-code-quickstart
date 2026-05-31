@@ -165,7 +165,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 10. OpenSpec CLI
 11. cc-switch（可选）
 12. Codex CLI（可选）
-13. Gemini CLI（可选）
+13. Antigravity CLI（可选）
 
 ---
 

@@ -207,7 +207,7 @@ class InstallState {
 "Mcp"           = @("ClaudeCode")
 "CcgWorkflow"   = @("NodeJS")
 "CodexCli"      = @("NodeJS")
-"GeminiCli"     = @("NodeJS")
+"AntigravityCli" = @()
 "OpenSpec"      = @("NodeJS")
 ```
 

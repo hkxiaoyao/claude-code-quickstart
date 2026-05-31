@@ -56,7 +56,7 @@ function Update-<StepId> {
 }
 ```
 
-> 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、GeminiCli、OpenSpec。
+> 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、AntigravityCli、OpenSpec。
 > 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
@@ -78,7 +78,7 @@ function Update-<StepId> {
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
 | CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 | CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
-| GeminiCli | Gemini CLI | `GeminiCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
+| AntigravityCli | Antigravity CLI | `AntigravityCli.ps1` | **✓** | ✓ | ✓ | 无 | 进阶 |
 | OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 
 ---
@@ -377,16 +377,26 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
 
 ---
 
-## GeminiCli — Gemini CLI（可选）
+## AntigravityCli — Antigravity CLI（可选）
 
-**文件**：`GeminiCli.ps1`
+**文件**：`AntigravityCli.ps1`
+**依赖**：无（独立二进制 CLI，不依赖 Node.js）
+
+**命令名**：`agy`
+
+**安装方式**：官方未提供 npm 包，Windows 通过远程 PowerShell 安装脚本安装：
 
 ```powershell
-# 正确调用方式（无 -DisplayName 参数）
-$installOut = Invoke-NpmGlobalInstall -PackageName "@google/gemini-cli"
+irm https://antigravity.google/cli/install.ps1 | iex
 ```
 
-**fnm multishell 兼容**：fnm 环境下 `gemini` 解析到 `.ps1` wrapper，`Invoke-ExternalCommand` 通过 `pwsh.exe -File` 执行时会挂起。因此所有版本检测和验证均通过 `npm list -g @google/gemini-cli` 完成，不执行 `gemini` 命令本身。私有辅助函数 `Get-GeminiCliVersionFromNpm` 封装了此逻辑。
+封装在 `Invoke-AntigravityCliInstaller`，通过 `pwsh -NoProfile -ExecutionPolicy Bypass -Command` 执行。官方脚本将 `agy.exe` 安装到 `%LOCALAPPDATA%\Antigravity\` 并更新用户 PATH。
+
+**版本检测**：统一通过 `agy --version` 完成（`Get-AntigravityCliVersion`），无 npm list 路径。
+
+**更新策略**：优先执行 `agy update`（官方自更新）；命令不可用或失败时回退到官方安装脚本覆盖安装。`UpdatedItems` 使用 `agy::antigravity-cli::<old>-><new>` 或 `noop::AntigravityCli::no-change`。
+
+**更新检测**：非 npm 包，无法获取远程最新版本、无法判断是否有更新，`Get-UpdateStatus` 将其 `HasUpdate` 置为 `$null`（语义为"无法获取更新状态"，默认勾选），执行 `agy update` 由官方 CLI 自行判断是否有新版本。
 
 ---
 

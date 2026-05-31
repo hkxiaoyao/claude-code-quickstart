@@ -599,7 +599,7 @@ function Select-AdvancedAction {
     param()
 
     $options = @(
-        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Gemini CLI）"
+        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Antigravity CLI）"
         "可选安装 - 选择要安装的组件"
     )
 
