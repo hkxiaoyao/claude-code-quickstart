@@ -153,7 +153,7 @@ Main()
 | ClaudeConfig | Update-ClaudeConfig | 声明式对齐 env 键 + 废弃键清理 |
 | ClaudeMd | Update-ClaudeMd | 原子覆写 CLAUDE.md + ccq- rules |
 | Ccline | Update-Ccline | npm @latest + 重新 patch |
-| CcgWorkflow | Update-CcgWorkflow | npx ccg-workflow@latest init |
+| CcgWorkflow | Update-CcgWorkflow | npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir ~/.claude |
 | CodexCli | Update-CodexCli | npm install @latest |
 | AntigravityCli | Update-AntigravityCli | agy update（失败回退官方安装脚本） |
 | OpenSpec | Update-OpenSpec | npm install @latest |

@@ -335,7 +335,7 @@ Install-ApiKey($state)
 **文件**：`CcgWorkflow.ps1`
 **依赖**：NodeJS + ClaudeConfig
 
-**功能**：通过官方 `npx ccg-workflow@latest init` 安装 CCG Workflow 工作流引擎，并清理已迁移到主 `CLAUDE.md` 的历史 CCG rules 文件。
+**功能**：通过官方 `npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir "$env:USERPROFILE\.claude"` 执行非交互安装，写入当前 CCG Workflow 的核心产物，并清理已迁移到主 `CLAUDE.md` 的历史 CCG rules 文件。
 
 **安装命令**：
 ```powershell
@@ -343,14 +343,18 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 ```
 
 **安装后目录结构**：
-- `~/.claude/commands/ccg/` — 命令模板（Slash Commands）
+- `~/.claude/commands/ccg/` — 命令模板（Slash Commands，含核心命令与 skill 生成命令）
 - `~/.claude/agents/ccg/` — Agent 模板
-- `~/.claude/.ccg/` — CCG 配置目录（含 config.toml）
+- `~/.claude/hooks/ccg/` — Hook 脚本（workflow-state / session-start / subagent-context / skill-router）
+- `~/.claude/.ccg/` — CCG 配置目录（含 config.toml、engine/、prompts/）
+- `~/.claude/skills/ccg/` — Skills 与质量关卡规则
 - `~/.claude/bin/codeagent-wrapper.exe` — 核心二进制
+- `~/.claude/settings.json` — 注册 CCG hooks
 - 历史 CCG rules 文件会被清理，通用工作流原则由 ClaudeMd 主模板统一管理
 
 **关键机制**：
 - `--skip-mcp`：安装前后对 `settings.json` 的 `mcpServers` 做快照比对，保护 Mcp 步骤的 MCP 配置
+- `--yes`：确保非交互拉取最新版本，避免 npm 交互确认中断自动安装
 - 超时/重试：`TimeoutSeconds 300`，`RetryCount 3`
 - 安装后立即调用 `Refresh-SessionPath`
 - 规则文件清理：更新时会清理历史文件 `ccq-ccgworkflow.md` / `ccq-multimodel.md` / `ccq-tools.md` / `ccq-workflow.md`
