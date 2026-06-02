@@ -44,16 +44,16 @@ $script:BuiltinProviders = @{
     }
     "minimax" = @{
         Name        = "MiniMax"
-        Description = "MiniMax API，支持 M2.7 系列模型"
+        Description = "MiniMax API，默认使用 MiniMax-M3"
         BaseUrl     = "https://api.minimaxi.com/anthropic"
         PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
         ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M2.7"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M2.7"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M2.7"
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M3"
+            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M3"
+            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M3"
         }
         ExtraEnv    = @{
-            "ANTHROPIC_MODEL" = "MiniMax-M2.7"
+            "ANTHROPIC_MODEL" = "MiniMax-M3"
             "API_TIMEOUT_MS"  = "3000000"
         }
     }
@@ -821,7 +821,7 @@ function Add-Provider {
     # 构建菜单
     $providerLabels = @(
         "智谱 GLM       - GLM Coding Plan，默认 GLM-5.1$($configuredTags['zhipu'])"
-        "MiniMax        - MiniMax API，支持 M2.7 系列$($configuredTags['minimax'])"
+        "MiniMax        - MiniMax API，默认 MiniMax-M3$($configuredTags['minimax'])"
         "Kimi Code      - Kimi 会员专属 API，需 sk-kimi- Key$($configuredTags['moonshot'])"
         "DeepSeek       - DeepSeek Anthropic API，支持 V4 Pro/Flash$($configuredTags['deepseek'])"
         "阿里云百炼      - 阿里云百炼平台，需配置模型$($configuredTags['bailian'])"

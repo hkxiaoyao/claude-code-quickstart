@@ -205,7 +205,7 @@ pwsh -File installer/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsC
 支持内置供应商：
 
 - 智谱 GLM（zhipu，默认 GLM-5.1）
-- MiniMax（minimax）
+- MiniMax（minimax，默认 MiniMax-M3）
 - Kimi Code（moonshot，兼容旧 key，需 sk-kimi- Key）
 - DeepSeek（deepseek）
 - 阿里云百炼（bailian）

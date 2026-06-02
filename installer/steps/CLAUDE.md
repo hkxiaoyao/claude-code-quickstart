@@ -158,7 +158,7 @@ Install-ApiKey($state)
 | Key | Name | 模型配置 |
 |-----|------|----------|
 | `zhipu` | 智谱 GLM | Haiku=`glm-4.5-air`，Opus/Sonnet=`glm-5.1`，额外写入 `API_TIMEOUT_MS=3000000` |
-| `minimax` | MiniMax | 3 个模型环境键和 `ANTHROPIC_MODEL` 均写入 `MiniMax-M2.7`，额外写入 `API_TIMEOUT_MS=3000000` |
+| `minimax` | MiniMax | 3 个模型环境键和 `ANTHROPIC_MODEL` 均写入 `MiniMax-M3`，额外写入 `API_TIMEOUT_MS=3000000` |
 | `moonshot` | Kimi Code | 3 个模型环境键、`ANTHROPIC_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 均写入 `kimi-for-coding`，额外写入 `ENABLE_TOOL_SEARCH=false` |
 | `deepseek` | DeepSeek | Haiku/Subagent=`deepseek-v4-flash`，Opus/Sonnet/主模型=`deepseek-v4-pro[1m]`，额外写入 `CLAUDE_CODE_EFFORT_LEVEL=max` |
 | `bailian` | 阿里云百炼 | 用户自行配置（RequireModelConfig） |
