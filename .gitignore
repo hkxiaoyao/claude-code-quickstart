@@ -1,6 +1,7 @@
 # ─── 本地 AI 工具数据（不纳入版本控制）───
 .ace-tool/
 .claude/
+.antigravitycli/
 openspec/
 
 # ─── 构建产物（将来 build/ 里的打包输出，由 GitHub Actions 自动构建）───
