@@ -170,6 +170,21 @@ function Get-StepRegistry {
             Group           = "Advanced"
         },
         @{
+            StepId          = "Skills"
+            StepName        = "Claude Code Skills"
+            Description     = "安装 Claude Code Skills（用户级全局，可按类别选择）"
+            StepFile        = "steps/Skills.ps1"
+            TestFunction    = "Test-SkillsInstalled"
+            InstallFunction = "Install-Skills"
+            VerifyFunction  = "Verify-Skills"
+            UpdateFunction  = ""
+            SkipIfInstalled = $false
+            IsOptional      = $true
+            Order           = 95
+            Dependencies    = @("NodeJS", "ClaudeCode")
+            Group           = "Advanced"
+        },
+        @{
             StepId          = "OpenSpec"
             StepName        = "OpenSpec CLI"
             Description     = "安装 OpenSpec CLI（规范驱动开发工具）"
@@ -288,7 +303,7 @@ function Get-StepGroups {
         }
         Advanced = @{
             Label       = "进阶扩展"
-            Description = "增强工具、配置优化、多模型协作"
+            Description = "增强配置，MCP，Skills，Workflow"
             InstallMode = "OneClickOrSelect"
             StepIds     = $advancedIds
         }

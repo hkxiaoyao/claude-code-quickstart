@@ -10,7 +10,8 @@ param(
     [string]$Mode = "",
     [switch]$Staged,
     [ValidateSet("Normal", "Developer")]
-    [string]$OutputMode = "Normal"
+    [string]$OutputMode = "Normal",
+    [switch]$SkillsCopy
 )
 
 Set-StrictMode -Version Latest
@@ -70,6 +71,10 @@ $script:InstallerRoot = $PSScriptRoot
 $stepFiles = Get-StepFiles
 foreach ($stepFile in $stepFiles) {
     . "$script:InstallerRoot\$stepFile"
+}
+
+if (Get-Command Set-SkillsInstallOptions -ErrorAction SilentlyContinue) {
+    Set-SkillsInstallOptions -CopyMode ([bool]$SkillsCopy)
 }
 
 # ─── 初始化输出模式（步骤加载之后，避免被重复 dot-source 覆盖）──────────────
@@ -583,7 +588,7 @@ function Select-TopLevelAction {
 
     $options = @(
         "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置"
-        "进阶扩展 - 增强工具, 配置, 工作流, 多模型"
+        "进阶扩展 - 增强配置，MCP，Skills，Workflow"
     )
 
     return Show-SingleSelectMenu -Title "请选择操作：" -Options $options -DefaultIndex 0
@@ -599,7 +604,7 @@ function Select-AdvancedAction {
     param()
 
     $options = @(
-        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Antigravity CLI）"
+        "一键安装 - 安装全部必选进阶组件（不含可选的 Skills/cc-switch/Codex/Antigravity CLI）"
         "可选安装 - 选择要安装的组件"
     )
 
@@ -615,13 +620,13 @@ function Show-StepList {
     #>
     param()
 
-    Write-UiPrimary "已注册的安装步骤：" -Level Detail
+    Write-UiPrimary "已注册的安装步骤："
     Write-Host ""
 
     $stepIndex = 0
     foreach ($groupName in @("Basic", "Advanced")) {
         $group = $script:StepGroups[$groupName]
-        Write-UiPrimary "─── $($group.Label)（$($group.Description)）───" -Level Detail
+        Write-UiPrimary "─── $($group.Label)（$($group.Description)）───"
         Write-Host ""
 
         foreach ($stepId in $group.StepIds) {
@@ -630,8 +635,8 @@ function Show-StepList {
 
             $stepIndex++
             $tag = if ($step.IsOptional) { "[可选]" } else { "[必选]" }
-            Write-UiInfo "  $stepIndex. $tag $($step.StepName)" -Level Detail
-            Write-UiDim "       $($step.Description)" -Level Detail
+            Write-UiInfo "  $stepIndex. $tag $($step.StepName)"
+            Write-UiDim "       $($step.Description)"
             $deps = (Get-StepDependencies)[$stepId]
             Write-UiDim "       依赖: $(if (-not $deps -or $deps.Count -eq 0) { '无' } else { $deps -join ', ' })" -Level Debug
             Write-Host ""

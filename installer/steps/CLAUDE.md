@@ -57,7 +57,7 @@ function Update-<StepId> {
 ```
 
 > 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、AntigravityCli、OpenSpec。
-> 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
+> 6 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp、Skills。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
@@ -72,14 +72,15 @@ function Update-<StepId> {
 | ClaudeCode | Claude Code | `ClaudeCode.ps1` | — | ✓ | ✓ | NodeJS | 基础 |
 | ApiKey | 第三方供应商配置 | `ApiKey.ps1` | — | ✓ | — | ClaudeCode | 基础 |
 | Ccline | ccline | `Ccline.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
-| CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | ClaudeConfig | Claude 基础配置 | `ClaudeConfig.ps1` | — | ✓ | ✓ | ClaudeCode | 进阶 |
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
 | CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
+| Skills | Claude Code Skills | `Skills.ps1` | **✓** | false | — | NodeJS, ClaudeCode | 进阶 |
+| OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
+| CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
 | AntigravityCli | Antigravity CLI | `AntigravityCli.ps1` | **✓** | ✓ | ✓ | 无 | 进阶 |
-| OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 
 ---
 
@@ -367,6 +368,29 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 | `CODEX_TIMEOUT` | `7200` | Install 补缺失 / Update 声明式对齐 |
 | `BASH_DEFAULT_TIMEOUT_MS` | `600000` | Install 补缺失 / Update 声明式对齐 |
 | `BASH_MAX_TIMEOUT_MS` | `3600000` | Install 补缺失 / Update 声明式对齐 |
+
+---
+
+## Skills — Claude Code Skills [可选]
+
+**文件**：`Skills.ps1`
+**依赖**：NodeJS + ClaudeCode
+
+**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code --global`，安装 Claude Code Skills 到用户级 `~/.claude/skills`。默认只勾选 `find-skills`，集合类条目默认不勾选。
+
+**catalogue 来源**：固化 `tech-notes/docs/ai/skills.md` 当前 12 个条目，运行时不依赖外部 Markdown 或本地 notes 路径。
+
+**安装策略**：
+- 所有命令通过 `Invoke-ExternalCommand -Command "npx" -Arguments <string[]>` 执行，禁止 shell 字符串拼接
+- 固定追加 `--agent claude-code` 与 `--global`
+- `find-skills` / `fastapi` 等指定 skill 条目追加 `--skill <name>`
+- `-SkillsCopy` 或交互选择 copy 模式时追加 `--copy`
+- 单项失败不阻止后续已选择条目继续执行，最终摘要列出失败项
+
+**检测与验证**：
+- `Test-SkillsInstalled` 实时检测 `~/.claude/skills`，不写持久化状态文件
+- 指定 skill 条目检测 `DetectName` 目录（如 `find-skills`、`fastapi`）
+- 集合类条目只依赖 skills CLI 安装结果，不强行断言展开目录
 
 ---
 

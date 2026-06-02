@@ -2,7 +2,7 @@
 
 > 生成时间：2026-03-15 | 覆盖率：97% (33/34 文件)
 
-Windows 10/11 平台的 **Claude Code 开发环境自动化安装器**。双阶段 PowerShell 架构，PS 5.1 引导 + PS 7 主安装/管理，13 步依赖链，实时检测机制。
+Windows 10/11 平台的 **Claude Code 开发环境自动化安装器**。双阶段 PowerShell 架构，PS 5.1 引导 + PS 7 主安装/管理，14 步依赖链，实时检测机制。
 
 ---
 
@@ -16,7 +16,7 @@ claude-code-quickstart/
 │   ├── Manage-ClaudeEnv.ps1      # PS 7+ 管理入口
 │   ├── build/Build-SingleFile.ps1 # 单文件打包（3 产物）
 │   ├── core/                     # 10 个基础功能库
-│   └── steps/                    # 13 步骤（NodeJS 含 5 子模块）
+│   └── steps/                    # 14 步骤（NodeJS 含 5 子模块）
 ├── test-syntax.ps1               # PS7 语法校验
 └── _check-syntax.ps1             # 辅助语法检查
 ```
@@ -31,7 +31,7 @@ graph TD
     C --> C2["Admin / Net / Registry"]
     C --> C3["Bootstrap / McpManager / Provider"]
     D --> D1["NodeJS (5 子模块) / Git / ClaudeCode / ApiKey"]
-    D --> D2["Ccline / ClaudeConfig / ClaudeMd / Mcp / CcgWorkflow / OpenSpec"]
+    D --> D2["Ccline / ClaudeConfig / ClaudeMd / Mcp / CcgWorkflow / Skills / OpenSpec"]
     D --> D3["CcSwitch / CodexCli / AntigravityCli (可选)"]
     click C "./installer/core/CLAUDE.md"
     click D "./installer/steps/CLAUDE.md"
@@ -43,8 +43,8 @@ graph TD
 
 ```
 NodeJS ─── ClaudeCode ─── ApiKey / Ccline / ClaudeConfig / Mcp
-       ├── CcgWorkflow / OpenSpec / CodexCli [可选] / AntigravityCli [可选]
-Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]
+       ├── CcgWorkflow / OpenSpec / CodexCli [可选] / Skills [可选, 依赖 ClaudeCode]
+Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]    AntigravityCli [可选, 无依赖]
 ```
 
 ---
@@ -55,7 +55,7 @@ Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]
 |------|---------|------|
 | installer/ | [installer/CLAUDE.md](installer/CLAUDE.md) | 双入口脚本（安装/管理）、步骤注册表 |
 | installer/core/ | [installer/core/CLAUDE.md](installer/core/CLAUDE.md) | 10 个核心基础库（含 Registry + McpManager + Provider） |
-| installer/steps/ | [installer/steps/CLAUDE.md](installer/steps/CLAUDE.md) | 13 个安装步骤模块（NodeJS 含 5 子模块，含 Update 函数） |
+| installer/steps/ | [installer/steps/CLAUDE.md](installer/steps/CLAUDE.md) | 14 个安装步骤模块（NodeJS 含 5 子模块，含 Update 函数） |
 
 ---
 
@@ -99,6 +99,9 @@ pwsh -File installer/Install-ClaudeEnv.ps1
 
 # 查看步骤列表
 pwsh -File installer/Install-ClaudeEnv.ps1 -ListSteps
+
+# 可选安装 Claude Code Skills（copy 模式）
+pwsh -File installer/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsCopy
 
 # 管理已安装环境（更新/供应商/MCP）
 pwsh -File installer/Manage-ClaudeEnv.ps1

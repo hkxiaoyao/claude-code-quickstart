@@ -15,7 +15,7 @@ Windows 平台的 Claude Code 开发环境自动化安装器。
   - [方式一：云端直接执行](#方式一云端直接执行推荐)
   - [方式二：下载单文件执行](#方式二下载单文件执行)
   - [方式三：从源码运行](#方式三从源码运行开发者)
-- [安装内容（13 步）](#安装内容13-步)
+- [安装内容（14 步）](#安装内容14-步)
 - [Manage 管理脚本](#manage-管理脚本)
 - [第三方供应商](#第三方供应商)
 - [MCP Server](#mcp-server)
@@ -146,7 +146,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 ---
 
-## 安装内容（13 步）
+## 安装内容（14 步）
 
 ### 基础环境（必装）
 
@@ -162,10 +162,17 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 7. CLAUDE.md 配置
 8. MCP Server 配置
 9. CCG 工作流
-10. OpenSpec CLI
-11. cc-switch（可选）
-12. Codex CLI（可选）
-13. Antigravity CLI（可选）
+10. Claude Code Skills（可选）
+11. OpenSpec CLI
+12. cc-switch（可选）
+13. Codex CLI（可选）
+14. Antigravity CLI（可选）
+
+Claude Code Skills 默认安装到用户级 `~/.claude/skills`，目标 Agent 为 Claude Code。若 Windows symlink 权限受限，可启用 copy 模式：
+
+```powershell
+pwsh -File installer/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsCopy
+```
 
 ---
 

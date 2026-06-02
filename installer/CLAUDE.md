@@ -10,7 +10,7 @@
 | 文件 | PS 版本 | 职责 |
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
-| `Install-ClaudeEnv.ps1` | **7.0+** | 安装入口（推荐）：基础环境（NodeJS~ApiKey）/ 进阶扩展（Ccline~OpenSpec）两级分组 |
+| `Install-ClaudeEnv.ps1` | **7.0+** | 安装入口（推荐）：基础环境（NodeJS~ApiKey）/ 进阶扩展（增强配置、MCP、Skills、Workflow）两级分组 |
 | `Manage-ClaudeEnv.ps1` | **7.0+** | 统一管理：更新已安装组件 / 供应商管理（CRUD + 切换）/ MCP Server 管理 |
 
 ---
@@ -40,7 +40,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 
 ## Install-ClaudeEnv.ps1
 
-**用途**：PS 7 安装入口（推荐），将 13 个步骤分为**基础环境**和**进阶扩展**两组。
+**用途**：PS 7 安装入口（推荐），将 14 个步骤分为**基础环境**和**进阶扩展**两组。
 
 ### 参数
 
@@ -51,6 +51,7 @@ pwsh -File "$scriptRoot\Install-ClaudeEnv.ps1"
 | `-Mode` | string | 进阶扩展安装模式：`OneClick` 或 `Select` |
 | `-Staged` | switch | 兼容旧参数，等同于 `-Group Advanced -Mode Select` |
 | `-OutputMode` | string | `Normal`（默认） / `Developer`（详细输出） |
+| `-SkillsCopy` | switch | 仅影响 Skills 步骤：追加 `--copy`，适合 Windows symlink 权限受限场景 |
 
 ### 加载顺序
 
@@ -72,7 +73,7 @@ foreach ($stepFile in $stepFiles) {
 | 分组 | 步骤 | 安装模式 |
 |------|------|----------|
 | **基础环境** | NodeJS, Git, ClaudeCode, ApiKey | 仅一键安装 |
-| **进阶扩展** | Ccline, CcSwitch, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, CodexCli, AntigravityCli, OpenSpec | 一键或多选 |
+| **进阶扩展** | Ccline, ClaudeConfig, ClaudeMd, Mcp, CcgWorkflow, Skills, OpenSpec, CcSwitch, CodexCli, AntigravityCli | 一键或多选 |
 
 ### 核心函数
 
@@ -96,14 +97,14 @@ Main()
   │
   ├── [CLI 模式]（-Group 参数）
   │   ├── Basic → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary
-  │   ├── Advanced/OneClick → Invoke-GroupedInstall(进阶步骤) → Show-FinalSummary
+  │   ├── Advanced/OneClick → Invoke-GroupedInstall(进阶必选步骤，排除可选 Skills/CLI) → Show-FinalSummary
   │   └── Advanced/Select → Show-AdvancedSelectMenu → Invoke-GroupedInstall → Show-FinalSummary
   │
   └── [交互模式]（无 -Group 参数） while($true):
       ├── Select-TopLevelAction
       ├── [基础环境] → Invoke-GroupedInstall(基础步骤) → Show-FinalSummary
       ├── [进阶扩展] → Select-AdvancedAction
-      │   ├── [一键] → Invoke-GroupedInstall(进阶步骤)
+      │   ├── [一键] → Invoke-GroupedInstall(进阶必选步骤，排除可选 Skills/CLI)
       │   ├── [可选] → Show-AdvancedSelectMenu → Invoke-GroupedInstall
       │   └── [Esc] → 回到顶层
       └── [Esc] → 退出
@@ -115,11 +116,12 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
+| Skills | Claude Code Skills 用户级全局安装，可按类别选择 |
 | CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | AntigravityCli | Google Antigravity CLI，多模型协作使用 |
 
-在 Staged 模式下，用户通过**单选迭代式菜单**逐个选择步骤执行，每次执行后返回菜单。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，**全部包含**。
+在 Select/可选安装模式下，用户通过多选菜单选择步骤执行。可选步骤同样列出，带状态标签标识。在 OneClick 模式下，默认排除可选步骤。
 
 ---
 
