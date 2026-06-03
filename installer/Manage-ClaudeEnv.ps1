@@ -4,7 +4,7 @@
 
 param(
     # 管理动作（CLI 模式）
-    [ValidateSet("Update", "Mcp", "Provider", "")]
+    [ValidateSet("Update", "Mcp", "Provider", "Skills", "")]
     [string]$Action = "",
 
     # Update 专用参数
@@ -177,18 +177,18 @@ function Show-UpdateSummary {
 
     Write-Host ""
     if ($updated.Count -gt 0) {
-        Write-UiSuccess "  Updated ($($updated.Count)):"
+        Write-UiSuccess "  已更新 ($($updated.Count)):"
         foreach ($item in $updated) {
             Write-UiInfo "    $($item.Name)" -NoNewline
             Write-UiDim "  $($item.Items)"
         }
     } else {
-        Write-UiSuccess "  Updated (0)"
+        Write-UiSuccess "  已更新 (0)"
     }
 
     if ($upToDate.Count -gt 0) {
         Write-Host ""
-        Write-UiDim "  Already Up-to-Date ($($upToDate.Count)):"
+        Write-UiDim "  已是最新 ($($upToDate.Count)):"
         foreach ($item in $upToDate) {
             Write-UiDim "    $($item.Name)" -NoNewline
             if ($item.Items -match "fingerprint-match") {
@@ -201,7 +201,7 @@ function Show-UpdateSummary {
 
     if ($failed.Count -gt 0) {
         Write-Host ""
-        Write-UiDanger "  Failed ($($failed.Count)):"
+        Write-UiDanger "  失败 ($($failed.Count)):"
         foreach ($item in $failed) {
             Write-UiDanger "    $($item.Name)" -NoNewline
             Write-UiDanger "  $($item.Detail)"
@@ -210,7 +210,7 @@ function Show-UpdateSummary {
 
     if ($SkippedStepIds.Count -gt 0) {
         Write-Host ""
-        Write-UiWarning "  Skipped ($($SkippedStepIds.Count)):"
+        Write-UiWarning "  已跳过 ($($SkippedStepIds.Count)):"
         foreach ($stepId in $SkippedStepIds) {
             $stepConfig = Get-StepConfigById -StepId $stepId
             $stepName = if ($stepConfig) { $stepConfig.StepName } else { $stepId }
@@ -703,6 +703,7 @@ function Select-ManageAction {
         "更新管理   - 检测并更新已安装组件"
         "供应商管理  - 管理 AI 供应商配置"
         "MCP 管理   - 管理 MCP Server 配置"
+        "Skills 管理 - 安装/更新/卸载 Skills"
     )
 
     return Show-SingleSelectMenu -Title "CCQ 环境管理" -Options $options -DefaultIndex 0
@@ -719,7 +720,7 @@ function Main {
         # 欢迎横幅
         Show-CcqLogo -Subtitle "CCQ 环境管理"
 
-        Write-UiInfo "管理已安装组件的更新、供应商和 MCP 配置"
+        Write-UiInfo "管理已安装组件的更新、供应商、MCP 和 Skills 配置"
         Write-Host ""
 
         # ── CLI 参数模式
@@ -748,6 +749,9 @@ function Main {
                 }
                 "Mcp" {
                     Show-McpManageMenu
+                }
+                "Skills" {
+                    Show-SkillsManageMenu
                 }
             }
             if ($exitCode -ne 0) { exit $exitCode }
@@ -779,6 +783,10 @@ function Main {
                 2 {
                     # MCP 管理
                     Show-McpManageMenu
+                }
+                3 {
+                    # Skills 管理
+                    Show-SkillsManageMenu
                 }
             }
         }

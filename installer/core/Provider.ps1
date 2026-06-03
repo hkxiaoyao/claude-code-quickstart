@@ -764,7 +764,7 @@ function Show-ProviderStatus {
 
     foreach ($p in $profiles) {
         $isActive = $active -and $active.Key -eq $p.Key
-        $statusText = if ($isActive) { "Active" } else { "Inactive" }
+        $statusText = if ($isActive) { "已启用" } else { "未启用" }
         $color = if ($isActive) { "Success" } else { "Dim" }
 
         # 截断 BaseUrl 以适应列宽
@@ -1643,7 +1643,7 @@ function Show-ProviderDashboardFallback {
         } else {
             for ($i = 0; $i -lt $profiles.Count; $i++) {
                 $p = $profiles[$i]
-                $statusTag = if ($p.IsActive) { "Active" } else { "Inactive" }
+                $statusTag = if ($p.IsActive) { "已启用" } else { "未启用" }
                 Write-Host ("  [{0}] {1} - {2} ({3})" -f ($i + 1), $p.Name, $p.BaseUrl, $statusTag)
             }
             Write-Host ""

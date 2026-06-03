@@ -100,10 +100,10 @@ pwsh -File installer/Install-ClaudeEnv.ps1
 # 查看步骤列表
 pwsh -File installer/Install-ClaudeEnv.ps1 -ListSteps
 
-# 可选安装 Claude Code Skills（copy 模式）
+# 可选安装 Skills（copy 模式）
 pwsh -File installer/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsCopy
 
-# 管理已安装环境（更新/供应商/MCP）
+# 管理已安装环境（更新/供应商/MCP/Skills）
 pwsh -File installer/Manage-ClaudeEnv.ps1
 
 # 查看可更新步骤

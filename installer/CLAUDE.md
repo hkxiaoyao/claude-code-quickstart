@@ -11,7 +11,7 @@
 |------|---------|------|
 | `Bootstrap-ClaudeEnv.ps1` | 5.1+ | 前置检测：Windows 版本 → winget → Windows Terminal → **PS 7 安装** → Git Bash UTF-8 |
 | `Install-ClaudeEnv.ps1` | **7.0+** | 安装入口（推荐）：基础环境（NodeJS~ApiKey）/ 进阶扩展（增强配置、MCP、Skills、Workflow）两级分组 |
-| `Manage-ClaudeEnv.ps1` | **7.0+** | 统一管理：更新已安装组件 / 供应商管理（CRUD + 切换）/ MCP Server 管理 |
+| `Manage-ClaudeEnv.ps1` | **7.0+** | 统一管理：更新已安装组件 / 供应商管理（CRUD + 切换）/ MCP Server 管理 / Skills 管理 |
 
 ---
 
@@ -116,7 +116,7 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
-| Skills | Claude Code Skills 用户级全局安装，可按类别选择 |
+| Skills | Skills 用户级全局安装/更新/卸载，可按类别选择 |
 | CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | AntigravityCli | Google Antigravity CLI，多模型协作使用 |
@@ -127,25 +127,26 @@ Main()
 
 ## Manage-ClaudeEnv.ps1
 
-**用途**：PS 7 统一管理入口，整合更新管理 + 供应商管理 + MCP 管理。
+**用途**：PS 7 统一管理入口，整合更新管理 + 供应商管理 + MCP 管理 + Skills 管理。
 
 ### 参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `-Action` | string | 管理动作：`Update` / `Mcp` / `Provider`（交互模式时可省略） |
+| `-Action` | string | 管理动作：`Update` / `Mcp` / `Provider` / `Skills`（交互模式时可省略） |
 | `-ListUpdates` | switch | 列出所有可更新步骤及状态后退出 |
 | `-Provider` | string | CLI 直接切换供应商（如 `-Provider zhipu`） |
 | `-ListProviders` | switch | 列出所有已配置供应商后退出 |
 | `-OutputMode` | string | `Normal`（默认） / `Developer`（详细输出） |
 
-### 三大子功能
+### 四大子功能
 
 | 子功能 | 来源 | 说明 |
 |--------|------|------|
 | 更新管理 | 迁移自旧 `Update-ClaudeEnv.ps1` | Mutex + 快照 + 指纹预检 + 交互多选 |
 | 供应商管理 | `core/Provider.ps1` | 完整 CRUD + 自动同步 + 切换 |
 | MCP 管理 | `core/McpManager.ps1` | 状态查看 / 启用/禁用 / 删除 |
+| Skills 管理 | `steps/Skills.ps1` | 状态查看 / 安装或更新 / 卸载 |
 
 ### 可更新步骤（8 个）
 
@@ -182,13 +183,16 @@ Main()
   │   │   ├── [if -ListProviders] Show-ProviderStatus → 退出
   │   │   ├── [if -Provider] Switch-Provider → 退出
   │   │   └── Show-ProviderManageMenu（交互式 CRUD）
-  │   └── -Action Mcp
-  │       └── Show-McpManageMenu
+  │   ├── -Action Mcp
+  │   │   └── Show-McpManageMenu
+  │   └── -Action Skills
+  │       └── Show-SkillsManageMenu
   │
   └── [交互模式]（无 -Action 参数） while($true):
-      ├── Select-ManageAction（更新管理 / 供应商管理 / MCP 管理）
+      ├── Select-ManageAction（更新管理 / 供应商管理 / MCP 管理 / Skills 管理）
       ├── [更新管理] → Invoke-UpdateAction
       ├── [供应商管理] → Show-ProviderManageMenu
       ├── [MCP 管理] → Show-McpManageMenu
+      ├── [Skills 管理] → Show-SkillsManageMenu
       └── [Esc] → 退出
 ```

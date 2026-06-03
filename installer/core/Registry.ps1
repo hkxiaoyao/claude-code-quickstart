@@ -171,8 +171,8 @@ function Get-StepRegistry {
         },
         @{
             StepId          = "Skills"
-            StepName        = "Claude Code Skills"
-            Description     = "安装 Claude Code Skills（用户级全局，可按类别选择）"
+            StepName        = "Skills"
+            Description     = "安装/更新 Skills（用户级全局，可按类别选择）"
             StepFile        = "steps/Skills.ps1"
             TestFunction    = "Test-SkillsInstalled"
             InstallFunction = "Install-Skills"

@@ -307,11 +307,45 @@ function Register-CcqShortcut {
         return
     }
 
+    $installScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1"
     $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1"
+
+    $shortcutContent = @(
+        "function ccq {"
+        "    param("
+        "        [ValidateSet('安装面板', '管理面板', 'Install', 'Manage', '')]"
+        "        [string]`$Panel = ''"
+        "    )"
+        ""
+        "    `$installScriptUrl = '$installScriptUrl'"
+        "    `$manageScriptUrl = '$manageScriptUrl'"
+        ""
+        "    if ([string]::IsNullOrWhiteSpace(`$Panel)) {"
+        "        Write-Host ''"
+        "        Write-Host 'CCQ 面板选择'"
+        "        Write-Host '  1. 安装面板'"
+        "        Write-Host '  2. 管理面板'"
+        "        Write-Host ''"
+        "        `$choice = Read-Host '请选择 (1/2，直接回车进入管理面板)'"
+        "        switch (`$choice) {"
+        "            '1' { `$Panel = 'Install' }"
+        "            '2' { `$Panel = 'Manage' }"
+        "            ''  { `$Panel = 'Manage' }"
+        "            default { Write-Host '已取消'; return }"
+        "        }"
+        "    }"
+        ""
+        "    switch (`$Panel) {"
+        "        { `$_ -in @('Install', '安装面板') } { irm `$installScriptUrl | iex }"
+        "        { `$_ -in @('Manage', '管理面板') } { irm `$manageScriptUrl | iex }"
+        "        default { Write-Host ('未知面板: ' + `$Panel) }"
+        "    }"
+        "}"
+    )
 
     try {
         # 1) 当前会话立即可用
-        $ccqScript = [ScriptBlock]::Create("irm '$manageScriptUrl' | iex")
+        $ccqScript = [ScriptBlock]::Create(($shortcutContent -join "`n"))
         Set-Item -Path Function:\global:ccq -Value $ccqScript
 
         # 2) Profile 持久化（仅写 SHORTCUTS 子段）
@@ -319,12 +353,6 @@ function Register-CcqShortcut {
         if ([string]::IsNullOrWhiteSpace($profilePath)) {
             return
         }
-
-        $shortcutContent = @(
-            "function ccq {"
-            "    irm '$manageScriptUrl' | iex"
-            "}"
-        )
 
         # 先迁移旧结构（幂等）
         if (Test-Path $profilePath) {
@@ -711,7 +739,7 @@ function Show-FinalSummary {
     if ($Results.Failed -eq 0) {
         Write-Host ""
         Write-UiPrimary "快速开始：" -Level Detail
-        Write-UiInfo "  ccq             - CCQ 管理入口（更新/供应商/MCP）" -Level Detail
+        Write-UiInfo "  ccq             - CCQ 面板入口（安装面板/管理面板）" -Level Detail
         Write-UiInfo "  claude          - 启动 Claude Code" -Level Detail
         Write-UiInfo "  claude --help   - 查看帮助信息" -Level Detail
     } else {

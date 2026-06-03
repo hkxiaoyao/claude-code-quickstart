@@ -1722,6 +1722,23 @@ function Get-McpStatus {
     return $results
 }
 
+function Get-McpStatusLabel {
+    <#
+    .SYNOPSIS
+    将内部 MCP 状态转换为用户可见中文状态。
+    #>
+    param([string]$Status)
+
+    switch ($Status) {
+        "Active"   { return "已启用" }
+        "Disabled" { return "已禁用" }
+        "Missing"  { return "未安装" }
+        "Custom"   { return "自定义" }
+        "Unknown"  { return "未知" }
+        default    { return $Status }
+    }
+}
+
 function Show-McpStatusTable {
     <#
     .SYNOPSIS
@@ -1758,7 +1775,7 @@ function Show-McpStatusTable {
     Write-UiDim ("  " + [string]::new("-", $sepWidth))
 
     foreach ($item in $StatusList) {
-        $statusText = "[$($item.Status)]"
+        $statusText = "[$(Get-McpStatusLabel -Status $item.Status)]"
         $credText = if ($item.HasCredentials) { "有" } else { "-" }
 
         $color = switch ($item.Status) {
@@ -2569,7 +2586,7 @@ function Show-McpManageMenu {
 
         switch ($actionMap[$choice]) {
             "toggle" {
-                $menuOptions = @($toggleable | ForEach-Object { "$($_.Name) [$($_.Status)]" })
+                $menuOptions = @($toggleable | ForEach-Object { "$($_.Name) [$(Get-McpStatusLabel -Status $_.Status)]" })
                 $defaultSelected = @()
                 for ($i = 0; $i -lt $toggleable.Count; $i++) {
                     if ($toggleable[$i].Status -eq "Active") {
@@ -2577,7 +2594,7 @@ function Show-McpManageMenu {
                     }
                 }
 
-                $selections = Show-MultiSelectMenu -Title "切换 MCP 状态（空格切换，Active=已勾选）" -Options $menuOptions -DefaultSelected $defaultSelected
+                $selections = Show-MultiSelectMenu -Title "切换 MCP 状态（空格切换，已启用=已勾选）" -Options $menuOptions -DefaultSelected $defaultSelected
                 if ($null -ne $selections) {
                     $selectedIndices = @($selections)
                     $toggleIds = @()
@@ -2598,7 +2615,7 @@ function Show-McpManageMenu {
                 }
             }
             "delete" {
-                $menuOptions = @($removable | ForEach-Object { "$($_.Name) [$($_.Status)]" })
+                $menuOptions = @($removable | ForEach-Object { "$($_.Name) [$(Get-McpStatusLabel -Status $_.Status)]" })
                 $selected = Show-SingleSelectMenu -Title "选择要删除的 MCP" -Options $menuOptions -DefaultIndex 0
                 if ($selected -ge 0 -and $selected -lt $removable.Count) {
                     Remove-McpServer $removable[$selected].Id

@@ -76,7 +76,7 @@ function Update-<StepId> {
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
 | CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
-| Skills | Claude Code Skills | `Skills.ps1` | **✓** | false | — | NodeJS, ClaudeCode | 进阶 |
+| Skills | Skills | `Skills.ps1` | **✓** | false | — | NodeJS, ClaudeCode | 进阶 |
 | OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 | CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
@@ -371,26 +371,28 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 
 ---
 
-## Skills — Claude Code Skills [可选]
+## Skills — Skills [可选]
 
 **文件**：`Skills.ps1`
 **依赖**：NodeJS + ClaudeCode
 
-**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code --global`，安装 Claude Code Skills 到用户级 `~/.claude/skills`。默认只勾选 `find-skills`，集合类条目默认不勾选。
+**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，安装或更新 Claude Code 全局 Skills。默认只勾选 `find-skills`，集合类条目默认不勾选。Manage 脚本中的 Skills 管理还支持状态查看与卸载。
 
 **catalogue 来源**：固化 `tech-notes/docs/ai/skills.md` 当前 12 个条目，运行时不依赖外部 Markdown 或本地 notes 路径。
 
 **安装策略**：
 - 所有命令通过 `Invoke-ExternalCommand -Command "npx" -Arguments <string[]>` 执行，禁止 shell 字符串拼接
-- 固定追加 `--agent claude-code` 与 `--global`
+- 固定追加 `--agent claude-code` 与 `-g`
 - `find-skills` / `fastapi` 等指定 skill 条目追加 `--skill <name>`
 - `-SkillsCopy` 或交互选择 copy 模式时追加 `--copy`
-- 单项失败不阻止后续已选择条目继续执行，最终摘要列出失败项
+- 单项失败不阻止后续已选择条目继续执行，最终摘要列出失败项和实际 Skill name
 
-**检测与验证**：
-- `Test-SkillsInstalled` 实时检测 `~/.claude/skills`，不写持久化状态文件
-- 指定 skill 条目检测 `DetectName` 目录（如 `find-skills`、`fastapi`）
-- 集合类条目只依赖 skills CLI 安装结果，不强行断言展开目录
+**检测、更新与卸载**：
+- `Test-SkillsInstalled` 通过 `npx --yes skills list -g -a claude-code --json` 实时检测，不扫描目录、不写持久化状态文件
+- catalogue 使用 `ExpectedNames` 明确 source 实际包含的 Skill name；集合类条目按 `已安装数/期望数` 判断 `已安装` / `部分安装` / `未安装`
+- source 未声明期望名称时可用 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现实际名称并缓存到本次进程内
+- 安装前后均使用 CLI 快照，记录本次新增的实际 Skill name 与缺失项
+- Manage → Skills 管理通过 `npx --yes skills remove <names...> -g -a claude-code --yes` 卸载，不直接删除目录
 
 ---
 
