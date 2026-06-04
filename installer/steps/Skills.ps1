@@ -23,198 +23,112 @@ $script:LastSkillsInstallData = @{}
 
 $script:SkillsCatalogue = @(
     @{
-        Id            = "find-skills"
-        Category      = "发现"
-        Name          = "find-skills"
-        Source        = "vercel-labs/skills"
-        SkillName     = "find-skills"
-        Description   = "Skills 发现辅助技能"
-        Default       = $true
-        ExpectedNames = @("find-skills")
+        Id          = "find-skills"
+        Category    = "发现"
+        Name        = "find-skills"
+        Source      = "vercel-labs/skills"
+        SkillName   = "find-skills"
+        Description = "Skills 发现辅助技能"
+        Default     = $true
     },
     @{
-        Id            = "anthropics-skills"
-        Category      = "公共"
-        Name          = "官方 Skills"
-        Source        = "anthropics/skills"
-        SkillName     = ""
-        Description   = "Anthropic 官方 Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "claude-api",
-            "docx",
-            "pdf",
-            "pptx",
-            "xlsx",
-            "algorithmic-art",
-            "brand-guidelines",
-            "canvas-design",
-            "doc-coauthoring",
-            "frontend-design",
-            "internal-comms",
-            "mcp-builder",
-            "skill-creator",
-            "slack-gif-creator",
-            "theme-factory",
-            "web-artifacts-builder",
-            "webapp-testing",
-            "template-skill"
-        )
+        Id          = "anthropics-skills"
+        Category    = "公共"
+        Name        = "官方 Skills"
+        Source      = "anthropics/skills"
+        SkillName   = ""
+        Description = "Anthropic 官方 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "vercel-agent-skills"
-        Category      = "前端"
-        Name          = "Vercel Agent Skills"
-        Source        = "vercel-labs/agent-skills"
-        SkillName     = ""
-        Description   = "Vercel Agent Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "vercel-composition-patterns",
-            "deploy-to-vercel",
-            "vercel-react-best-practices",
-            "vercel-react-native-skills",
-            "vercel-react-view-transitions",
-            "vercel-cli-with-tokens",
-            "vercel-optimize",
-            "web-design-guidelines",
-            "writing-guidelines"
-        )
+        Id          = "vercel-agent-skills"
+        Category    = "前端"
+        Name        = "Vercel Agent Skills"
+        Source      = "vercel-labs/agent-skills"
+        SkillName   = ""
+        Description = "Vercel Agent Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "vue-skills"
-        Category      = "前端"
-        Name          = "Vue Skills"
-        Source        = "vuejs-ai/skills"
-        SkillName     = ""
-        Description   = "Vue 开发 Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "create-adaptable-composable",
-            "vue-best-practices",
-            "vue-debug-guides",
-            "vue-jsx-best-practices",
-            "vue-options-api-best-practices",
-            "vue-pinia-best-practices",
-            "vue-router-best-practices",
-            "vue-testing-best-practices"
-        )
+        Id          = "vue-skills"
+        Category    = "前端"
+        Name        = "Vue Skills"
+        Source      = "vuejs-ai/skills"
+        SkillName   = ""
+        Description = "Vue 开发 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "ui-ux-pro-max"
-        Category      = "前端"
-        Name          = "UI UX Pro Max"
-        Source        = "nextlevelbuilder/ui-ux-pro-max-skill"
-        SkillName     = ""
-        Description   = "UI/UX 设计与前端体验技能"
-        Default       = $false
-        ExpectedNames = @(
-            "ui-ux-pro-max",
-            "ckm:banner-design",
-            "ckm:brand",
-            "ckm:design",
-            "ckm:design-system",
-            "ckm:slides",
-            "ckm:ui-styling"
-        )
+        Id          = "ui-ux-pro-max"
+        Category    = "前端"
+        Name        = "UI UX Pro Max"
+        Source      = "nextlevelbuilder/ui-ux-pro-max-skill"
+        SkillName   = ""
+        Description = "UI/UX 设计与前端体验技能"
+        Default     = $false
     },
     @{
-        Id            = "shadcn-ui-skills"
-        Category      = "前端"
-        Name          = "shadcn/ui Skills"
-        Source        = "shadcn/ui"
-        SkillName     = ""
-        Description   = "shadcn/ui 组件开发 Skills 集合"
-        Default       = $false
-        ExpectedNames = @("shadcn")
+        Id          = "shadcn-ui-skills"
+        Category    = "前端"
+        Name        = "shadcn/ui Skills"
+        Source      = "shadcn/ui"
+        SkillName   = ""
+        Description = "shadcn/ui 组件开发 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "wot-ui-skills"
-        Category      = "前端"
-        Name          = "Wot UI Skills"
-        Source        = "wot-ui/open-wot"
-        SkillName     = ""
-        Description   = "Wot UI 开发 Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "create-wot-ui-theme",
-            "migrate-v1-to-v2",
-            "wot-ui-cli",
-            "wot-ui-unocss-preset-guide",
-            "wot-ui-v2"
-        )
+        Id          = "wot-ui-skills"
+        Category    = "前端"
+        Name        = "Wot UI Skills"
+        Source      = "wot-ui/open-wot"
+        SkillName   = ""
+        Description = "Wot UI 开发 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "ant-design-skills"
-        Category      = "前端"
-        Name          = "Ant Design Skills"
-        Source        = "ant-design/ant-design-cli"
-        SkillName     = ""
-        Description   = "Ant Design 开发 Skills 集合"
-        Default       = $false
-        ExpectedNames = @("antd")
+        Id          = "ant-design-skills"
+        Category    = "前端"
+        Name        = "Ant Design Skills"
+        Source      = "ant-design/ant-design-cli"
+        SkillName   = ""
+        Description = "Ant Design 开发 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "ant-design-x-skills"
-        Category      = "前端"
-        Name          = "Ant Design X Skills"
-        Source        = "https://github.com/ant-design/x/tree/main/packages/x-skill"
-        SkillName     = ""
-        Description   = "Ant Design X Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "x-components",
-            "x-markdown",
-            "use-x-chat",
-            "x-card",
-            "x-chat-provider",
-            "x-request"
-        )
+        Id          = "ant-design-x-skills"
+        Category    = "前端"
+        Name        = "Ant Design X Skills"
+        Source      = "https://github.com/ant-design/x/tree/main/packages/x-skill"
+        SkillName   = ""
+        Description = "Ant Design X Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "fastapi-skills"
-        Category      = "后端"
-        Name          = "FastAPI Skills"
-        Source        = "https://github.com/fastapi/fastapi"
-        SkillName     = "fastapi"
-        Description   = "FastAPI 开发 Skills"
-        Default       = $false
-        ExpectedNames = @("fastapi")
+        Id          = "fastapi-skills"
+        Category    = "后端"
+        Name        = "FastAPI Skills"
+        Source      = "https://github.com/fastapi/fastapi"
+        SkillName   = "fastapi"
+        Description = "FastAPI 开发 Skills"
+        Default     = $false
     },
     @{
-        Id            = "langchain-skills"
-        Category      = "后端"
-        Name          = "LangChain Skills"
-        Source        = "langchain-ai/langchain-skills"
-        SkillName     = ""
-        Description   = "LangChain 开发 Skills 集合"
-        Default       = $false
-        ExpectedNames = @(
-            "deep-agents-core",
-            "deep-agents-memory",
-            "deep-agents-orchestration",
-            "framework-selection",
-            "langchain-dependencies",
-            "langchain-fundamentals",
-            "langchain-middleware",
-            "langchain-rag",
-            "langgraph-cli",
-            "langgraph-fundamentals",
-            "langgraph-human-in-the-loop",
-            "langgraph-persistence",
-            "managed-deep-agents",
-            "swarm"
-        )
+        Id          = "langchain-skills"
+        Category    = "后端"
+        Name        = "LangChain Skills"
+        Source      = "langchain-ai/langchain-skills"
+        SkillName   = ""
+        Description = "LangChain 开发 Skills 集合"
+        Default     = $false
     },
     @{
-        Id            = "ppt-master"
-        Category      = "其他"
-        Name          = "PPT Master"
-        Source        = "hugohe3/ppt-master"
-        SkillName     = ""
-        Description   = "PPT 生成与演示文稿技能"
-        Default       = $false
-        ExpectedNames = @("ppt-master")
+        Id          = "ppt-master"
+        Category    = "其他"
+        Name        = "PPT Master"
+        Source      = "hugohe3/ppt-master"
+        SkillName   = ""
+        Description = "PPT 生成与演示文稿技能"
+        Default     = $false
     }
 )
 
@@ -230,11 +144,14 @@ function Get-SkillsCatalogue {
     <#
     .SYNOPSIS
     返回受控 Skills catalogue，并校验字段完整性。
+
+    .NOTES
+    catalogue 只描述 source 与展示元数据；实际 Skill name 必须通过 skills CLI 动态发现。
     #>
     param()
 
     $catalogue = @($script:SkillsCatalogue)
-    $requiredFields = @("Id", "Category", "Name", "Source", "SkillName", "Description", "Default", "ExpectedNames")
+    $requiredFields = @("Id", "Category", "Name", "Source", "SkillName", "Description", "Default")
     $seenIds = @{}
 
     foreach ($entry in $catalogue) {
@@ -250,6 +167,9 @@ function Get-SkillsCatalogue {
         }
         if ($seenIds.ContainsKey($id)) {
             throw "Skills catalogue ID 重复: $id"
+        }
+        if ($entry.ContainsKey("ExpectedNames")) {
+            throw "Skills catalogue 条目 $id 禁止写死 ExpectedNames，请通过 CLI 动态发现"
         }
         $seenIds[$id] = $true
 
@@ -312,10 +232,32 @@ function Test-SkillNameIgnored {
     return $false
 }
 
-function Get-SkillEntryExpectedNames {
+function Get-SkillsDiscoveryCacheKey {
     <#
     .SYNOPSIS
-    返回 catalogue 条目的期望 Skill name 集合。
+    生成 Skills source 动态发现缓存键。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry
+    )
+
+    $source = [string]$Entry["Source"]
+    $skillName = ""
+    if ($Entry.ContainsKey("SkillName")) {
+        $skillName = [string]$Entry["SkillName"]
+    }
+
+    return "$source`n$skillName"
+}
+
+function Get-SkillEntryDiscoveredNames {
+    <#
+    .SYNOPSIS
+    通过 skills CLI 动态发现 catalogue 条目的实际 Skill name 集合。
+
+    .NOTES
+    catalogue 只保存 source 元数据；SkillName 仅作为 CLI 的 --skill 选择器参与动态发现。
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -324,30 +266,18 @@ function Get-SkillEntryExpectedNames {
         [switch]$AllowSourceDiscovery
     )
 
-    $names = [System.Collections.Generic.List[string]]::new()
-
-    if ($Entry.ContainsKey("ExpectedNames")) {
-        foreach ($name in @($Entry["ExpectedNames"])) {
-            $value = [string]$name
-            if (-not [string]::IsNullOrWhiteSpace($value)) {
-                [void]$names.Add($value.Trim())
-            }
-        }
+    if (-not $AllowSourceDiscovery) {
+        return @()
     }
 
-    if ($Entry.ContainsKey("SkillName")) {
-        $skillName = [string]$Entry["SkillName"]
-        if (-not [string]::IsNullOrWhiteSpace($skillName)) {
-            [void]$names.Add($skillName.Trim())
-        }
+    $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $Entry
+    if ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
+        return @($script:SkillsSourceDiscoveryCache[$cacheKey])
     }
 
-    $uniqueNames = @(Get-UniqueSkillNames -Names @($names))
-    if ($uniqueNames.Count -eq 0 -and $AllowSourceDiscovery) {
-        $uniqueNames = @(Get-SkillsSourceDiscoveredNames -Entry $Entry)
-    }
-
-    return @($uniqueNames)
+    Write-UiDim "  动态发现 Skills: $($Entry['Source'])" -Level Debug
+    $result = Invoke-SkillsSourceListDiscovery -Entry $Entry
+    return @($result["Names"])
 }
 
 function Remove-SkillsAnsiSequences {
@@ -395,10 +325,10 @@ function ConvertFrom-SkillsSourceListOutput {
     return @(Get-UniqueSkillNames -Names @($names))
 }
 
-function Get-SkillsSourceDiscoveredNames {
+function Invoke-SkillsSourceListDiscovery {
     <#
     .SYNOPSIS
-    使用 skills CLI 动态列出 source 中包含的实际 Skill name。
+    执行一次 skills add --list 动态发现，并写入本进程缓存。
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -407,9 +337,20 @@ function Get-SkillsSourceDiscoveredNames {
 
     $source = [string]$Entry["Source"]
     $skillName = [string]$Entry["SkillName"]
-    $cacheKey = "$source`n$skillName"
+    $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $Entry
+    $result = @{
+        Success      = $false
+        CacheKey     = $cacheKey
+        Names        = @()
+        ErrorMessage = ""
+        Source       = $source
+        SkillName    = $skillName
+    }
+
     if ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
-        return @($script:SkillsSourceDiscoveryCache[$cacheKey])
+        $result.Success = $true
+        $result.Names = @($script:SkillsSourceDiscoveryCache[$cacheKey])
+        return $result
     }
 
     $arguments = @("--yes", "skills", "add", $source, "--list", "-g", "--agent", "claude-code")
@@ -425,21 +366,414 @@ function Get-SkillsSourceDiscoveredNames {
             -TimeoutSeconds 180 `
             -RetryCount 0
 
-        if (-not $commandResult.Success) {
-            $script:SkillsSourceDiscoveryCache[$cacheKey] = @()
-            return @()
-        }
-
         $text = "$($commandResult.Output)`n$($commandResult.Error)"
         $names = @(ConvertFrom-SkillsSourceListOutput -Text $text)
+        $result.Success = $true
+        $result.Names = @($names)
         $script:SkillsSourceDiscoveryCache[$cacheKey] = @($names)
-        return @($names)
+        return $result
     }
     catch {
-        Write-UiDim "Skills source 动态发现失败: $source ($($_.Exception.Message))" -Level Debug
+        $result.ErrorMessage = $_.Exception.Message
+        Write-UiDim "Skills source 动态发现失败: $source ($($result.ErrorMessage))" -Level Debug
         $script:SkillsSourceDiscoveryCache[$cacheKey] = @()
-        return @()
+        return $result
     }
+}
+
+function Get-SkillsSourceDiscoveredNames {
+    <#
+    .SYNOPSIS
+    使用 skills CLI 动态列出 source 中包含的实际 Skill name。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry
+    )
+
+    $result = Invoke-SkillsSourceListDiscovery -Entry $Entry
+    return @($result["Names"])
+}
+
+function Get-SkillsDiscoveryValue {
+    <#
+    .SYNOPSIS
+    从 hashtable 或对象中安全读取动态发现结果字段。
+    #>
+    param(
+        [AllowNull()]
+        [object]$InputObject,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+
+        [AllowNull()]
+        [object]$DefaultValue = $null
+    )
+
+    if ($null -eq $InputObject) {
+        return $DefaultValue
+    }
+    if ($InputObject -is [hashtable] -and $InputObject.ContainsKey($Name)) {
+        return $InputObject[$Name]
+    }
+
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -ne $property) {
+        return $property.Value
+    }
+
+    return $DefaultValue
+}
+
+function Invoke-SkillsCatalogueDiscoveryParallel {
+    <#
+    .SYNOPSIS
+    使用 Start-ThreadJob 对未缓存 catalogue 条目执行有界并发动态发现。
+    #>
+    param(
+        [array]$Entries = @(),
+
+        [int]$MaxConcurrency = 2,
+
+        [switch]$ShowProgress,
+
+        [int]$TotalCount = 0
+    )
+
+    $queue = [System.Collections.Queue]::new()
+    foreach ($entry in @($Entries)) {
+        $queue.Enqueue($entry)
+    }
+
+    $jobs = @()
+    $results = [System.Collections.Generic.List[hashtable]]::new()
+    $completedCount = 0
+    if ($TotalCount -le 0) {
+        $TotalCount = @($Entries).Count
+    }
+
+    $jobScript = {
+        param(
+            [hashtable]$Entry,
+            [string]$CacheKey
+        )
+
+        $source = [string]$Entry["Source"]
+        $skillName = [string]$Entry["SkillName"]
+        $arguments = @("--yes", "skills", "add", $source, "--list", "-g", "--agent", "claude-code")
+        if (-not [string]::IsNullOrWhiteSpace($skillName)) {
+            $arguments += @("--skill", $skillName)
+        }
+
+        try {
+            $actualFileName = "npx"
+            $actualArguments = $arguments
+            try {
+                $cmdInfo = Get-Command "npx" -ErrorAction Stop
+                if ($cmdInfo.CommandType -eq "Application" -or $cmdInfo.CommandType -eq "ExternalScript") {
+                    $extension = [System.IO.Path]::GetExtension($cmdInfo.Source).ToLower()
+                    if ($extension -eq ".cmd" -or $extension -eq ".bat") {
+                        $cmdPath = $cmdInfo.Source
+                        if ($cmdPath -match "\s") {
+                            $cmdPath = "`"$cmdPath`""
+                        }
+                        $fullCommand = $cmdPath
+                        if ($arguments.Count -gt 0) {
+                            $fullCommand += " " + ($arguments -join " ")
+                        }
+                        $actualFileName = "cmd.exe"
+                        $actualArguments = @("/d", "/s", "/c", $fullCommand)
+                    } elseif ($extension -eq ".ps1") {
+                        $ps1Path = $cmdInfo.Source
+                        if ($ps1Path -match "\s") {
+                            $ps1Path = "`"$ps1Path`""
+                        }
+                        $actualFileName = "pwsh.exe"
+                        $actualArguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $ps1Path) + $arguments
+                    } elseif ($extension -eq ".exe") {
+                        $actualFileName = $cmdInfo.Source
+                    }
+                }
+            }
+            catch {
+                $actualFileName = "npx"
+                $actualArguments = $arguments
+            }
+
+            $processInfo = [System.Diagnostics.ProcessStartInfo]::new()
+            $processInfo.FileName = $actualFileName
+            $processInfo.Arguments = $actualArguments -join " "
+            $processInfo.UseShellExecute = $false
+            $processInfo.RedirectStandardOutput = $true
+            $processInfo.RedirectStandardError = $true
+            $processInfo.CreateNoWindow = $true
+            try {
+                $processInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+                $processInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+            } catch { }
+
+            $process = [System.Diagnostics.Process]::new()
+            $process.StartInfo = $processInfo
+            try {
+                [void]$process.Start()
+                $outputTask = $process.StandardOutput.ReadToEndAsync()
+                $errorTask = $process.StandardError.ReadToEndAsync()
+                if (-not $process.WaitForExit(180000)) {
+                    $process.Kill()
+                    throw "skills add --list 执行超时: $source"
+                }
+                $process.WaitForExit()
+                $outputText = $outputTask.GetAwaiter().GetResult()
+                $errorText = $errorTask.GetAwaiter().GetResult()
+                $exitCode = [int]$process.ExitCode
+                return @{
+                    Success      = ($exitCode -eq 0)
+                    CacheKey     = $CacheKey
+                    Source       = $source
+                    SkillName    = $skillName
+                    Output       = $outputText.Trim()
+                    Error        = $errorText.Trim()
+                    ErrorMessage = if ($exitCode -eq 0) { "" } else { "skills add --list 退出码: $exitCode" }
+                }
+            }
+            finally {
+                if ($null -ne $process) {
+                    if (-not $process.HasExited) {
+                        try { $process.Kill() } catch { }
+                    }
+                    $process.Dispose()
+                }
+            }
+        }
+        catch {
+            return @{
+                Success      = $false
+                CacheKey     = $CacheKey
+                Source       = $source
+                SkillName    = $skillName
+                Output       = ""
+                Error        = ""
+                ErrorMessage = $_.Exception.Message
+            }
+        }
+    }
+
+    try {
+        while ($queue.Count -gt 0 -or $jobs.Count -gt 0) {
+            while ($queue.Count -gt 0 -and $jobs.Count -lt $MaxConcurrency) {
+                $entry = [hashtable]$queue.Dequeue()
+                $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $entry
+                $job = Start-ThreadJob -ScriptBlock $jobScript -ArgumentList @($entry, $cacheKey)
+                $jobs += @{
+                    Job      = $job
+                    Entry    = $entry
+                    CacheKey = $cacheKey
+                }
+            }
+
+            if ($jobs.Count -eq 0) {
+                continue
+            }
+
+            $activeJobs = @($jobs | ForEach-Object { $_["Job"] })
+            $finishedJobs = @(Wait-Job -Job $activeJobs -Any -Timeout 1)
+            if ($finishedJobs.Count -eq 0) {
+                continue
+            }
+
+            foreach ($finishedJob in $finishedJobs) {
+                $jobItems = @($jobs | Where-Object { [int]$_["Job"].Id -eq [int]$finishedJob.Id })
+                if ($jobItems.Count -eq 0) {
+                    continue
+                }
+
+                $jobItem = $jobItems[0]
+                $entry = [hashtable]$jobItem["Entry"]
+                $cacheKey = [string]$jobItem["CacheKey"]
+                $entryName = [string]$entry["Name"]
+                $discovery = $null
+
+                try {
+                    $jobOutput = @(Receive-Job -Job $finishedJob -ErrorAction Stop)
+                    $rawResult = if ($jobOutput.Count -gt 0) { $jobOutput[-1] } else { $null }
+                    $jobSuccess = [bool](Get-SkillsDiscoveryValue -InputObject $rawResult -Name "Success" -DefaultValue $false)
+                    if ($jobSuccess) {
+                        $outputText = [string](Get-SkillsDiscoveryValue -InputObject $rawResult -Name "Output" -DefaultValue "")
+                        $errorText = [string](Get-SkillsDiscoveryValue -InputObject $rawResult -Name "Error" -DefaultValue "")
+                        $names = @(ConvertFrom-SkillsSourceListOutput -Text "$outputText`n$errorText")
+                        $script:SkillsSourceDiscoveryCache[$cacheKey] = @($names)
+                        $discovery = @{
+                            Success      = $true
+                            CacheKey     = $cacheKey
+                            Names        = @($names)
+                            ErrorMessage = ""
+                            Source       = [string]$entry["Source"]
+                            SkillName    = [string]$entry["SkillName"]
+                        }
+                    } else {
+                        $errorMessage = [string](Get-SkillsDiscoveryValue -InputObject $rawResult -Name "ErrorMessage" -DefaultValue "并发动态发现失败")
+                        Write-UiDim "Skills source 并发动态发现失败，改用串行重试: $([string]$entry['Source']) ($errorMessage)" -Level Debug
+                        $discovery = Invoke-SkillsSourceListDiscovery -Entry $entry
+                    }
+                }
+                catch {
+                    Write-UiDim "Skills source 并发动态发现异常，改用串行重试: $([string]$entry['Source']) ($($_.Exception.Message))" -Level Debug
+                    $discovery = Invoke-SkillsSourceListDiscovery -Entry $entry
+                }
+                finally {
+                    Remove-Job -Job $finishedJob -Force -ErrorAction SilentlyContinue
+                }
+
+                $completedCount++
+                if ($ShowProgress) {
+                    if ([bool]$discovery["Success"]) {
+                        Write-UiInfo "  - [$completedCount/$TotalCount] ${entryName}: 发现 $(@($discovery['Names']).Count) 个"
+                    } else {
+                        Write-UiWarning "  - [$completedCount/$TotalCount] ${entryName}: 发现失败，状态未知"
+                    }
+                }
+
+                [void]$results.Add($discovery)
+                $jobs = @($jobs | Where-Object { [int]$_["Job"].Id -ne [int]$finishedJob.Id })
+            }
+        }
+    }
+    finally {
+        foreach ($jobItem in @($jobs)) {
+            $job = $jobItem["Job"]
+            if ($null -ne $job) {
+                Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    return @($results)
+}
+
+function Resolve-SkillsCatalogueDiscovery {
+    <#
+    .SYNOPSIS
+    批量解析 catalogue 动态发现结果，缓存命中直接复用，未命中使用有界并发预取。
+    #>
+    param(
+        [array]$Entries = @(),
+
+        [int]$MaxConcurrency = 2,
+
+        [switch]$ShowProgress
+    )
+
+    $resultsByKey = @{}
+    $pending = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($entry in @($Entries)) {
+        $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $entry
+        if ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
+            $resultsByKey[$cacheKey] = @{
+                Success      = $true
+                CacheKey     = $cacheKey
+                Names        = @($script:SkillsSourceDiscoveryCache[$cacheKey])
+                ErrorMessage = ""
+                Source       = [string]$entry["Source"]
+                SkillName    = [string]$entry["SkillName"]
+            }
+        } else {
+            [void]$pending.Add($entry)
+        }
+    }
+
+    $pendingCount = $pending.Count
+    if ($pendingCount -eq 0) {
+        return $resultsByKey
+    }
+
+    if ($MaxConcurrency -lt 1) {
+        $MaxConcurrency = 1
+    }
+
+    if ($ShowProgress) {
+        Write-UiPrimary "正在动态发现 Skills catalogue（0/$pendingCount，最多并发 $MaxConcurrency）..."
+    }
+
+    $canUseThreadJob = $false
+    try {
+        $canUseThreadJob = ($null -ne (Get-Command "Start-ThreadJob" -ErrorAction SilentlyContinue))
+    }
+    catch {
+        $canUseThreadJob = $false
+    }
+
+    if ($canUseThreadJob -and $MaxConcurrency -gt 1 -and $pendingCount -gt 1) {
+        try {
+            $parallelResults = @(Invoke-SkillsCatalogueDiscoveryParallel -Entries @($pending) -MaxConcurrency $MaxConcurrency -ShowProgress:$ShowProgress -TotalCount $pendingCount)
+            foreach ($discovery in $parallelResults) {
+                $resultsByKey[[string]$discovery["CacheKey"]] = $discovery
+            }
+            return $resultsByKey
+        }
+        catch {
+            Write-UiDim "Skills catalogue 并发动态发现失败，回退串行: $($_.Exception.Message)" -Level Debug
+        }
+    }
+
+    $completedCount = 0
+    foreach ($entry in @($pending)) {
+        $discovery = Invoke-SkillsSourceListDiscovery -Entry $entry
+        $resultsByKey[[string]$discovery["CacheKey"]] = $discovery
+        $completedCount++
+        if ($ShowProgress) {
+            $entryName = [string]$entry["Name"]
+            if ([bool]$discovery["Success"]) {
+                Write-UiInfo "  - [$completedCount/$pendingCount] ${entryName}: 发现 $(@($discovery['Names']).Count) 个"
+            } else {
+                Write-UiWarning "  - [$completedCount/$pendingCount] ${entryName}: 发现失败，状态未知"
+            }
+        }
+    }
+
+    return $resultsByKey
+}
+
+function Resolve-SkillsCatalogueStatuses {
+    <#
+    .SYNOPSIS
+    批量解析 catalogue 条目状态，复用同一次动态发现结果。
+    #>
+    param(
+        [array]$Entries = @(),
+
+        [AllowNull()]
+        [object]$InstalledRecords = $null,
+
+        [int]$MaxConcurrency = 2,
+
+        [switch]$ShowProgress
+    )
+
+    $records = @()
+    if ($null -eq $InstalledRecords) {
+        $records = @(Get-InstalledSkillRecords)
+    } else {
+        $records = @($InstalledRecords)
+    }
+
+    $discoveryByKey = Resolve-SkillsCatalogueDiscovery -Entries @($Entries) -MaxConcurrency $MaxConcurrency -ShowProgress:$ShowProgress
+    $items = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($entry in @($Entries)) {
+        $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $entry
+        $resolvedDiscoveredNames = @()
+        if ($discoveryByKey.ContainsKey($cacheKey)) {
+            $resolvedDiscoveredNames = @($discoveryByKey[$cacheKey]["Names"])
+        }
+
+        $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $records -DiscoveredNames $resolvedDiscoveredNames
+        [void]$items.Add(@{
+            Entry  = $entry
+            Status = $status
+        })
+    }
+
+    return @($items)
 }
 
 function Get-InstalledSkillRecords {
@@ -517,7 +851,10 @@ function Get-SkillEntryInstallStatus {
         [hashtable]$Entry,
 
         [AllowNull()]
-        [object]$InstalledRecords = $null
+        [object]$InstalledRecords = $null,
+
+        [AllowNull()]
+        [object]$DiscoveredNames = $null
     )
 
     $records = @()
@@ -527,7 +864,12 @@ function Get-SkillEntryInstallStatus {
         $records = @($InstalledRecords)
     }
 
-    $expectedNames = @(Get-SkillEntryExpectedNames -Entry $Entry -AllowSourceDiscovery)
+    $resolvedDiscoveredNames = @()
+    if ($null -eq $DiscoveredNames) {
+        $resolvedDiscoveredNames = @(Get-SkillEntryDiscoveredNames -Entry $Entry -AllowSourceDiscovery)
+    } else {
+        $resolvedDiscoveredNames = @(Get-UniqueSkillNames -Names @($DiscoveredNames))
+    }
     $recordsByName = @{}
     foreach ($record in $records) {
         $recordName = [string]$record["Name"]
@@ -539,17 +881,17 @@ function Get-SkillEntryInstallStatus {
     $matched = @()
     $installedNames = @()
     $missingNames = @()
-    foreach ($expectedName in $expectedNames) {
-        if ($recordsByName.ContainsKey([string]$expectedName)) {
-            $matched += $recordsByName[[string]$expectedName]
-            $installedNames += [string]$recordsByName[[string]$expectedName]["Name"]
+    foreach ($discoveredName in $resolvedDiscoveredNames) {
+        if ($recordsByName.ContainsKey([string]$discoveredName)) {
+            $matched += $recordsByName[[string]$discoveredName]
+            $installedNames += [string]$recordsByName[[string]$discoveredName]["Name"]
         } else {
-            $missingNames += [string]$expectedName
+            $missingNames += [string]$discoveredName
         }
     }
 
     $state = "Unknown"
-    if ($expectedNames.Count -gt 0) {
+    if ($resolvedDiscoveredNames.Count -gt 0) {
         if ($missingNames.Count -eq 0) {
             $state = "Installed"
         } elseif ($installedNames.Count -gt 0) {
@@ -560,13 +902,13 @@ function Get-SkillEntryInstallStatus {
     }
 
     return @{
-        State          = $state
-        ExpectedNames  = @($expectedNames)
-        InstalledNames = @($installedNames)
-        MissingNames   = @($missingNames)
-        MatchedRecords = @($matched)
-        ExpectedCount  = $expectedNames.Count
-        InstalledCount = $installedNames.Count
+        State           = $state
+        DiscoveredNames = @($resolvedDiscoveredNames)
+        InstalledNames  = @($installedNames)
+        MissingNames    = @($missingNames)
+        MatchedRecords  = @($matched)
+        DiscoveredCount = $resolvedDiscoveredNames.Count
+        InstalledCount  = $installedNames.Count
     }
 }
 
@@ -598,11 +940,11 @@ function Get-SkillEntryStatusText {
     )
 
     $installedCount = [int]$Status["InstalledCount"]
-    $expectedCount = [int]$Status["ExpectedCount"]
+    $discoveredCount = [int]$Status["DiscoveredCount"]
     switch ([string]$Status["State"]) {
-        "Installed"    { return "已安装 $installedCount/$expectedCount" }
-        "Partial"      { return "部分安装 $installedCount/$expectedCount" }
-        "NotInstalled" { return "未安装 0/$expectedCount" }
+        "Installed"    { return "已安装 $installedCount/$discoveredCount" }
+        "Partial"      { return "部分安装 $installedCount/$discoveredCount" }
+        "NotInstalled" { return "未安装 0/$discoveredCount" }
         default         { return "未知" }
     }
 }
@@ -704,12 +1046,14 @@ function Test-SkillsInstalled {
     try {
         $catalogue = @(Get-SkillsCatalogue)
         $installedRecords = @(Get-InstalledSkillRecords)
+        $statuses = @(Resolve-SkillsCatalogueStatuses -Entries $catalogue -InstalledRecords $installedRecords)
         $installedKnownSkills = @()
         $installedCompleteSkills = @()
         $installedPartialSkills = @()
 
-        foreach ($entry in $catalogue) {
-            $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $installedRecords
+        foreach ($item in $statuses) {
+            $entry = $item["Entry"]
+            $status = $item["Status"]
             $state = [string]$status["State"]
             if ($state -eq "Installed" -or $state -eq "Partial") {
                 $installedKnownSkills += [string]$entry["Id"]
@@ -754,16 +1098,19 @@ function Show-SkillsSelectMenu {
         @{ Expression = { [array]::IndexOf($script:SkillsCategoryOrder, [string]$_["Category"]) } },
         @{ Expression = { [string]$_["Name"] } })
 
+    Write-UiPrimary "正在检测 Skills 状态..."
+    $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
     $options = [System.Collections.Generic.List[string]]::new()
     $entryMap = [System.Collections.Generic.List[hashtable]]::new()
     $defaultSelected = [System.Collections.Generic.List[int]]::new()
 
-    for ($i = 0; $i -lt $orderedEntries.Count; $i++) {
-        $entry = $orderedEntries[$i]
-        $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $installedRecords
+    for ($i = 0; $i -lt $statusItems.Count; $i++) {
+        $item = $statusItems[$i]
+        $entry = $item["Entry"]
+        $status = $item["Status"]
         $statusText = Get-SkillEntryStatusText -Status $status
         $description = [string]$entry["Description"]
-        if ([int]$status["ExpectedCount"] -gt 1) {
+        if ([int]$status["DiscoveredCount"] -gt 1) {
             $description += "（集合）"
         }
 
@@ -883,7 +1230,7 @@ function Install-SkillEntry {
         Data         = @{
             WasState             = $wasState
             WasInstalled         = ($wasState -eq "Installed")
-            ExpectedNames        = @($beforeStatus["ExpectedNames"])
+            DiscoveredNames      = @($beforeStatus["DiscoveredNames"])
             BeforeInstalledNames = @($beforeStatus["InstalledNames"])
             BeforeMissingNames   = @($beforeStatus["MissingNames"])
             AfterState           = "Unknown"
@@ -1141,14 +1488,18 @@ function Verify-Skills {
         }
 
         $installedRecords = @(Get-InstalledSkillRecords)
-        $failed = @()
+        $changedEntries = @()
         foreach ($id in $changedIds) {
-            if (-not $entryById.ContainsKey([string]$id)) {
-                continue
+            if ($entryById.ContainsKey([string]$id)) {
+                $changedEntries += $entryById[[string]$id]
             }
+        }
 
-            $entry = $entryById[[string]$id]
-            $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $installedRecords
+        $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $changedEntries -InstalledRecords $installedRecords)
+        $failed = @()
+        foreach ($item in $statusItems) {
+            $entry = $item["Entry"]
+            $status = $item["Status"]
             $statusText = Get-SkillEntryStatusText -Status $status
             if ([string]$status["State"] -eq "Installed") {
                 Write-UiInfo "  - $([string]$entry['Name']): $statusText" -Level Detail
@@ -1158,7 +1509,7 @@ function Verify-Skills {
                 if ($missing.Count -gt 0) {
                     Write-UiInfo "    缺失: $($missing -join ', ')" -Level Detail
                 }
-                $failed += [string]$id
+                $failed += [string]$entry["Id"]
             }
         }
 
@@ -1191,6 +1542,10 @@ function Show-SkillsStatusTable {
         @{ Expression = { [string]$_["Name"] } })
 
     Write-Host ""
+    Write-UiPrimary "正在检测 Skills 状态..."
+    $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
+
+    Write-Host ""
     Write-UiPrimary "Skills 状态："
     Write-Host ""
 
@@ -1204,8 +1559,9 @@ function Show-SkillsStatusTable {
     $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
     Write-UiDim ("  " + [string]::new("-", $sepWidth))
 
-    foreach ($entry in $orderedEntries) {
-        $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $installedRecords
+    foreach ($item in $statusItems) {
+        $entry = $item["Entry"]
+        $status = $item["Status"]
         $statusText = Get-SkillEntryStatusText -Status $status
         $installedNames = @($status["InstalledNames"])
         $matchedNames = if ($installedNames.Count -gt 0) {
@@ -1227,8 +1583,9 @@ function Show-SkillsStatusTable {
     }
 
     $knownNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($entry in $catalogue) {
-        foreach ($name in @(Get-SkillEntryExpectedNames -Entry $entry -AllowSourceDiscovery)) {
+    foreach ($item in $statusItems) {
+        $status = $item["Status"]
+        foreach ($name in @($status["DiscoveredNames"])) {
             [void]$knownNames.Add([string]$name)
         }
     }
@@ -1257,15 +1614,18 @@ function Show-SkillsUninstallMenu {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
+    $orderedEntries = @($catalogue | Sort-Object `
+        @{ Expression = { [array]::IndexOf($script:SkillsCategoryOrder, [string]$_["Category"]) } },
+        @{ Expression = { [string]$_["Name"] } })
+
+    Write-UiPrimary "正在检测可卸载 Skills..."
+    $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
     $installedEntries = @()
 
-    foreach ($entry in $catalogue) {
-        $status = Get-SkillEntryInstallStatus -Entry $entry -InstalledRecords $installedRecords
+    foreach ($item in $statusItems) {
+        $status = $item["Status"]
         if ([int]$status["InstalledCount"] -gt 0) {
-            $installedEntries += @{
-                Entry  = $entry
-                Status = $status
-            }
+            $installedEntries += $item
         }
     }
 

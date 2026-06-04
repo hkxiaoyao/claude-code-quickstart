@@ -389,8 +389,10 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 
 **检测、更新与卸载**：
 - `Test-SkillsInstalled` 通过 `npx --yes skills list -g -a claude-code --json` 实时检测，不扫描目录、不写持久化状态文件
-- catalogue 使用 `ExpectedNames` 明确 source 实际包含的 Skill name；集合类条目按 `已安装数/期望数` 判断 `已安装` / `部分安装` / `未安装`
-- source 未声明期望名称时可用 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现实际名称并缓存到本次进程内
+- catalogue 只保存 source、展示名称、分类和默认选择；实际 Skill name 全部通过 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现并缓存到本次进程内
+- 进入状态表、安装选择菜单、卸载菜单或验证阶段前，先批量预取 catalogue 动态发现结果；默认最多 2 个 `--list` 查询并发，安装/卸载命令仍保持串行
+- `SkillName` 仅用于指定单个 source 子技能时追加 `--skill <name>`，不作为安装状态的硬编码期望名单
+- 集合类条目按动态发现结果计算 `已安装数/发现数`，判断 `已安装` / `部分安装` / `未安装`；动态发现失败时该条目状态为 `未知`，不阻断菜单或状态页
 - 安装前后均使用 CLI 快照，记录本次新增的实际 Skill name 与缺失项
 - Manage → Skills 管理通过 `npx --yes skills remove <names...> -g -a claude-code --yes` 卸载，不直接删除目录
 
