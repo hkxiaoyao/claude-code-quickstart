@@ -310,38 +310,130 @@ function Register-CcqShortcut {
     $installScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1"
     $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1"
 
-    $shortcutContent = @(
-        "function ccq {"
-        "    param("
-        "        [ValidateSet('安装面板', '管理面板', 'Install', 'Manage', '')]"
-        "        [string]`$Panel = ''"
-        "    )"
-        ""
-        "    `$installScriptUrl = '$installScriptUrl'"
-        "    `$manageScriptUrl = '$manageScriptUrl'"
-        ""
-        "    if ([string]::IsNullOrWhiteSpace(`$Panel)) {"
-        "        Write-Host ''"
-        "        Write-Host 'CCQ 面板选择'"
-        "        Write-Host '  1. 安装面板'"
-        "        Write-Host '  2. 管理面板'"
-        "        Write-Host ''"
-        "        `$choice = Read-Host '请选择 (1/2，直接回车进入管理面板)'"
-        "        switch (`$choice) {"
-        "            '1' { `$Panel = 'Install' }"
-        "            '2' { `$Panel = 'Manage' }"
-        "            ''  { `$Panel = 'Manage' }"
-        "            default { Write-Host '已取消'; return }"
-        "        }"
-        "    }"
-        ""
-        "    switch (`$Panel) {"
-        "        { `$_ -in @('Install', '安装面板') } { irm `$installScriptUrl | iex }"
-        "        { `$_ -in @('Manage', '管理面板') } { irm `$manageScriptUrl | iex }"
-        "        default { Write-Host ('未知面板: ' + `$Panel) }"
-        "    }"
-        "}"
+    $shortcutTemplate = @'
+function ccq {
+    param(
+        [ValidateSet('安装面板', '管理面板', 'Install', 'Manage', '')]
+        [string]$Panel = ''
     )
+
+    $installScriptUrl = '__INSTALL_SCRIPT_URL__'
+    $manageScriptUrl = '__MANAGE_SCRIPT_URL__'
+
+    function Show-CcqPanelMenu {
+        param(
+            [int]$DefaultIndex = 1
+        )
+
+        $options = @(
+            @{ Label = '安装面板'; Value = 'Install' },
+            @{ Label = '管理面板'; Value = 'Manage' }
+        )
+        $selectedIndex = [Math]::Max(0, [Math]::Min($DefaultIndex, $options.Count - 1))
+
+        try {
+            if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) {
+                return $options[$selectedIndex].Value
+            }
+        } catch {
+            return $options[$selectedIndex].Value
+        }
+
+        $renderMenu = {
+            param([int]$Index)
+
+            Write-Host ''
+            Write-Host 'CCQ 面板选择'
+            Write-Host '使用 ↑/↓ 选择，Enter 确认，Esc 取消'
+            Write-Host ''
+
+            for ($i = 0; $i -lt $options.Count; $i++) {
+                $prefix = if ($i -eq $Index) { '> ' } else { '  ' }
+                Write-Host ($prefix + $options[$i].Label)
+            }
+        }
+
+        $menuLineCount = 4 + $options.Count
+        $redrawMenu = {
+            param([int]$Index)
+
+            try {
+                $top = [Math]::Max(0, [Console]::CursorTop - $menuLineCount)
+                [Console]::SetCursorPosition(0, $top)
+
+                $blank = ' ' * [Math]::Max(1, [Console]::WindowWidth - 1)
+                for ($i = 0; $i -lt $menuLineCount; $i++) {
+                    Write-Host $blank
+                }
+
+                [Console]::SetCursorPosition(0, $top)
+            } catch {
+                Write-Host ''
+            }
+
+            & $renderMenu $Index
+        }
+
+        $cursorVisible = $true
+        $cursorVisibilityCaptured = $false
+
+        try {
+            try {
+                $cursorVisible = [Console]::CursorVisible
+                $cursorVisibilityCaptured = $true
+                [Console]::CursorVisible = $false
+            } catch { }
+
+            & $renderMenu $selectedIndex
+
+            while ($true) {
+                $key = [Console]::ReadKey($true)
+                switch ($key.Key) {
+                    'UpArrow' {
+                        $selectedIndex = ($selectedIndex - 1 + $options.Count) % $options.Count
+                        & $redrawMenu $selectedIndex
+                    }
+                    'DownArrow' {
+                        $selectedIndex = ($selectedIndex + 1) % $options.Count
+                        & $redrawMenu $selectedIndex
+                    }
+                    'Enter' {
+                        return $options[$selectedIndex].Value
+                    }
+                    'Escape' {
+                        Write-Host ''
+                        return ''
+                    }
+                }
+            }
+        } catch {
+            Write-Host ''
+            return $options[$selectedIndex].Value
+        } finally {
+            if ($cursorVisibilityCaptured) {
+                try { [Console]::CursorVisible = $cursorVisible } catch { }
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Panel)) {
+        $Panel = Show-CcqPanelMenu -DefaultIndex 1
+        if ([string]::IsNullOrWhiteSpace($Panel)) {
+            Write-Host '已取消'
+            return
+        }
+    }
+
+    switch ($Panel) {
+        { $_ -in @('Install', '安装面板') } { irm $installScriptUrl | iex }
+        { $_ -in @('Manage', '管理面板') } { irm $manageScriptUrl | iex }
+        default { Write-Host ('未知面板: ' + $Panel) }
+    }
+}
+'@
+
+    $shortcutContentText = $shortcutTemplate.Replace('__INSTALL_SCRIPT_URL__', $installScriptUrl).Replace('__MANAGE_SCRIPT_URL__', $manageScriptUrl)
+    $shortcutContent = @($shortcutContentText -split "`r?`n")
 
     try {
         # 1) 当前会话立即可用
@@ -373,6 +465,14 @@ function Register-CcqShortcut {
         } else {
             # 成功后置位，确保同一进程内不会重复写盘
             $script:CcqShortcutRegistered = $true
+
+            try {
+                # 在当前进程中刷新 Profile，让 irm|iex 这类同进程安装场景无需新开终端。
+                # 注意：若用户通过 pwsh -File 启动安装器，父进程作用域无法被子进程修改。
+                if (Test-Path $profilePath) { . $profilePath }
+            } catch {
+                Write-UiWarning "⚠ 当前会话加载 Profile 失败（不影响安装流程）: $($_.Exception.Message)" -Level Debug
+            }
         }
 
     } catch {

@@ -168,7 +168,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 13. Codex CLI（可选）
 14. Antigravity CLI（可选）
 
-Skills 通过 `skills` CLI 安装到全局 scope（`-g`），目标 Agent 为 Claude Code。若 Windows symlink 权限受限，可启用 copy 模式：
+Skills 通过 `skills` CLI 安装到全局 scope（`-g`），目标 Agent 为 Claude Code。安装时先单选 source；若 source 下有多个子 Skills，可继续多选子 Skills。若 Windows symlink 权限受限，可启用 copy 模式：
 
 ```powershell
 pwsh -File installer/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsCopy

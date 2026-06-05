@@ -376,7 +376,7 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 **文件**：`Skills.ps1`
 **依赖**：NodeJS + ClaudeCode
 
-**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，安装或更新 Claude Code 全局 Skills。默认只勾选 `find-skills`，集合类条目默认不勾选。Manage 脚本中的 Skills 管理还支持状态查看与卸载。
+**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，安装或更新 Claude Code 全局 Skills。安装入口先单选 source；集合类 source 选中后进入子 Skills 多选。Manage 脚本中的 Skills 管理还支持状态查看与卸载。
 
 **catalogue 来源**：固化 `tech-notes/docs/ai/skills.md` 当前 12 个条目，运行时不依赖外部 Markdown 或本地 notes 路径。
 
@@ -384,14 +384,17 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - 所有命令通过 `Invoke-ExternalCommand -Command "npx" -Arguments <string[]>` 执行，禁止 shell 字符串拼接
 - 固定追加 `--agent claude-code` 与 `-g`
 - `find-skills` / `fastapi` 等指定 skill 条目追加 `--skill <name>`
+- source 选择为单选；动态发现到多个子 Skills 时进入子 Skills 多选，并逐个追加 `--skill <name>` 安装
 - `-SkillsCopy` 或交互选择 copy 模式时追加 `--copy`
-- 单项失败不阻止后续已选择条目继续执行，最终摘要列出失败项和实际 Skill name
+- 单项失败不阻止后续已选择子 Skills 继续执行，最终摘要列出失败项和实际 Skill name
 
 **检测、更新与卸载**：
 - `Test-SkillsInstalled` 通过 `npx --yes skills list -g -a claude-code --json` 实时检测，不扫描目录、不写持久化状态文件
-- catalogue 只保存 source、展示名称、分类和默认选择；实际 Skill name 全部通过 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现并缓存到本次进程内
-- 进入状态表、安装选择菜单、卸载菜单或验证阶段前，先批量预取 catalogue 动态发现结果；默认最多 2 个 `--list` 查询并发，安装/卸载命令仍保持串行
-- `SkillName` 仅用于指定单个 source 子技能时追加 `--skill <name>`，不作为安装状态的硬编码期望名单
+- catalogue 保存 source、展示名称、简介、默认选择和可选 `SkipDiscovery`；状态表展示 Description 作为简介，不再展示类别
+- 实际 Skill name 默认通过 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现并缓存到本次进程内；`SkipDiscovery` 条目改用 `StaticSkillName` 静态检测
+- `ppt-master` 没有子 Skills，且远端 `--list` 明显较慢，因此检测阶段跳过远端 discovery，直接用 `StaticSkillName = ppt-master` 与本地 `skills list --json` 对比
+- 进入状态表、安装选择菜单、卸载菜单或验证阶段前，先批量预取需要动态 discovery 的 catalogue 结果；默认最多 2 个 `--list` 查询并发，安装/卸载命令仍保持串行
+- `SkillName` 仅用于指定单个 source 子技能时追加 `--skill <name>`；`StaticSkillName` 只用于跳过远端 discovery 的静态检测
 - 集合类条目按动态发现结果计算 `已安装数/发现数`，判断 `已安装` / `部分安装` / `未安装`；动态发现失败时该条目状态为 `未知`，不阻断菜单或状态页
 - 安装前后均使用 CLI 快照，记录本次新增的实际 Skill name 与缺失项
 - Manage → Skills 管理通过 `npx --yes skills remove <names...> -g -a claude-code --yes` 卸载，不直接删除目录

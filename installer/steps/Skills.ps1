@@ -12,7 +12,6 @@ $script:SkillsCliScope = "global:claude-code"
 $script:SkillsInstallOptions = @{
     CopyMode = $false
 }
-$script:SkillsCategoryOrder = @("发现", "公共", "前端", "后端", "其他")
 $script:SkillsIgnoredNames = @(
     "ccg-skills",
     "collaborating-with-codex",
@@ -24,7 +23,6 @@ $script:LastSkillsInstallData = @{}
 $script:SkillsCatalogue = @(
     @{
         Id          = "find-skills"
-        Category    = "发现"
         Name        = "find-skills"
         Source      = "vercel-labs/skills"
         SkillName   = "find-skills"
@@ -33,7 +31,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "anthropics-skills"
-        Category    = "公共"
         Name        = "官方 Skills"
         Source      = "anthropics/skills"
         SkillName   = ""
@@ -42,7 +39,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "vercel-agent-skills"
-        Category    = "前端"
         Name        = "Vercel Agent Skills"
         Source      = "vercel-labs/agent-skills"
         SkillName   = ""
@@ -51,7 +47,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "vue-skills"
-        Category    = "前端"
         Name        = "Vue Skills"
         Source      = "vuejs-ai/skills"
         SkillName   = ""
@@ -60,7 +55,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "ui-ux-pro-max"
-        Category    = "前端"
         Name        = "UI UX Pro Max"
         Source      = "nextlevelbuilder/ui-ux-pro-max-skill"
         SkillName   = ""
@@ -69,7 +63,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "shadcn-ui-skills"
-        Category    = "前端"
         Name        = "shadcn/ui Skills"
         Source      = "shadcn/ui"
         SkillName   = ""
@@ -78,7 +71,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "wot-ui-skills"
-        Category    = "前端"
         Name        = "Wot UI Skills"
         Source      = "wot-ui/open-wot"
         SkillName   = ""
@@ -87,7 +79,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "ant-design-skills"
-        Category    = "前端"
         Name        = "Ant Design Skills"
         Source      = "ant-design/ant-design-cli"
         SkillName   = ""
@@ -96,7 +87,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "ant-design-x-skills"
-        Category    = "前端"
         Name        = "Ant Design X Skills"
         Source      = "https://github.com/ant-design/x/tree/main/packages/x-skill"
         SkillName   = ""
@@ -105,7 +95,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "fastapi-skills"
-        Category    = "后端"
         Name        = "FastAPI Skills"
         Source      = "https://github.com/fastapi/fastapi"
         SkillName   = "fastapi"
@@ -114,7 +103,6 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "langchain-skills"
-        Category    = "后端"
         Name        = "LangChain Skills"
         Source      = "langchain-ai/langchain-skills"
         SkillName   = ""
@@ -123,12 +111,13 @@ $script:SkillsCatalogue = @(
     },
     @{
         Id          = "ppt-master"
-        Category    = "其他"
         Name        = "PPT Master"
-        Source      = "hugohe3/ppt-master"
-        SkillName   = ""
-        Description = "PPT 生成与演示文稿技能"
-        Default     = $false
+        Source          = "hugohe3/ppt-master"
+        SkillName       = ""
+        StaticSkillName = "ppt-master"
+        Description     = "PPT 生成与演示文稿技能"
+        Default         = $false
+        SkipDiscovery   = $true
     }
 )
 
@@ -146,12 +135,13 @@ function Get-SkillsCatalogue {
     返回受控 Skills catalogue，并校验字段完整性。
 
     .NOTES
-    catalogue 只描述 source 与展示元数据；实际 Skill name 必须通过 skills CLI 动态发现。
+    catalogue 只描述 source 与展示元数据；默认通过 skills CLI 动态发现实际 Skill name。
+    对无子 Skills 且远端 discovery 较慢的条目，可设置 SkipDiscovery 并提供 StaticSkillName 作为静态检测名称。
     #>
     param()
 
     $catalogue = @($script:SkillsCatalogue)
-    $requiredFields = @("Id", "Category", "Name", "Source", "SkillName", "Description", "Default")
+    $requiredFields = @("Id", "Name", "Source", "SkillName", "Description", "Default")
     $seenIds = @{}
 
     foreach ($entry in $catalogue) {
@@ -169,14 +159,15 @@ function Get-SkillsCatalogue {
             throw "Skills catalogue ID 重复: $id"
         }
         if ($entry.ContainsKey("ExpectedNames")) {
-            throw "Skills catalogue 条目 $id 禁止写死 ExpectedNames，请通过 CLI 动态发现"
+            throw "Skills catalogue 条目 $id 禁止写死 ExpectedNames，请通过 CLI 动态发现或 SkipDiscovery 静态声明单个 StaticSkillName/SkillName"
+        }
+        if ($entry.ContainsKey("SkipDiscovery") -and [bool]$entry["SkipDiscovery"]) {
+            $staticSkillName = if ($entry.ContainsKey("StaticSkillName")) { [string]$entry["StaticSkillName"] } else { [string]$entry["SkillName"] }
+            if ([string]::IsNullOrWhiteSpace($staticSkillName)) {
+                throw "Skills catalogue 条目 $id 启用 SkipDiscovery 时必须提供 StaticSkillName 或 SkillName"
+            }
         }
         $seenIds[$id] = $true
-
-        $category = [string]$entry["Category"]
-        if ($script:SkillsCategoryOrder -notcontains $category) {
-            throw "Skills catalogue 类别不受支持: $category"
-        }
 
         foreach ($field in @("Name", "Source", "Description")) {
             if ([string]::IsNullOrWhiteSpace([string]$entry[$field])) {
@@ -212,6 +203,41 @@ function Get-UniqueSkillNames {
     }
 
     return @($result)
+}
+
+function Limit-SkillsDisplayText {
+    <#
+    .SYNOPSIS
+    按显示宽度截断长文本，避免状态表溢出。
+    #>
+    param(
+        [string]$Text = "",
+
+        [int]$MaxWidth = 40
+    )
+
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ""
+    }
+    if ((Get-StringDisplayWidth -Text $Text) -le $MaxWidth) {
+        return $Text
+    }
+
+    $ellipsis = "..."
+    $limit = [Math]::Max(1, $MaxWidth - (Get-StringDisplayWidth -Text $ellipsis))
+    $builder = [System.Text.StringBuilder]::new()
+    $width = 0
+    foreach ($char in $Text.ToCharArray()) {
+        $charText = [string]$char
+        $charWidth = Get-StringDisplayWidth -Text $charText
+        if (($width + $charWidth) -gt $limit) {
+            break
+        }
+        [void]$builder.Append($charText)
+        $width += $charWidth
+    }
+
+    return "$($builder.ToString())$ellipsis"
 }
 
 function Test-SkillNameIgnored {
@@ -251,6 +277,43 @@ function Get-SkillsDiscoveryCacheKey {
     return "$source`n$skillName"
 }
 
+function Test-SkillEntrySkipDiscovery {
+    <#
+    .SYNOPSIS
+    判断 catalogue 条目是否跳过远端 discovery，改用 SkillName 静态检测。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry
+    )
+
+    return ($Entry.ContainsKey("SkipDiscovery") -and [bool]$Entry["SkipDiscovery"])
+}
+
+function Get-SkillEntryStaticNames {
+    <#
+    .SYNOPSIS
+    返回可用于静态检测的 SkillName 集合。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry
+    )
+
+    $skillName = ""
+    if ($Entry.ContainsKey("StaticSkillName")) {
+        $skillName = [string]$Entry["StaticSkillName"]
+    } elseif ($Entry.ContainsKey("SkillName")) {
+        $skillName = [string]$Entry["SkillName"]
+    }
+
+    if ([string]::IsNullOrWhiteSpace($skillName)) {
+        return @()
+    }
+
+    return @($skillName.Trim())
+}
+
 function Get-SkillEntryDiscoveredNames {
     <#
     .SYNOPSIS
@@ -258,6 +321,7 @@ function Get-SkillEntryDiscoveredNames {
 
     .NOTES
     catalogue 只保存 source 元数据；SkillName 仅作为 CLI 的 --skill 选择器参与动态发现。
+    SkipDiscovery 条目不执行远端 --list，直接使用 StaticSkillName 做静态检测。
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -265,6 +329,10 @@ function Get-SkillEntryDiscoveredNames {
 
         [switch]$AllowSourceDiscovery
     )
+
+    if (Test-SkillEntrySkipDiscovery -Entry $Entry) {
+        return @(Get-SkillEntryStaticNames -Entry $Entry)
+    }
 
     if (-not $AllowSourceDiscovery) {
         return @()
@@ -345,6 +413,14 @@ function Invoke-SkillsSourceListDiscovery {
         ErrorMessage = ""
         Source       = $source
         SkillName    = $skillName
+    }
+
+    if (Test-SkillEntrySkipDiscovery -Entry $Entry) {
+        $names = @(Get-SkillEntryStaticNames -Entry $Entry)
+        $result.Success = $true
+        $result.Names = @($names)
+        $script:SkillsSourceDiscoveryCache[$cacheKey] = @($names)
+        return $result
     }
 
     if ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
@@ -668,7 +744,18 @@ function Resolve-SkillsCatalogueDiscovery {
     $pending = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($entry in @($Entries)) {
         $cacheKey = Get-SkillsDiscoveryCacheKey -Entry $entry
-        if ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
+        if (Test-SkillEntrySkipDiscovery -Entry $entry) {
+            $names = @(Get-SkillEntryStaticNames -Entry $entry)
+            $script:SkillsSourceDiscoveryCache[$cacheKey] = @($names)
+            $resultsByKey[$cacheKey] = @{
+                Success      = $true
+                CacheKey     = $cacheKey
+                Names        = @($names)
+                ErrorMessage = ""
+                Source       = [string]$entry["Source"]
+                SkillName    = [string]$entry["SkillName"]
+            }
+        } elseif ($script:SkillsSourceDiscoveryCache.ContainsKey($cacheKey)) {
             $resultsByKey[$cacheKey] = @{
                 Success      = $true
                 CacheKey     = $cacheKey
@@ -1085,48 +1172,82 @@ function Test-SkillsInstalled {
     return $result
 }
 
-function Show-SkillsSelectMenu {
+function New-SkillEntryInstallTarget {
     <#
     .SYNOPSIS
-    显示 Skills catalogue 多选菜单。
+    基于 catalogue 条目创建指定子 Skill 的安装目标。
     #>
-    param()
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry,
 
-    $catalogue = @(Get-SkillsCatalogue)
-    $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object `
-        @{ Expression = { [array]::IndexOf($script:SkillsCategoryOrder, [string]$_["Category"]) } },
-        @{ Expression = { [string]$_["Name"] } })
+        [Parameter(Mandatory = $true)]
+        [string]$SkillName
+    )
 
-    Write-UiPrimary "正在检测 Skills 状态..."
-    $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
-    $options = [System.Collections.Generic.List[string]]::new()
-    $entryMap = [System.Collections.Generic.List[hashtable]]::new()
-    $defaultSelected = [System.Collections.Generic.List[int]]::new()
+    $target = @{}
+    foreach ($key in $Entry.Keys) {
+        $target[$key] = $Entry[$key]
+    }
 
-    for ($i = 0; $i -lt $statusItems.Count; $i++) {
-        $item = $statusItems[$i]
-        $entry = $item["Entry"]
-        $status = $item["Status"]
-        $statusText = Get-SkillEntryStatusText -Status $status
-        $description = [string]$entry["Description"]
-        if ([int]$status["DiscoveredCount"] -gt 1) {
-            $description += "（集合）"
+    $parentName = [string]$Entry["Name"]
+    $normalizedSkillName = $SkillName.Trim()
+    $target["ParentId"] = [string]$Entry["Id"]
+    $target["ParentName"] = $parentName
+    $target["SkillName"] = $normalizedSkillName
+    $target["SkipDiscovery"] = $true
+    $target["Name"] = "$parentName / $normalizedSkillName"
+    return $target
+}
+
+function Select-SkillEntryChildren {
+    <#
+    .SYNOPSIS
+    对集合类 source 进行子 Skills 多选，返回具体安装目标。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Entry,
+
+        [Parameter(Mandatory = $true)]
+        [hashtable]$Status
+    )
+
+    if (Test-SkillEntrySkipDiscovery -Entry $Entry) {
+        return @($Entry)
+    }
+
+    $discoveredNames = @(Get-UniqueSkillNames -Names @($Status["DiscoveredNames"]))
+    if ($discoveredNames.Count -eq 0) {
+        Write-UiWarning "未发现 $([string]$Entry['Name']) 的子 Skills，将按 source 整体安装"
+        return @($Entry)
+    }
+
+    if ($discoveredNames.Count -eq 1) {
+        if ([string]::IsNullOrWhiteSpace([string]$Entry["SkillName"])) {
+            return @(New-SkillEntryInstallTarget -Entry $Entry -SkillName $discoveredNames[0])
         }
+        return @($Entry)
+    }
 
-        $category = [string]$entry["Category"]
-        $name = [string]$entry["Name"]
-        $displayText = "$category / $name（$statusText）- $description"
-        [void]$options.Add($displayText)
-        [void]$entryMap.Add($entry)
+    $installedNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @($Status["InstalledNames"])) {
+        [void]$installedNames.Add([string]$name)
+    }
 
-        if (([bool]$entry["Default"]) -and [string]$status["State"] -ne "Installed") {
+    $options = [System.Collections.Generic.List[string]]::new()
+    $defaultSelected = [System.Collections.Generic.List[int]]::new()
+    for ($i = 0; $i -lt $discoveredNames.Count; $i++) {
+        $name = [string]$discoveredNames[$i]
+        $stateText = if ($installedNames.Contains($name)) { "已安装" } else { "未安装" }
+        [void]$options.Add("$name（$stateText）")
+        if (-not $installedNames.Contains($name)) {
             [void]$defaultSelected.Add($i)
         }
     }
 
     $selectedRaw = Show-MultiSelectMenu `
-        -Title "Skills - 选择要安装/更新的 Skills" `
+        -Title "Skills - 选择 $([string]$Entry['Name']) 下的子 Skills" `
         -Options ([string[]]$options.ToArray()) `
         -DefaultSelected ([int[]]$defaultSelected.ToArray())
 
@@ -1142,14 +1263,66 @@ function Show-SkillsSelectMenu {
         return @()
     }
 
-    $selectedEntries = @()
+    $targets = @()
     foreach ($idx in $selectedIndices) {
-        if ($idx -ge 0 -and $idx -lt $entryMap.Count) {
-            $selectedEntries += $entryMap[$idx]
+        if ($idx -ge 0 -and $idx -lt $discoveredNames.Count) {
+            $targets += New-SkillEntryInstallTarget -Entry $Entry -SkillName ([string]$discoveredNames[$idx])
         }
     }
 
-    return @($selectedEntries)
+    return @($targets)
+}
+
+function Show-SkillsSelectMenu {
+    <#
+    .SYNOPSIS
+    显示 Skills catalogue 单选菜单，并在集合类 source 被选中后支持子 Skills 多选。
+    #>
+    param()
+
+    $catalogue = @(Get-SkillsCatalogue)
+    $installedRecords = @(Get-InstalledSkillRecords)
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
+
+    Write-UiPrimary "正在检测 Skills 状态..."
+    $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
+    $options = [System.Collections.Generic.List[string]]::new()
+    $itemMap = [System.Collections.Generic.List[hashtable]]::new()
+    $defaultIndex = 0
+
+    for ($i = 0; $i -lt $statusItems.Count; $i++) {
+        $item = $statusItems[$i]
+        $entry = $item["Entry"]
+        $status = $item["Status"]
+        $statusText = Get-SkillEntryStatusText -Status $status
+        $description = [string]$entry["Description"]
+        if ([int]$status["DiscoveredCount"] -gt 1) {
+            $description += "（可选择子 Skills）"
+        }
+
+        $name = [string]$entry["Name"]
+        $displayText = "$name（$statusText）- $description"
+        [void]$options.Add($displayText)
+        [void]$itemMap.Add($item)
+
+        if (([bool]$entry["Default"]) -and [string]$status["State"] -ne "Installed") {
+            $defaultIndex = $i
+        }
+    }
+
+    $selectedIndex = Show-SingleSelectMenu `
+        -Title "Skills - 选择要安装/更新的 Skills" `
+        -Options ([string[]]$options.ToArray()) `
+        -DefaultIndex $defaultIndex
+
+    if ($selectedIndex -lt 0 -or $selectedIndex -ge $itemMap.Count) {
+        return @()
+    }
+
+    $selectedItem = $itemMap[$selectedIndex]
+    $selectedEntry = [hashtable]$selectedItem["Entry"]
+    $selectedStatus = [hashtable]$selectedItem["Status"]
+    return @(Select-SkillEntryChildren -Entry $selectedEntry -Status $selectedStatus)
 }
 
 function Resolve-SkillsCopyMode {
@@ -1209,7 +1382,7 @@ function Install-SkillEntry {
         [bool]$CopyMode = $false
     )
 
-    $entryId = [string]$Entry["Id"]
+    $entryId = if ($Entry.ContainsKey("ParentId")) { [string]$Entry["ParentId"] } else { [string]$Entry["Id"] }
     $entryName = [string]$Entry["Name"]
     $beforeRecords = @(Get-InstalledSkillRecords)
     $beforeStatus = Get-SkillEntryInstallStatus -Entry $Entry -InstalledRecords $beforeRecords
@@ -1376,7 +1549,7 @@ function Install-Skills {
         $installedSkillNames = @()
         $missingSkillNames = @()
         $entryResults = @()
-        $selectedIds = @($selectedEntries | ForEach-Object { [string]$_["Id"] })
+        $selectedIds = @($selectedEntries | ForEach-Object { if ($_.ContainsKey("ParentId")) { [string]$_["ParentId"] } else { [string]$_["Id"] } })
 
         foreach ($entry in $selectedEntries) {
             $entryResult = Install-SkillEntry -Entry $entry -CopyMode $copyMode
@@ -1481,6 +1654,45 @@ function Verify-Skills {
             return $result
         }
 
+        $expectedNames = @()
+        if ($installData.ContainsKey("EntryResults")) {
+            foreach ($entryResult in @($installData["EntryResults"])) {
+                if ($null -eq $entryResult -or -not [bool]$entryResult.Success -or [bool]$entryResult.Skipped) {
+                    continue
+                }
+                if ($entryResult.Data.ContainsKey("DiscoveredNames")) {
+                    $expectedNames += @($entryResult.Data["DiscoveredNames"])
+                }
+            }
+        }
+        $expectedNames = @(Get-UniqueSkillNames -Names $expectedNames)
+
+        if ($expectedNames.Count -gt 0) {
+            $installedRecords = @(Get-InstalledSkillRecords)
+            $installedNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            foreach ($record in $installedRecords) {
+                [void]$installedNames.Add([string]$record["Name"])
+            }
+
+            $missingNames = @()
+            foreach ($name in $expectedNames) {
+                if (-not $installedNames.Contains([string]$name)) {
+                    $missingNames += [string]$name
+                }
+            }
+
+            if ($missingNames.Count -gt 0) {
+                Write-UiInfo "  - Skills 验证失败 [FAIL]" -Level Detail
+                Write-UiInfo "    缺失: $($missingNames -join ', ')" -Level Detail
+                $result.ErrorMessage = "以下 Skills 验证失败或未检测到: $($missingNames -join ', ')"
+                return $result
+            }
+
+            Write-UiInfo "  - 已验证 Skills: $($expectedNames -join ', ')" -Level Detail
+            $result.Success = $true
+            return $result
+        }
+
         $catalogue = @(Get-SkillsCatalogue)
         $entryById = @{}
         foreach ($entry in $catalogue) {
@@ -1537,9 +1749,7 @@ function Show-SkillsStatusTable {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object `
-        @{ Expression = { [array]::IndexOf($script:SkillsCategoryOrder, [string]$_["Category"]) } },
-        @{ Expression = { [string]$_["Name"] } })
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
 
     Write-Host ""
     Write-UiPrimary "正在检测 Skills 状态..."
@@ -1549,11 +1759,11 @@ function Show-SkillsStatusTable {
     Write-UiPrimary "Skills 状态："
     Write-Host ""
 
-    $colWidths = @(16, 8, 24, 40)
+    $colWidths = @(16, 24, 42, 40)
     $headerLine = "  " +
         (Format-DisplayPad "状态" $colWidths[0]) + " " +
-        (Format-DisplayPad "类别" $colWidths[1]) + " " +
-        (Format-DisplayPad "名称" $colWidths[2]) + " " +
+        (Format-DisplayPad "名称" $colWidths[1]) + " " +
+        (Format-DisplayPad "简介" $colWidths[2]) + " " +
         (Format-DisplayPad "已安装 Skill" $colWidths[3])
     Write-UiInfo $headerLine
     $sepWidth = ($colWidths | Measure-Object -Sum).Sum + $colWidths.Count - 1
@@ -1569,15 +1779,14 @@ function Show-SkillsStatusTable {
         } else {
             "-"
         }
-        if ($matchedNames.Length -gt $colWidths[3]) {
-            $matchedNames = $matchedNames.Substring(0, $colWidths[3] - 3) + "..."
-        }
+        $matchedNames = Limit-SkillsDisplayText -Text $matchedNames -MaxWidth $colWidths[3]
+        $description = Limit-SkillsDisplayText -Text ([string]$entry["Description"]) -MaxWidth $colWidths[2]
 
         $color = Get-SkillEntryStatusColor -Status $status
         $line = "  " +
             (Format-DisplayPad $statusText $colWidths[0]) + " " +
-            (Format-DisplayPad ([string]$entry["Category"]) $colWidths[1]) + " " +
-            (Format-DisplayPad ([string]$entry["Name"]) $colWidths[2]) + " " +
+            (Format-DisplayPad ([string]$entry["Name"]) $colWidths[1]) + " " +
+            (Format-DisplayPad $description $colWidths[2]) + " " +
             (Format-DisplayPad $matchedNames $colWidths[3])
         Write-UiOutput $line -Type $color
     }
@@ -1614,9 +1823,7 @@ function Show-SkillsUninstallMenu {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object `
-        @{ Expression = { [array]::IndexOf($script:SkillsCategoryOrder, [string]$_["Category"]) } },
-        @{ Expression = { [string]$_["Name"] } })
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
 
     Write-UiPrimary "正在检测可卸载 Skills..."
     $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
@@ -1634,9 +1841,7 @@ function Show-SkillsUninstallMenu {
         return @()
     }
 
-    $ordered = @($installedEntries | Sort-Object `
-        @{ Expression = { $entry = $_["Entry"]; [array]::IndexOf($script:SkillsCategoryOrder, [string]$entry["Category"]) } },
-        @{ Expression = { $entry = $_["Entry"]; [string]$entry["Name"] } })
+    $ordered = @($installedEntries | Sort-Object @{ Expression = { $entry = $_["Entry"]; [string]$entry["Name"] } })
 
     $options = [System.Collections.Generic.List[string]]::new()
     $entryMap = [System.Collections.Generic.List[hashtable]]::new()
@@ -1646,7 +1851,7 @@ function Show-SkillsUninstallMenu {
         $status = $item["Status"]
         $statusText = Get-SkillEntryStatusText -Status $status
         $matchedNames = (@($status["InstalledNames"]) -join ", ")
-        [void]$options.Add("$([string]$entry['Category']) / $([string]$entry['Name'])（$statusText；将卸载: $matchedNames）")
+        [void]$options.Add("$([string]$entry['Name'])（$statusText；将卸载: $matchedNames）")
         [void]$entryMap.Add($entry)
     }
 

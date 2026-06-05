@@ -116,7 +116,7 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
-| Skills | Skills 用户级全局安装/更新/卸载，可按类别选择 |
+| Skills | Skills 用户级全局安装/更新/卸载，source 单选；集合类 source 支持子 Skills 多选 |
 | CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | AntigravityCli | Google Antigravity CLI，多模型协作使用 |
