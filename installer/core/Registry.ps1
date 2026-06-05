@@ -172,12 +172,12 @@ function Get-StepRegistry {
         @{
             StepId          = "Skills"
             StepName        = "Skills"
-            Description     = "安装/更新 Skills（用户级全局，单选 source，集合类支持子 Skills 多选）"
+            Description     = "安装 Skills（用户级全局，单选 source，集合类支持子 Skills 多选）；更新使用官方 skills update"
             StepFile        = "steps/Skills.ps1"
             TestFunction    = "Test-SkillsInstalled"
             InstallFunction = "Install-Skills"
             VerifyFunction  = "Verify-Skills"
-            UpdateFunction  = ""
+            UpdateFunction  = "Update-Skills"
             SkipIfInstalled = $false
             IsOptional      = $true
             Order           = 95

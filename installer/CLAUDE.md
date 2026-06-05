@@ -116,7 +116,7 @@ Main()
 
 | 步骤 | 说明 |
 |------|------|
-| Skills | Skills 用户级全局安装/更新/卸载，source 单选；集合类 source 支持子 Skills 多选 |
+| Skills | Skills 用户级全局安装/更新/卸载；安装 source 单选、集合类支持子 Skills 多选；更新走官方 `skills update` |
 | CcSwitch | cc-switch，Claude Code / Codex / Gemini CLI 全方位辅助工具 |
 | CodexCli | OpenAI Codex CLI，多模型协作使用 |
 | AntigravityCli | Google Antigravity CLI，多模型协作使用 |
@@ -146,9 +146,9 @@ Main()
 | 更新管理 | 迁移自旧 `Update-ClaudeEnv.ps1` | Mutex + 快照 + 指纹预检 + 交互多选 |
 | 供应商管理 | `core/Provider.ps1` | 完整 CRUD + 自动同步 + 切换 |
 | MCP 管理 | `core/McpManager.ps1` | 状态查看 / 启用/禁用 / 删除 |
-| Skills 管理 | `steps/Skills.ps1` | 状态查看 / 安装或更新 / 卸载 |
+| Skills 管理 | `steps/Skills.ps1` | 状态查看 / 安装 / 更新 / 卸载 |
 
-### 可更新步骤（8 个）
+### 可更新步骤（9 个）
 
 | StepId | UpdateFunction | 更新策略 |
 |--------|---------------|---------|
@@ -157,6 +157,7 @@ Main()
 | ClaudeMd | Update-ClaudeMd | 原子覆写 CLAUDE.md + ccq- rules |
 | Ccline | Update-Ccline | npm @latest + 重新 patch |
 | CcgWorkflow | Update-CcgWorkflow | npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir ~/.claude |
+| Skills | Update-Skills | npx --yes skills update -g -y |
 | CodexCli | Update-CodexCli | npm install @latest |
 | AntigravityCli | Update-AntigravityCli | agy update（失败回退官方安装脚本） |
 | OpenSpec | Update-OpenSpec | npm install @latest |

@@ -56,8 +56,8 @@ function Update-<StepId> {
 }
 ```
 
-> 8 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、CodexCli、AntigravityCli、OpenSpec。
-> 6 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp、Skills。
+> 9 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、Skills、CodexCli、AntigravityCli、OpenSpec。
+> 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
@@ -76,7 +76,7 @@ function Update-<StepId> {
 | ClaudeMd | CLAUDE.md 配置 | `ClaudeMd.ps1` | — | ✓ | ✓ | ClaudeConfig | 进阶 |
 | Mcp | MCP Server 配置 | `Mcp.ps1` | — | ✓ | — | ClaudeCode | 进阶 |
 | CcgWorkflow | CCG 工作流 | `CcgWorkflow.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
-| Skills | Skills | `Skills.ps1` | **✓** | false | — | NodeJS, ClaudeCode | 进阶 |
+| Skills | Skills | `Skills.ps1` | **✓** | false | ✓ | NodeJS, ClaudeCode | 进阶 |
 | OpenSpec | OpenSpec CLI | `OpenSpec.ps1` | — | ✓ | ✓ | NodeJS | 进阶 |
 | CcSwitch | cc-switch | `CcSwitch.ps1` | **✓** | ✓ | — | ClaudeCode | 进阶 |
 | CodexCli | Codex CLI | `CodexCli.ps1` | **✓** | ✓ | ✓ | NodeJS | 进阶 |
@@ -376,7 +376,7 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 **文件**：`Skills.ps1`
 **依赖**：NodeJS + ClaudeCode
 
-**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，安装或更新 Claude Code 全局 Skills。安装入口先单选 source；集合类 source 选中后进入子 Skills 多选。Manage 脚本中的 Skills 管理还支持状态查看与卸载。
+**功能**：通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，安装或重装 Claude Code 全局 Skills。安装入口先单选 source；集合类 source 选中后进入子 Skills 多选。更新入口与安装入口分离，通过 `Update-Skills` 调用 `npx --yes skills update [skill...] -g -y`，支持全量更新或选择单个/多个已安装 Skills。Manage 脚本中的 Skills 管理还支持状态查看与卸载。
 
 **catalogue 来源**：固化 `tech-notes/docs/ai/skills.md` 当前 12 个条目，运行时不依赖外部 Markdown 或本地 notes 路径。
 
@@ -397,7 +397,7 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 - `SkillName` 仅用于指定单个 source 子技能时追加 `--skill <name>`；`StaticSkillName` 只用于跳过远端 discovery 的静态检测
 - 集合类条目按动态发现结果计算 `已安装数/发现数`，判断 `已安装` / `部分安装` / `未安装`；动态发现失败时该条目状态为 `未知`，不阻断菜单或状态页
 - 安装前后均使用 CLI 快照，记录本次新增的实际 Skill name 与缺失项
-- Manage → Skills 管理通过 `npx --yes skills remove <names...> -g -a claude-code --yes` 卸载，不直接删除目录
+- Manage → Skills 管理拆分为安装 / 更新 / 卸载三个入口：安装使用 `skills add`，更新使用 `skills update`，卸载使用 `npx --yes skills remove <names...> -g -a claude-code --yes`，不直接删除目录
 
 ---
 

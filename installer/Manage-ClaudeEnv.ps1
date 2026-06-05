@@ -360,6 +360,16 @@ function Get-UpdateStatus {
                     }
                 }
             }
+            elseif ($step.StepId -eq "Skills") {
+                # skills CLI 的 update 命令自行检测已安装 skills 的远端变化
+                $installedSkillNames = @()
+                if ($testResult -is [hashtable] -and $testResult.ContainsKey("Data") -and $testResult.Data.ContainsKey("InstalledSkillNames")) {
+                    $installedSkillNames = @($testResult.Data["InstalledSkillNames"])
+                }
+                $entry.HasUpdate = $null
+                $entry.StatusHint = "执行 npx skills update -g -y 检测并更新 $($installedSkillNames.Count) 个全局 Skills"
+                $entry.Data = @{ InstalledSkillNames = @($installedSkillNames) }
+            }
             elseif ($step.StepId -eq "AntigravityCli") {
                 # 非 npm 包：无法获取远程最新版本，无法判断是否有更新，执行 agy update 由官方 CLI 自行判断
                 $entry.HasUpdate = $null

@@ -1,5 +1,5 @@
 # Skills 安装步骤 - CCQ
-# 功能: 通过 skills CLI 安装/更新/卸载 Skills
+# 功能: 通过 skills CLI 安装、更新、卸载 Skills
 
 #Requires -Version 7.0
 
@@ -1093,6 +1093,38 @@ function Build-SkillsRemoveArguments {
     return @($arguments)
 }
 
+function Build-SkillsUpdateArguments {
+    <#
+    .SYNOPSIS
+    构造 skills CLI 的官方更新参数数组。
+    #>
+    param(
+        [string[]]$SkillNames = @()
+    )
+
+    $arguments = @("--yes", "skills", "update")
+    $arguments += @(Get-UniqueSkillNames -Names $SkillNames)
+    $arguments += @("-g", "-y")
+    return @($arguments)
+}
+
+function Test-SkillsUpdateOutputNoChange {
+    <#
+    .SYNOPSIS
+    根据 skills update 输出判断是否无可更新项。
+    #>
+    param(
+        [string]$Text = ""
+    )
+
+    $normalized = Remove-SkillsAnsiSequences -Text $Text
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return $false
+    }
+
+    return ($normalized -match '(?i)no\s+updates|already\s+up\s+to\s+date|up\s+to\s+date|all\s+skills\s+.*latest|0\s+skills?\s+updated')
+}
+
 function Test-SkillEntryInstalled {
     <#
     .SYNOPSIS
@@ -1311,7 +1343,7 @@ function Show-SkillsSelectMenu {
     }
 
     $selectedIndex = Show-SingleSelectMenu `
-        -Title "Skills - 选择要安装/更新的 Skills" `
+        -Title "Skills - 选择要安装的 Skills" `
         -Options ([string[]]$options.ToArray()) `
         -DefaultIndex $defaultIndex
 
@@ -1354,26 +1386,27 @@ function Get-SkillsInstallFriendlyError {
     #>
     param(
         [int]$ExitCode,
-        [string]$ErrorText = ""
+        [string]$ErrorText = "",
+        [string]$ActionName = "安装"
     )
 
     if ($ErrorText -match 'ETIMEDOUT|ECONNREFUSED|ENOTFOUND|network|fetch failed') {
         return "无法访问 npm/GitHub，请检查网络连接或代理设置"
     }
     if ($ErrorText -match 'EACCES|EPERM|permission|symlink') {
-        return "文件权限或 symlink 创建失败，可重跑并启用 -SkillsCopy"
+        return "文件权限或 symlink 创建失败，可在安装/重装时启用 -SkillsCopy，或检查全局 Skills 目录权限"
     }
     if ($ErrorText -match 'not found|No matching|404') {
         return "Skills source 或指定 skill 可能已变更，请检查 catalogue"
     }
 
-    return "Skills 安装失败 (ExitCode: $ExitCode)"
+    return "Skills ${ActionName}失败 (ExitCode: $ExitCode)"
 }
 
 function Install-SkillEntry {
     <#
     .SYNOPSIS
-    安装或更新单个 Skills catalogue 条目，并记录实际新增/缺失的 Skill name。
+    安装或重装单个 Skills catalogue 条目，并记录实际新增/缺失的 Skill name。
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -1388,8 +1421,8 @@ function Install-SkillEntry {
     $beforeStatus = Get-SkillEntryInstallStatus -Entry $Entry -InstalledRecords $beforeRecords
     $wasState = [string]$beforeStatus["State"]
     $actionText = switch ($wasState) {
-        "Installed" { "更新/重装" }
-        "Partial"   { "补齐/更新" }
+        "Installed" { "重装" }
+        "Partial"   { "补齐" }
         default     { "安装" }
     }
 
@@ -1479,7 +1512,7 @@ function Install-SkillEntry {
 function Install-Skills {
     <#
     .SYNOPSIS
-    安装或更新用户选择的 Skills。
+    安装或重装用户选择的 Skills。
     #>
     param()
 
@@ -1490,7 +1523,7 @@ function Install-Skills {
     }
 
     try {
-        Write-UiPrimary "安装/更新 Skills..." -Level Detail
+        Write-UiPrimary "安装 Skills..." -Level Detail
         Refresh-SessionPath
 
         foreach ($cmd in @("node", "npm", "npx")) {
@@ -1519,7 +1552,7 @@ function Install-Skills {
 
         $selectedEntries = @(Show-SkillsSelectMenu)
         if ($selectedEntries.Count -eq 0) {
-            Write-UiWarning "未选择任何 Skills，跳过安装/更新"
+            Write-UiWarning "未选择任何 Skills，跳过安装"
             $result.Success = $true
             $result.Data = @{
                 SelectedIds         = @()
@@ -1595,7 +1628,7 @@ function Install-Skills {
         $script:LastSkillsInstallData = $result.Data
 
         if ($failedIds.Count -gt 0) {
-            $result.ErrorMessage = "以下 Skills 安装/更新失败: $($failedIds -join ', ')"
+            $result.ErrorMessage = "以下 Skills 安装失败: $($failedIds -join ', ')"
             if ($failedMessages.Count -gt 0) {
                 $result.ErrorMessage += "`n$($failedMessages -join "`n")"
             }
@@ -1605,11 +1638,149 @@ function Install-Skills {
         if ($partialIds.Count -gt 0) {
             Write-UiWarning "以下 Skills 条目仅部分安装: $($partialIds -join ', ')" -Level Detail
         }
-        Write-UiSuccess "Skills 安装/更新完成" -Level Detail
+        Write-UiSuccess "Skills 安装完成" -Level Detail
         $result.Success = $true
     }
     catch {
-        $result.ErrorMessage = "安装/更新 Skills 失败: $($_.Exception.Message)"
+        $result.ErrorMessage = "安装 Skills 失败: $($_.Exception.Message)"
+        Write-UiDanger $result.ErrorMessage
+    }
+
+    return $result
+}
+
+function Update-Skills {
+    <#
+    .SYNOPSIS
+    通过 skills CLI 官方 update 命令更新全局 Skills。
+    .RETURNS
+    @{ Success; ErrorMessage; Data; UpdatedItems }
+    #>
+    param(
+        [string[]]$SkillNames = @()
+    )
+
+    $result = @{
+        Success      = $false
+        ErrorMessage = ""
+        Data         = @{}
+        UpdatedItems = @()
+    }
+
+    try {
+        Write-UiPrimary "更新 Skills..." -Level Detail
+        Refresh-SessionPath
+
+        foreach ($cmd in @("node", "npm", "npx")) {
+            $details = Test-CommandAvailable -Command $cmd -ReturnDetails
+            if (-not $details.Available) {
+                $errorMsg = "未找到 $cmd 命令，请先完成 NodeJS 步骤"
+                if ($details.ResolvedPath) {
+                    $errorMsg += "`n  解析路径: $($details.ResolvedPath)"
+                }
+                if ($details.ErrorMessage) {
+                    $errorMsg += "`n  错误详情: $($details.ErrorMessage)"
+                }
+                throw $errorMsg
+            }
+        }
+
+        $beforeRecords = @(Get-InstalledSkillRecords)
+        $beforeNames = @(Get-UniqueSkillNames -Names @($beforeRecords | ForEach-Object { [string]$_["Name"] }))
+        $targetNames = @(Get-UniqueSkillNames -Names $SkillNames)
+        if ($beforeNames.Count -eq 0) {
+            Write-UiInfo "未检测到可更新的全局 Claude Code Skills" -Level Detail
+            $result.UpdatedItems = @("noop::Skills::no-installed-skills")
+            $result.Data["BeforeSkillNames"] = @()
+            $result.Data["AfterSkillNames"] = @()
+            $result.Data["ExpectedSkillNames"] = @()
+            $result.Data["CheckedSkillNames"] = @()
+            $script:LastSkillsInstallData = @{
+                SkippedReason       = "no-installed-skills"
+                ExpectedSkillNames  = @()
+                CheckedSkillNames   = @()
+                InstalledSkillNames = @()
+            }
+            $result.Success = $true
+            return $result
+        }
+
+        if ($targetNames.Count -gt 0) {
+            $missingTargets = @($targetNames | Where-Object { $_ -notin $beforeNames })
+            if ($missingTargets.Count -gt 0) {
+                $result.ErrorMessage = "以下 Skills 未安装，无法更新: $($missingTargets -join ', ')"
+                return $result
+            }
+        }
+
+        $arguments = @(Build-SkillsUpdateArguments -SkillNames $targetNames)
+        $preview = "npx $($arguments -join ' ')"
+        Write-UiInfo "命令: $preview" -Level Debug
+        Write-UiInfo "范围: 全局 Skills (-g)" -Level Detail
+
+        $commandResult = Invoke-ExternalCommand `
+            -Command "npx" `
+            -Arguments $arguments `
+            -SuppressOutput `
+            -TimeoutSeconds 600 `
+            -RetryCount 1
+
+        if ($commandResult.ExitCode -ne 0) {
+            $errorText = $commandResult.Error
+            if ([string]::IsNullOrWhiteSpace($errorText)) {
+                $errorText = $commandResult.Output
+            }
+            $result.ErrorMessage = "更新 Skills 失败: $(Get-SkillsInstallFriendlyError -ExitCode $commandResult.ExitCode -ErrorText $errorText -ActionName '更新')"
+            return $result
+        }
+
+        $outputText = ""
+        if ($commandResult.Output) { $outputText += [string]$commandResult.Output }
+        if ($commandResult.Error) {
+            if ($outputText) { $outputText += "`n" }
+            $outputText += [string]$commandResult.Error
+        }
+
+        $afterRecords = @(Get-InstalledSkillRecords)
+        $afterNames = @(Get-UniqueSkillNames -Names @($afterRecords | ForEach-Object { [string]$_["Name"] }))
+        $expectedNames = if ($targetNames.Count -gt 0) { @($targetNames) } else { @($beforeNames) }
+        $checkedNames = @($afterNames | Where-Object { $_ -in $expectedNames })
+
+        $result.Data["Command"] = $preview
+        $result.Data["BeforeSkillNames"] = @($beforeNames)
+        $result.Data["AfterSkillNames"] = @($afterNames)
+        $result.Data["TargetSkillNames"] = @($targetNames)
+        $result.Data["ExpectedSkillNames"] = @($expectedNames)
+        $result.Data["CheckedSkillNames"] = @($checkedNames)
+        $result.Data["Output"] = Remove-SkillsAnsiSequences -Text $outputText
+
+        if (Test-SkillsUpdateOutputNoChange -Text $outputText) {
+            $result.UpdatedItems = @("noop::Skills::no-change")
+            Write-UiInfo "Skills 已是最新" -Level Detail
+        } else {
+            if ($targetNames.Count -gt 0) {
+                $result.UpdatedItems = @($targetNames | ForEach-Object { "skills::${_}::updated" })
+            } else {
+                $result.UpdatedItems = @("skills::global::updated")
+            }
+            Write-UiSuccess "Skills 更新命令已完成" -Level Detail
+        }
+
+        $script:LastSkillsInstallData = @{
+            InstalledIds        = @()
+            UpdatedIds          = @("Skills")
+            PartialIds          = @()
+            EntryResults        = @()
+            InstalledSkillNames = @($afterNames)
+            ExpectedSkillNames  = @($expectedNames)
+            CheckedSkillNames   = @($checkedNames)
+            Command             = $preview
+        }
+        $result.Success = $true
+    }
+    catch {
+        $errorText = $_.Exception.Message
+        $result.ErrorMessage = "更新 Skills 失败: $(Get-SkillsInstallFriendlyError -ExitCode -1 -ErrorText $errorText -ActionName '更新')"
         Write-UiDanger $result.ErrorMessage
     }
 
@@ -1632,6 +1803,42 @@ function Verify-Skills {
         $installData = $script:LastSkillsInstallData
         if ($installData.ContainsKey("SkippedReason") -and [string]$installData["SkippedReason"] -eq "no-selection") {
             Write-UiInfo "  - 未选择 Skills，验证跳过 [SKIP]" -Level Detail
+            $result.Success = $true
+            return $result
+        }
+        if ($installData.ContainsKey("SkippedReason") -and [string]$installData["SkippedReason"] -eq "no-installed-skills") {
+            Write-UiInfo "  - 未检测到全局 Skills，验证跳过 [SKIP]" -Level Detail
+            $result.Success = $true
+            return $result
+        }
+        if ($installData.ContainsKey("ExpectedSkillNames")) {
+            $expectedSkillNames = @(Get-UniqueSkillNames -Names @($installData["ExpectedSkillNames"]))
+            if ($expectedSkillNames.Count -eq 0) {
+                Write-UiInfo "  - 本次无全局 Skills 需要验证 [SKIP]" -Level Detail
+                $result.Success = $true
+                return $result
+            }
+            $installedRecords = @(Get-InstalledSkillRecords)
+            $installedNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            foreach ($record in $installedRecords) {
+                [void]$installedNames.Add([string]$record["Name"])
+            }
+
+            $missingNames = @()
+            foreach ($name in $expectedSkillNames) {
+                if (-not $installedNames.Contains([string]$name)) {
+                    $missingNames += [string]$name
+                }
+            }
+
+            if ($missingNames.Count -gt 0) {
+                Write-UiInfo "  - Skills 更新验证失败 [FAIL]" -Level Detail
+                Write-UiInfo "    缺失: $($missingNames -join ', ')" -Level Detail
+                $result.ErrorMessage = "以下 Skills 更新后未检测到: $($missingNames -join ', ')"
+                return $result
+            }
+
+            Write-UiInfo "  - 已验证全局 Skills: $($expectedSkillNames.Count) 个 [PASS]" -Level Detail
             $result.Success = $true
             return $result
         }
@@ -1961,6 +2168,65 @@ function Uninstall-SkillEntry {
     return $result
 }
 
+function Show-SkillsUpdateMenu {
+    <#
+    .SYNOPSIS
+    选择更新全部或指定已安装 Skills。
+    #>
+    param()
+
+    $installedRecords = @(Get-InstalledSkillRecords)
+    $installedNames = @(Get-UniqueSkillNames -Names @($installedRecords | ForEach-Object { [string]$_["Name"] }))
+    if ($installedNames.Count -eq 0) {
+        Write-UiWarning "未检测到可更新的全局 Claude Code Skills"
+        return @{ Mode = "Cancel"; SkillNames = @() }
+    }
+
+    $choice = Show-SingleSelectMenu `
+        -Title "Skills - 更新方式" `
+        -Options @(
+            "更新全部已安装 Skills（$($installedNames.Count) 个）",
+            "选择具体 Skills 更新",
+            "取消"
+        ) `
+        -DefaultIndex 0
+
+    if ($choice -eq -1 -or $choice -eq 2) {
+        return @{ Mode = "Cancel"; SkillNames = @() }
+    }
+
+    if ($choice -eq 0) {
+        return @{ Mode = "All"; SkillNames = @() }
+    }
+
+    $options = @($installedNames | ForEach-Object { [string]$_ })
+    $selectedRaw = Show-MultiSelectMenu `
+        -Title "Skills - 选择要更新的 Skills" `
+        -Options ([string[]]$options) `
+        -DefaultSelected @()
+
+    if ($null -eq $selectedRaw) {
+        return @{ Mode = "Cancel"; SkillNames = @() }
+    }
+
+    $selectedIndices = @($selectedRaw)
+    if ($selectedIndices.Count -eq 1 -and $selectedIndices[0] -is [array]) {
+        $selectedIndices = @($selectedIndices[0])
+    }
+    if ($selectedIndices.Count -eq 0) {
+        return @{ Mode = "Cancel"; SkillNames = @() }
+    }
+
+    $selectedNames = @()
+    foreach ($idx in $selectedIndices) {
+        if ($idx -ge 0 -and $idx -lt $installedNames.Count) {
+            $selectedNames += [string]$installedNames[$idx]
+        }
+    }
+
+    return @{ Mode = "Selected"; SkillNames = @($selectedNames) }
+}
+
 function Uninstall-Skills {
     <#
     .SYNOPSIS
@@ -2029,7 +2295,7 @@ function Uninstall-Skills {
 function Show-SkillsManageMenu {
     <#
     .SYNOPSIS
-    Skills 管理菜单：查看状态、安装/更新、卸载。
+    Skills 管理菜单：查看状态、安装、更新、卸载。
     #>
     param()
 
@@ -2039,13 +2305,14 @@ function Show-SkillsManageMenu {
         $choice = Show-SingleSelectMenu `
             -Title "Skills 管理" `
             -Options @(
-                "安装/更新 Skills（已安装项可选中重复安装）",
+                "安装 Skills（从 catalogue 选择 source / 子 Skills）",
+                "更新 Skills（官方 skills update，可全量或单独更新）",
                 "卸载 Skills",
                 "返回"
             ) `
             -DefaultIndex 0
 
-        if ($choice -eq -1 -or $choice -eq 2) {
+        if ($choice -eq -1 -or $choice -eq 3) {
             return
         }
 
@@ -2057,6 +2324,15 @@ function Show-SkillsManageMenu {
                 }
             }
             1 {
+                $updateSelection = Show-SkillsUpdateMenu
+                if ([string]$updateSelection["Mode"] -ne "Cancel") {
+                    $updateResult = Update-Skills -SkillNames @($updateSelection["SkillNames"])
+                    if (-not [bool]$updateResult.Success) {
+                        Write-UiWarning $updateResult.ErrorMessage
+                    }
+                }
+            }
+            2 {
                 $uninstallResult = Uninstall-Skills
                 if (-not [bool]$uninstallResult.Success) {
                     Write-UiWarning $uninstallResult.ErrorMessage
