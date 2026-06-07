@@ -2,7 +2,7 @@
 
 > 生成时间：2026-03-15 | 覆盖率：97% (33/34 文件)
 
-Windows 10/11 与 macOS 12+ 双平台的 **Claude Code 开发环境自动化安装器**。Windows 使用双阶段 PowerShell 架构（PS 5.1 引导 + PS 7 主安装/管理），macOS 使用 zsh + Homebrew + nvm 原生入口；14 步依赖链、共享 contracts 契约与实时检测机制。
+Windows 10/11 与 macOS 12+ 双平台的 **Claude Code 开发环境自动化安装器**。Windows 使用双阶段 PowerShell 架构（PS 5.1 引导 + PS 7 主安装/管理），macOS 使用 zsh + Homebrew + nvm 原生入口；13 步安装依赖链、Manage Skills 管理入口、共享 contracts 契约与实时检测机制。
 
 ---
 
@@ -20,12 +20,12 @@ claude-code-quickstart/
 │   │   ├── Install-ClaudeEnv.ps1     # Windows PS 7+ 安装入口
 │   │   ├── Manage-ClaudeEnv.ps1      # Windows PS 7+ 管理入口
 │   │   ├── core/                     # Windows PowerShell runtime core
-│   │   └── steps/                    # Windows 14 步骤（NodeJS 含 5 子模块）
+│   │   └── steps/                    # Windows 13 个安装步骤 + Skills 管理模块（NodeJS 含 5 子模块）
 │   └── macos/
 │       ├── Install-ClaudeEnv.zsh     # macOS zsh 安装入口（合并 Bootstrap 前置检测）
 │       ├── Manage-ClaudeEnv.zsh      # macOS zsh 管理入口
 │       ├── core/                     # macOS zsh runtime core
-│       └── steps/                    # macOS 14 步骤实现
+│       └── steps/                    # macOS 13 个安装步骤 + Skills 管理模块
 └── test-syntax.ps1                   # Windows PowerShell 语法校验
 ```
 
@@ -44,7 +44,7 @@ graph TD
     C --> C2["Admin / Net / Registry"]
     C --> C3["Bootstrap / McpManager / Provider"]
     D --> D1["NodeJS (5 子模块) / Git / ClaudeCode / ApiKey"]
-    D --> D2["Ccline / ClaudeConfig / ClaudeMd / Mcp / CcgWorkflow / Skills / OpenSpec"]
+    D --> D2["Ccline / ClaudeConfig / ClaudeMd / Mcp / CcgWorkflow / OpenSpec"]
     D --> D3["CcSwitch / CodexCli / AntigravityCli (可选)"]
     F --> F1["steps / providers / MCP / ClaudeConfig / templates / build"]
     G --> G1["Install / Manage zsh"]
@@ -60,7 +60,7 @@ graph TD
 
 ```
 NodeJS ─── ClaudeCode ─── ApiKey / Ccline / ClaudeConfig / Mcp
-       ├── CcgWorkflow / OpenSpec / CodexCli [可选] / Skills [可选, 依赖 ClaudeCode]
+       ├── CcgWorkflow / OpenSpec / CodexCli [可选]
 Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode]    AntigravityCli [可选, 无依赖]
 ```
 
@@ -74,8 +74,8 @@ Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode] 
 | installer/contracts/ | [installer/contracts/README.md](installer/contracts/README.md) | 跨平台步骤、供应商、MCP、ClaudeConfig、模板与构建契约 |
 | installer/windows/ | [installer/CLAUDE.md](installer/CLAUDE.md) | Windows canonical 入口、core 与 steps |
 | installer/windows/core/ | [installer/windows/core/CLAUDE.md](installer/windows/core/CLAUDE.md) | Windows PowerShell runtime core（含 Registry + McpManager + Provider） |
-| installer/windows/steps/ | [installer/windows/steps/CLAUDE.md](installer/windows/steps/CLAUDE.md) | Windows 14 个安装步骤模块（NodeJS 含 5 子模块，含 Update 函数） |
-| installer/macos/ | [installer/macos/README.md](installer/macos/README.md) | macOS zsh Install/Manage、core 与 14 步骤实现 |
+| installer/windows/steps/ | [installer/windows/steps/CLAUDE.md](installer/windows/steps/CLAUDE.md) | Windows 13 个安装步骤模块 + Skills 管理模块（NodeJS 含 5 子模块，含 Update 函数） |
+| installer/macos/ | [installer/macos/README.md](installer/macos/README.md) | macOS zsh Install/Manage、core 与 13 个安装步骤 + Skills 管理模块 |
 
 ---
 
@@ -125,8 +125,8 @@ pwsh -File installer/windows/Install-ClaudeEnv.ps1
 # 查看步骤列表
 pwsh -File installer/windows/Install-ClaudeEnv.ps1 -ListSteps
 
-# 可选安装 Skills（copy 模式）
-pwsh -File installer/windows/Install-ClaudeEnv.ps1 -Group Advanced -Mode Select -SkillsCopy
+# 管理 Skills（安装/更新/卸载）
+pwsh -File installer/windows/Manage-ClaudeEnv.ps1 -Action Skills
 
 # 管理已安装环境（更新/供应商/MCP/Skills）
 pwsh -File installer/windows/Manage-ClaudeEnv.ps1

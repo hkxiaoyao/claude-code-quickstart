@@ -270,7 +270,6 @@ ccq_manage_update_hint() {
   case "${1:-}" in
     ClaudeCode|Ccline|OpenSpec|CodexCli) printf 'npm latest' ;;
     CcgWorkflow) printf 'npx refresh' ;;
-    Skills) printf 'skills update' ;;
     ClaudeConfig|ClaudeMd) printf '声明式对齐' ;;
     CcSwitch) printf 'brew cask' ;;
     AntigravityCli) printf 'agy update/install.sh' ;;

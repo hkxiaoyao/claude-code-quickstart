@@ -9,9 +9,6 @@ $ErrorActionPreference = 'Stop'
 # 依赖: Ui.ps1, Process.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
 $script:SkillsCliScope = "global:claude-code"
-$script:SkillsInstallOptions = @{
-    CopyMode = $false
-}
 $script:SkillsIgnoredNames = @(
     "ccg-skills",
     "collaborating-with-codex",
@@ -120,14 +117,6 @@ $script:SkillsCatalogue = @(
         SkipDiscovery   = $true
     }
 )
-
-function Set-SkillsInstallOptions {
-    param(
-        [bool]$CopyMode = $false
-    )
-
-    $script:SkillsInstallOptions.CopyMode = [bool]$CopyMode
-}
 
 function Get-SkillsCatalogue {
     <#
@@ -1364,10 +1353,6 @@ function Resolve-SkillsCopyMode {
     #>
     param()
 
-    if ([bool]$script:SkillsInstallOptions.CopyMode) {
-        return $true
-    }
-
     $choice = Show-SingleSelectMenu `
         -Title "是否启用 Skills copy 模式？" `
         -Options @(
@@ -1394,7 +1379,7 @@ function Get-SkillsInstallFriendlyError {
         return "无法访问 npm/GitHub，请检查网络连接或代理设置"
     }
     if ($ErrorText -match 'EACCES|EPERM|permission|symlink') {
-        return "文件权限或 symlink 创建失败，可在安装/重装时启用 -SkillsCopy，或检查全局 Skills 目录权限"
+        return "文件权限或 symlink 创建失败，可在 Skills 管理安装/重装时启用 copy 模式，或检查全局 Skills 目录权限"
     }
     if ($ErrorText -match 'not found|No matching|404') {
         return "Skills source 或指定 skill 可能已变更，请检查 catalogue"

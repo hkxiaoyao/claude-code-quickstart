@@ -446,17 +446,17 @@ function Get-InlineStepRegistry {
         @{
             StepId          = "Skills"
             StepName        = "Skills"
-            Description     = "安装 Skills（用户级全局，单选 source，集合类支持子 Skills 多选）；更新使用官方 skills update"
+            Description     = "Skills 管理模块（仅通过 Manage → Skills 管理安装/更新/卸载，不参与安装流程与统一更新）"
             StepFile        = "windows/steps/Skills.ps1"
             TestFunction    = "Test-SkillsInstalled"
             InstallFunction = "Install-Skills"
             VerifyFunction  = "Verify-Skills"
-            UpdateFunction  = "Update-Skills"
+            UpdateFunction  = ""
             SkipIfInstalled = $false
             IsOptional      = $true
             Order           = 95
             Dependencies    = @("NodeJS", "ClaudeCode")
-            Group           = "Advanced"
+            Group           = "Manage"
         },
         @{
             StepId          = "OpenSpec"
@@ -600,7 +600,7 @@ function Get-StepGroups {
         }
         Advanced = @{
             Label       = "进阶扩展"
-            Description = "增强配置，MCP，Skills，Workflow"
+            Description = "增强配置，MCP，Workflow"
             InstallMode = "OneClickOrSelect"
             StepIds     = $advancedIds
         }

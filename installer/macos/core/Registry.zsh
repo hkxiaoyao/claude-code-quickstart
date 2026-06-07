@@ -30,7 +30,7 @@ ccq_registry_init_bootstrap_snapshot() {
   [ "${#CCQ_BOOTSTRAP_STEP_IDS[@]}" -gt 0 ] && return 0
 
   CCQ_BOOTSTRAP_GROUP_BASIC=(NodeJS Git ClaudeCode ApiKey)
-  CCQ_BOOTSTRAP_GROUP_ADVANCED=(Ccline ClaudeConfig ClaudeMd Mcp CcgWorkflow Skills OpenSpec CcSwitch CodexCli AntigravityCli)
+  CCQ_BOOTSTRAP_GROUP_ADVANCED=(Ccline ClaudeConfig ClaudeMd Mcp CcgWorkflow OpenSpec CcSwitch CodexCli AntigravityCli)
   CCQ_BOOTSTRAP_STEP_IDS=(NodeJS Git ClaudeCode ApiKey Ccline ClaudeConfig ClaudeMd Mcp CcgWorkflow Skills OpenSpec CcSwitch CodexCli AntigravityCli)
 
   CCQ_BOOTSTRAP_STEP_NAME[NodeJS]="Node.js"
@@ -57,7 +57,7 @@ ccq_registry_init_bootstrap_snapshot() {
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[ClaudeMd]="创建全局 CLAUDE.md 配置文件"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[Mcp]="配置 MCP 插件服务器"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[CcgWorkflow]="安装 CCG 工作流脚本和 Slash Commands"
-  CCQ_BOOTSTRAP_STEP_DESCRIPTION[Skills]="安装 Skills 用户级全局资源"
+  CCQ_BOOTSTRAP_STEP_DESCRIPTION[Skills]="Skills 管理模块（仅通过 Manage → Skills 管理安装/更新/卸载）"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[OpenSpec]="安装 OpenSpec CLI"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[CcSwitch]="安装 cc-switch 或显示 macOS 平台状态"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[CodexCli]="安装 OpenAI Codex CLI"
@@ -101,7 +101,7 @@ ccq_registry_init_bootstrap_snapshot() {
   CCQ_BOOTSTRAP_STEP_UPDATE[ClaudeMd]="Update-ClaudeMd"
   CCQ_BOOTSTRAP_STEP_UPDATE[Ccline]="Update-Ccline"
   CCQ_BOOTSTRAP_STEP_UPDATE[CcgWorkflow]="Update-CcgWorkflow"
-  CCQ_BOOTSTRAP_STEP_UPDATE[Skills]="Update-Skills"
+  CCQ_BOOTSTRAP_STEP_UPDATE[Skills]=""
   CCQ_BOOTSTRAP_STEP_UPDATE[OpenSpec]="Update-OpenSpec"
   CCQ_BOOTSTRAP_STEP_UPDATE[CcSwitch]="Update-CcSwitch"
   CCQ_BOOTSTRAP_STEP_UPDATE[CodexCli]="Update-CodexCli"
@@ -197,6 +197,7 @@ ccq_get_bootstrap_step_field() {
     Group)
       case "${step_id}" in
         NodeJS|Git|ClaudeCode|ApiKey) printf 'Basic' ;;
+        Skills) printf 'Manage' ;;
         *) printf 'Advanced' ;;
       esac
       ;;

@@ -10,8 +10,7 @@ param(
     [string]$Mode = "",
     [switch]$Staged,
     [ValidateSet("Normal", "Developer")]
-    [string]$OutputMode = "Normal",
-    [switch]$SkillsCopy
+    [string]$OutputMode = "Normal"
 )
 
 Set-StrictMode -Version Latest
@@ -80,10 +79,6 @@ if (-not [string]::IsNullOrWhiteSpace($script:WindowsRoot)) {
         }
         . $stepPath
     }
-}
-
-if (Get-Command Set-SkillsInstallOptions -ErrorAction SilentlyContinue) {
-    Set-SkillsInstallOptions -CopyMode ([bool]$SkillsCopy)
 }
 
 # ─── 初始化输出模式（步骤加载之后，避免被重复 dot-source 覆盖）──────────────
@@ -725,7 +720,7 @@ function Select-TopLevelAction {
 
     $options = @(
         "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置"
-        "进阶扩展 - 增强配置，MCP，Skills，Workflow"
+        "进阶扩展 - 增强配置，MCP，Workflow"
     )
 
     return Show-SingleSelectMenu -Title "请选择操作：" -Options $options -DefaultIndex 0
@@ -741,7 +736,7 @@ function Select-AdvancedAction {
     param()
 
     $options = @(
-        "一键安装 - 安装全部必选进阶组件（不含可选的 Skills/cc-switch/Codex/Antigravity CLI）"
+        "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Antigravity CLI）"
         "可选安装 - 选择要安装的组件"
     )
 

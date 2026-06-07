@@ -32,7 +32,6 @@ CCQ_PARAM_LIST_STEPS=0
 CCQ_PARAM_GROUP=""
 CCQ_PARAM_MODE=""
 CCQ_PARAM_STAGED=0
-CCQ_PARAM_SKILLS_COPY=0
 CCQ_PARAM_OUTPUT_MODE="normal"
 CCQ_SHORTCUT_REGISTERED=0
 
@@ -46,7 +45,6 @@ Options:
   -Mode, --mode <OneClick|Select>  指定 Advanced 安装模式
   -Staged, --staged              兼容参数，等同 Advanced Select
   -OutputMode, --output-mode <Normal|Developer>
-  -SkillsCopy, --skills-copy      传递 Skills copy 安装意图
   -h, --help                     显示帮助
 EOF
 }
@@ -73,11 +71,6 @@ ccq_parse_args() {
       -OutputMode|--output-mode)
         CCQ_PARAM_OUTPUT_MODE="${2:-normal}"
         shift 2
-        ;;
-      -SkillsCopy|--skills-copy)
-        CCQ_PARAM_SKILLS_COPY=1
-        export CCQ_SKILLS_COPY=1
-        shift
         ;;
       -h|--help)
         ccq_usage
@@ -523,12 +516,12 @@ ccq_invoke_grouped_install() {
 ccq_select_top_level_action() {
   ccq_prompt_single "请选择操作：" 0 \
     "基础环境 - Node.js, Git, Claude Code, 第三方供应商配置" \
-    "进阶扩展 - 增强配置，MCP，Skills，Workflow"
+    "进阶扩展 - 增强配置，MCP，Workflow"
 }
 
 ccq_select_advanced_action() {
   ccq_prompt_single "进阶扩展 - 请选择安装模式：" 0 \
-    "一键安装 - 安装全部必选进阶组件（不含可选 Skills/CLI）" \
+    "一键安装 - 安装全部必选进阶组件（不含可选 CLI）" \
     "可选安装 - 选择要安装的组件"
 }
 

@@ -13,7 +13,7 @@
 | `windows/Install-ClaudeEnv.ps1` | Windows / PS 7.0+ | Windows 安装入口：Basic / Advanced 分组安装，动态加载 `windows/core/` 与 `windows/steps/` |
 | `windows/Manage-ClaudeEnv.ps1` | Windows / PS 7.0+ | Windows 管理入口：Update / Provider / MCP / Skills |
 | `windows/core/` | Windows / PowerShell | Windows runtime core：UI、Process、Profile、Registry、Bootstrap、MCP、Provider |
-| `windows/steps/` | Windows / PowerShell | Windows 14 个步骤实现，StepId 与 macOS 保持一致 |
+| `windows/steps/` | Windows / PowerShell | Windows 13 个安装步骤 + Skills 管理模块，StepId 与 macOS 保持一致 |
 | `contracts/` | JSON 契约 | 跨平台 StepId、分组、依赖、Provider、MCP、ClaudeConfig、模板与构建清单 |
 | `macos/Install-ClaudeEnv.zsh` | macOS / bash→zsh | macOS 安装入口：合并 Bootstrap 前置检测，支持 `curl ... | bash` 后自动切换 `/bin/zsh` |
 | `macos/Manage-ClaudeEnv.zsh` | macOS / zsh | macOS 管理入口：Update / Provider / MCP / Skills |
