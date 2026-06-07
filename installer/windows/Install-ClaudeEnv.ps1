@@ -46,31 +46,40 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     Write-Host "  解决方案：" -ForegroundColor Yellow
     Write-Host "    1. 先运行引导脚本:" -ForegroundColor White
     Write-Host "       Set-ExecutionPolicy Bypass -Scope Process -Force" -ForegroundColor Gray
-    Write-Host "       [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Bootstrap-ClaudeEnv.built.ps1')) | iex" -ForegroundColor Gray
+    Write-Host "       [Text.Encoding]::UTF8.GetString((New-Object Net.WebClient).DownloadData('https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/bootstrap.ps1')) | iex" -ForegroundColor Gray
     Write-Host "    2. 或在 Windows Terminal 中打开 PowerShell 7 后执行此脚本" -ForegroundColor White
     Write-Host ""
     exit 1
 }
 
-$script:InstallerRoot = $PSScriptRoot
+$script:WindowsRoot = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) { "" } else { $PSScriptRoot }
+$script:InstallerRoot = if ([string]::IsNullOrWhiteSpace($script:WindowsRoot)) { "" } else { Split-Path -Parent $script:WindowsRoot }
 
 # ─── Dot-source 核心模块 ────────────────────────────────────────────────────
 
-. "$script:InstallerRoot\core\Ui.ps1"
-. "$script:InstallerRoot\core\Process.ps1"
-. "$script:InstallerRoot\core\Profile.ps1"
-. "$script:InstallerRoot\core\Admin.ps1"
-. "$script:InstallerRoot\core\Net.ps1"
-. "$script:InstallerRoot\core\Registry.ps1"
-. "$script:InstallerRoot\core\Bootstrap.ps1"
-. "$script:InstallerRoot\core\McpManager.ps1"
-. "$script:InstallerRoot\core\Provider.ps1"
+. "$script:WindowsRoot\core\Ui.ps1"
+. "$script:WindowsRoot\core\Process.ps1"
+. "$script:WindowsRoot\core\Profile.ps1"
+. "$script:WindowsRoot\core\Admin.ps1"
+. "$script:WindowsRoot\core\Net.ps1"
+. "$script:WindowsRoot\core\Registry.ps1"
+. "$script:WindowsRoot\core\Bootstrap.ps1"
+. "$script:WindowsRoot\core\McpManager.ps1"
+. "$script:WindowsRoot\core\Provider.ps1"
 
 # ─── Dot-source 所有步骤模块（从 Registry 动态加载）──────────────────────────
 
 $stepFiles = Get-StepFiles
-foreach ($stepFile in $stepFiles) {
-    . "$script:InstallerRoot\$stepFile"
+if (-not [string]::IsNullOrWhiteSpace($script:WindowsRoot)) {
+    foreach ($stepFile in $stepFiles) {
+        $normalizedStepFile = $stepFile -replace '\\', '/'
+        $stepPath = if ($normalizedStepFile -like "windows/*") {
+            Join-Path $script:InstallerRoot $stepFile
+        } else {
+            Join-Path $script:WindowsRoot $stepFile
+        }
+        . $stepPath
+    }
 }
 
 if (Get-Command Set-SkillsInstallOptions -ErrorAction SilentlyContinue) {
@@ -307,8 +316,8 @@ function Register-CcqShortcut {
         return
     }
 
-    $installScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Install-ClaudeEnv.built.ps1"
-    $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/Manage-ClaudeEnv.built.ps1"
+    $installScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/install.ps1"
+    $manageScriptUrl = "https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/manage.ps1"
 
     $shortcutTemplate = @'
 function ccq {

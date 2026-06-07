@@ -2,7 +2,7 @@
 
 $errors = [System.Management.Automation.PSParseError[]]@()
 $null = [System.Management.Automation.PSParser]::Tokenize(
-    (Get-Content "F:/web/claude-code-quickstart/installer/core/Process.ps1" -Raw),
+    (Get-Content "F:/web/claude-code-quickstart/installer/windows/core/Process.ps1" -Raw),
     [ref]$errors
 )
 
@@ -14,7 +14,7 @@ if ($errors.Count -gt 0) {
 
 Write-Host "PASS: Syntax OK" -ForegroundColor Green
 
-Import-Module "F:/web/claude-code-quickstart/installer/core/Process.ps1" -Force
+Import-Module "F:/web/claude-code-quickstart/installer/windows/core/Process.ps1" -Force
 
 $required = @(
     'Invoke-ExternalCommand',

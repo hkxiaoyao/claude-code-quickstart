@@ -24,74 +24,83 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "PowerShell 版本: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
-          & ".\installer\build\Build-SingleFile.ps1"
+          & ".\installer\build.ps1" -Platform All
 
       - name: 验证构建产物
         shell: pwsh
         run: |
-          $bootstrapPath = ".\installer\build\dist\Bootstrap-ClaudeEnv.built.ps1"
-          $installerPath = ".\installer\build\dist\Install-ClaudeEnv.built.ps1"
-          $managePath    = ".\installer\build\dist\Manage-ClaudeEnv.built.ps1"
-          if (-not (Test-Path $bootstrapPath)) { throw "Bootstrap 构建产物不存在" }
-          if (-not (Test-Path $installerPath)) { throw "Installer 构建产物不存在" }
-          if (-not (Test-Path $managePath))    { throw "Manage 构建产物不存在" }
-          Write-Host "[PASS] 构建产物验证通过" -ForegroundColor Green
-          Write-Host "  Bootstrap: $([math]::Round((Get-Item $bootstrapPath).Length / 1KB, 1)) KB"
-          Write-Host "  Install:   $([math]::Round((Get-Item $installerPath).Length / 1KB, 1)) KB"
-          Write-Host "  Manage:    $([math]::Round((Get-Item $managePath).Length / 1KB, 1)) KB"
+          $expected = @(
+            ".\dist\bootstrap.ps1",
+            ".\dist\install.ps1",
+            ".\dist\manage.ps1",
+            ".\dist\install.sh",
+            ".\dist\manage.sh"
+          )
+
+          foreach ($path in $expected) {
+            if (-not (Test-Path $path -PathType Leaf)) {
+              throw "构建产物不存在: $path"
+            }
+            Write-Host "[PASS] $path $([math]::Round((Get-Item $path).Length / 1KB, 1)) KB" -ForegroundColor Green
+          }
 
       - name: 上传构建产物（Artifacts）
         uses: actions/upload-artifact@v4
         with:
           name: built-scripts-${{ github.sha }}
-          path: |
-            installer/build/dist/Bootstrap-ClaudeEnv.built.ps1
-            installer/build/dist/Install-ClaudeEnv.built.ps1
-            installer/build/dist/Manage-ClaudeEnv.built.ps1
+          path: dist/*
           retention-days: 7
 
       - name: 创建或更新 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/build/dist/*.built.ps1
+          files: dist/*
           generate_release_notes: true
           body: |
-            ## 🚀 云端一键安装
+            ## 云端一键安装
 
-            打开 **PowerShell**（任意版本，无需管理员），粘贴以下命令：
+            Windows 首次安装（PowerShell 任意版本）：
 
             ```powershell
             Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/bootstrap.ps1' | iex
             ```
 
-            > Bootstrap 脚本会自动安装 PowerShell 7 等前置依赖，完成后引导运行主安装脚本。
+            macOS 首次安装：
 
-            ---
-
-            ## 📋 分步安装
-
-            **步骤 1**（在旧版 PowerShell / Git Bash 中运行）：
-            ```powershell
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Bootstrap-ClaudeEnv.built.ps1' | iex
-            ```
-
-            **步骤 2**（在 PowerShell 7 中运行）：
-            ```powershell
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/Install-ClaudeEnv.built.ps1' | iex
+            ```sh
+            curl -fsSL 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.sh' | bash
             ```
 
             ---
 
-            ## 📦 文件说明
+            ## 分步安装
 
-            | 文件 | PS 版本要求 | 用途 |
+            Windows Bootstrap（旧版 PowerShell / Git Bash 中运行）：
+
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/bootstrap.ps1' | iex
+            ```
+
+            Windows Install（PowerShell 7 中运行）：
+
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            irm 'https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install.ps1' | iex
+            ```
+
+            ---
+
+            ## 文件说明
+
+            | 文件 | 运行时要求 | 用途 |
             |------|------------|------|
-            | `Bootstrap-ClaudeEnv.built.ps1` | 5.1+ | 安装前置依赖（首先运行）|
-            | `Install-ClaudeEnv.built.ps1` | 7.0+ | 安装 Claude Code 开发环境（基础 + 进阶）|
-            | `Manage-ClaudeEnv.built.ps1` | 7.0+ | 统一管理（更新组件 / 供应商管理 / MCP 管理）|
+            | `bootstrap.ps1` | Windows PowerShell 5.1+ | 安装前置依赖 |
+            | `install.ps1` | PowerShell 7.0+ | Windows 安装入口 |
+            | `manage.ps1` | PowerShell 7.0+ | Windows 管理入口 |
+            | `install.sh` | macOS bash → zsh | macOS 安装入口 |
+            | `manage.sh` | macOS zsh | macOS 管理入口 |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

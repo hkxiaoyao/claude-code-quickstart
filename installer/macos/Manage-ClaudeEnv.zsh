@@ -1,0 +1,657 @@
+#!/usr/bin/env zsh
+# Manage-ClaudeEnv.zsh - macOS 管理入口
+# 功能: Update、Provider、MCP、Skills 四类管理入口骨架
+
+if [ -z "${ZSH_VERSION:-}" ]; then
+  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ] && [ -x "/bin/zsh" ]; then
+    exec /bin/zsh "${BASH_SOURCE[0]}" "$@"
+  fi
+  if [ -x "/bin/zsh" ]; then
+    ccq_streamed_script="$(mktemp "${TMPDIR:-/tmp}/ccq-manage.XXXXXX.zsh")" || exit 1
+    cat > "${ccq_streamed_script}"
+    export CCQ_STREAMED_SCRIPT_PATH="${ccq_streamed_script}"
+    exec /bin/zsh "${ccq_streamed_script}" "$@"
+  fi
+  printf '%s\n' 'Manage-ClaudeEnv.zsh 需要 zsh 执行；云端 built 入口会自动切换到 /bin/zsh。' >&2
+  exit 1
+fi
+
+if [ -n "${CCQ_STREAMED_SCRIPT_PATH:-}" ]; then
+  trap 'rm -f "${CCQ_STREAMED_SCRIPT_PATH}"' EXIT
+fi
+
+setopt NO_NOMATCH
+setopt PIPE_FAIL
+setopt SH_WORD_SPLIT
+
+CCQ_MACOS_ROOT="$(cd "$(dirname "${0:A}")" && pwd)"
+CCQ_INSTALLER_ROOT="$(cd "${CCQ_MACOS_ROOT}/.." && pwd)"
+export CCQ_MACOS_ROOT CCQ_INSTALLER_ROOT
+
+CCQ_PARAM_ACTION=""
+CCQ_PARAM_LIST_UPDATES=0
+CCQ_PARAM_LIST_PROVIDERS=0
+CCQ_PARAM_PROVIDER=""
+CCQ_PARAM_OUTPUT_MODE="normal"
+
+ccq_manage_usage() {
+  cat <<'EOF'
+Usage: Manage-ClaudeEnv.zsh [OPTIONS]
+
+Options:
+  -Action, --action <Update|Provider|Mcp|Skills>  指定管理动作
+  -ListUpdates, --list-updates                    列出可更新组件状态后退出
+  -ListProviders, --list-providers                列出供应商状态后退出
+  -Provider, --provider <key>                     切换活跃供应商
+  -OutputMode, --output-mode <Normal|Developer>   输出模式
+  -h, --help                                      显示帮助
+EOF
+}
+
+ccq_manage_parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -Action|--action)
+        CCQ_PARAM_ACTION="${2:-}"
+        shift 2
+        ;;
+      -ListUpdates|--list-updates)
+        CCQ_PARAM_LIST_UPDATES=1
+        shift
+        ;;
+      -ListProviders|--list-providers)
+        CCQ_PARAM_LIST_PROVIDERS=1
+        shift
+        ;;
+      -Provider|--provider)
+        CCQ_PARAM_PROVIDER="${2:-}"
+        shift 2
+        ;;
+      -OutputMode|--output-mode)
+        CCQ_PARAM_OUTPUT_MODE="${2:-normal}"
+        shift 2
+        ;;
+      -h|--help)
+        ccq_manage_usage
+        exit 0
+        ;;
+      *)
+        printf '未知参数: %s\n' "$1" >&2
+        ccq_manage_usage >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  case "${CCQ_PARAM_OUTPUT_MODE:l}" in
+    developer) CCQ_PARAM_OUTPUT_MODE="developer" ;;
+    *) CCQ_PARAM_OUTPUT_MODE="normal" ;;
+  esac
+}
+
+ccq_manage_source_file() {
+  local file_path="${1:-}"
+  [ -f "${file_path}" ] || return 1
+  source "${file_path}"
+}
+
+ccq_manage_load_core() {
+  if [ "${CCQ_BUILT_MODE:-0}" = "1" ] && command -v ccq_set_output_mode >/dev/null 2>&1; then
+    ccq_set_output_mode "${CCQ_PARAM_OUTPUT_MODE}"
+    return 0
+  fi
+
+  local core_dir="${CCQ_MACOS_ROOT}/core"
+  local core_file
+  for core_file in Ui Process Profile Platform PackageManager Json Registry Bootstrap; do
+    ccq_manage_source_file "${core_dir}/${core_file}.zsh" || {
+      printf '无法加载 macOS core: %s\n' "${core_file}.zsh" >&2
+      return 1
+    }
+  done
+  ccq_set_output_mode "${CCQ_PARAM_OUTPUT_MODE}"
+}
+
+ccq_manage_load_step_modules() {
+  if [ "${CCQ_BUILT_MODE:-0}" = "1" ]; then
+    return 0
+  fi
+
+  local step_files step_file full_path
+  step_files="$(ccq_get_step_files 2>/dev/null || true)"
+  for step_file in ${step_files}; do
+    full_path="${CCQ_INSTALLER_ROOT}/${step_file}"
+    if [ -f "${full_path}" ]; then
+      source "${full_path}"
+    else
+      ccq_ui_warning "步骤模块尚未实现，跳过加载: ${step_file}" "developer"
+    fi
+  done
+}
+
+ccq_manage_prompt_single() {
+  local title="${1:-请选择}"
+  local default_index="${2:-0}"
+  shift 2 || true
+  local options=("$@")
+  local count="${#options[@]}"
+  local choice
+  [ "${count}" -gt 0 ] || return 1
+
+  if [ ! -r /dev/tty ]; then
+    printf '%s\n' "${default_index}"
+    return 0
+  fi
+
+  while true; do
+    printf '\n%s\n' "${title}" > /dev/tty
+    local i=1
+    for option in "${options[@]}"; do
+      printf '  %s) %s\n' "${i}" "${option}" > /dev/tty
+      i=$((i + 1))
+    done
+    printf '请输入编号 [1-%s]，或 q 取消: ' "${count}" > /dev/tty
+    IFS= read -r choice < /dev/tty || return 1
+    case "${choice}" in
+      q|Q) return 1 ;;
+      ''|*[!0-9]*) printf '请输入有效编号\n' > /dev/tty ;;
+      *)
+        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; then
+          printf '%s\n' $((choice - 1))
+          return 0
+        fi
+        printf '编号超出范围\n' > /dev/tty
+        ;;
+    esac
+  done
+}
+
+ccq_manage_prompt_multi() {
+  local title="${1:-请选择}"
+  local default_indices="${2:-}"
+  shift 2 || true
+  local options=("$@")
+  local count="${#options[@]}"
+  local choice item selected=()
+  [ "${count}" -gt 0 ] || return 1
+
+  if [ ! -r /dev/tty ]; then
+    return 1
+  fi
+
+  while true; do
+    selected=()
+    printf '\n%s\n' "${title}" > /dev/tty
+    local i=1 marker
+    for item in "${options[@]}"; do
+      marker=" "
+      case " ${default_indices} " in
+        *" $((i - 1)) "*) marker="*" ;;
+      esac
+      printf '  %s) [%s] %s\n' "${i}" "${marker}" "${item}" > /dev/tty
+      i=$((i + 1))
+    done
+    printf '请输入编号（多个用空格/逗号分隔），a 全选，回车使用默认，q 取消: ' > /dev/tty
+    IFS= read -r choice < /dev/tty || return 1
+    choice="${choice//,/ }"
+    case "${choice}" in
+      q|Q) return 1 ;;
+      a|A)
+        i=0
+        while [ "${i}" -lt "${count}" ]; do
+          selected+=("${i}")
+          i=$((i + 1))
+        done
+        printf '%s\n' "${selected[@]}"
+        return 0
+        ;;
+      '')
+        [ -n "${default_indices}" ] || return 1
+        for item in ${default_indices}; do
+          selected+=("${item}")
+        done
+        printf '%s\n' "${selected[@]}"
+        return 0
+        ;;
+    esac
+
+    for item in ${choice}; do
+      case "${item}" in
+        ''|*[!0-9]*) ;;
+        *)
+          if [ "${item}" -ge 1 ] && [ "${item}" -le "${count}" ]; then
+            selected+=("$((item - 1))")
+          fi
+          ;;
+      esac
+    done
+    if [ "${#selected[@]}" -gt 0 ]; then
+      printf '%s\n' "${selected[@]}"
+      return 0
+    fi
+    printf '请输入有效编号\n' > /dev/tty
+  done
+}
+
+ccq_manage_mask_status_value() {
+  local value="${1:-}"
+  if [ -z "${value}" ]; then
+    printf '-'
+  elif [ "${#value}" -le 8 ]; then
+    printf '***'
+  else
+    printf '%s***%s' "${value:0:3}" "${value: -3}"
+  fi
+}
+
+ccq_manage_result_field() {
+  local result="${1:-}"
+  local field="${2:-}"
+  [ -n "${field}" ] || return 1
+  ccq_parse_result_field "${result}" "${field}" 2>/dev/null || true
+}
+
+ccq_manage_step_test_result() {
+  local test_function="${1:-}"
+  [ -n "${test_function}" ] || return 1
+  command -v "${test_function}" >/dev/null 2>&1 || return 1
+  "${test_function}" 2>/dev/null || true
+}
+
+ccq_manage_step_installed() {
+  local test_function="${1:-}"
+  local result
+  result="$(ccq_manage_step_test_result "${test_function}" 2>/dev/null || true)"
+  [ -n "${result}" ] || return 1
+  ccq_result_is_installed "${result}"
+}
+
+ccq_manage_update_hint() {
+  case "${1:-}" in
+    ClaudeCode|Ccline|OpenSpec|CodexCli) printf 'npm latest' ;;
+    CcgWorkflow) printf 'npx refresh' ;;
+    Skills) printf 'skills update' ;;
+    ClaudeConfig|ClaudeMd) printf '声明式对齐' ;;
+    CcSwitch) printf 'brew cask' ;;
+    AntigravityCli) printf 'agy update/install.sh' ;;
+    *) printf 'update' ;;
+  esac
+}
+
+ccq_manage_update_status_lines() {
+  local step_id update_function test_function step_name version_tag installed test_result hint settings_path
+  for step_id in $(ccq_get_group_step_ids Basic; ccq_get_group_step_ids Advanced); do
+    update_function="$(ccq_get_step_field "${step_id}" UpdateFunction 2>/dev/null || true)"
+    [ -n "${update_function}" ] || continue
+
+    step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
+    test_function="$(ccq_get_step_field "${step_id}" TestFunction 2>/dev/null || true)"
+    installed="false"
+    version_tag="-"
+    test_result="$(ccq_manage_step_test_result "${test_function}" 2>/dev/null || true)"
+    if [ -n "${test_result}" ]; then
+      version_tag="$(ccq_manage_result_field "${test_result}" Version)"
+      [ -n "${version_tag}" ] || version_tag="-"
+      if ccq_result_is_installed "${test_result}"; then
+        installed="true"
+      fi
+    fi
+
+    if [ "${installed}" != "true" ] && [ "${step_id}" = "ClaudeConfig" ]; then
+      settings_path="${HOME}/.claude/settings.json"
+      if [ -f "${settings_path}" ]; then
+        installed="true"
+        version_tag="config"
+      fi
+    fi
+
+    hint="$(ccq_manage_update_hint "${step_id}")"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${step_id}" "${step_name}" "${installed}" "${version_tag}" "${update_function}" "${hint}"
+  done
+}
+
+ccq_manage_update_status() {
+  local lines line step_id step_name installed version_tag update_function hint status label
+  lines="$(ccq_manage_update_status_lines)"
+  ccq_ui_primary "可更新组件状态："
+  if [ -z "${lines}" ]; then
+    ccq_ui_warning "  未发现注册了 UpdateFunction 的步骤"
+    return 0
+  fi
+
+  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint; do
+    [ -n "${step_id}" ] || continue
+    if [ "${installed}" = "true" ]; then
+      status="可更新"
+      label="$(ccq_status_label Success)"
+    else
+      status="未安装"
+      label="$(ccq_status_label Skipped)"
+    fi
+    ccq_ui_info "  ${label} ${step_name} (${step_id}) - ${status} - 当前版本: ${version_tag:-'-'} - 策略: ${hint}"
+  done <<EOF
+${lines}
+EOF
+}
+
+ccq_manage_select_update_steps() {
+  local lines line step_id step_name installed version_tag update_function hint
+  local ids=() labels=() defaults=() idx=0 indices selected_index
+  lines="$(ccq_manage_update_status_lines)"
+  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint; do
+    [ -n "${step_id}" ] || continue
+    [ "${installed}" = "true" ] || continue
+    ids+=("${step_id}")
+    labels+=("${step_name} (${step_id}) - ${version_tag:-'-'} - ${hint}")
+    defaults+=("${idx}")
+    idx=$((idx + 1))
+  done <<EOF
+${lines}
+EOF
+
+  if [ "${#ids[@]}" -eq 0 ]; then
+    ccq_ui_warning "没有已安装的可更新步骤"
+    return 1
+  fi
+
+  if [ ! -r /dev/tty ]; then
+    printf '%s\n' "${ids[@]}"
+    return 0
+  fi
+
+  indices="$(ccq_manage_prompt_multi "可更新组件" "${defaults[*]}" "${labels[@]}")" || return 1
+  for selected_index in ${indices}; do
+    printf '%s\n' "${ids[$((selected_index + 1))]}"
+  done
+}
+
+ccq_manage_join_semicolon() {
+  local first=1 item
+  for item in "$@"; do
+    if [ "${first}" = "1" ]; then
+      printf '%s' "${item}"
+      first=0
+    else
+      printf ';%s' "${item}"
+    fi
+  done
+}
+
+ccq_manage_safe_updated_items() {
+  local step_id="${1:-Unknown}"
+  local raw_items="${2:-}"
+  local item lower sanitized=()
+  raw_items="${raw_items//$'\n'/;}"
+  if [ -z "${raw_items}" ]; then
+    printf 'noop::%s::no-change' "${step_id}"
+    return 0
+  fi
+
+  for item in ${(s:;:)raw_items}; do
+    [ -n "${item}" ] || continue
+    lower="${item:l}"
+    case "${lower}" in
+      *token*|*secret*|*password*|*credential*) sanitized+=("redacted::${step_id}::sensitive-value") ;;
+      *"::"*"::"*) sanitized+=("${item}") ;;
+      *) sanitized+=("invalid::${step_id}::malformed") ;;
+    esac
+  done
+
+  if [ "${#sanitized[@]}" -eq 0 ]; then
+    sanitized+=("noop::${step_id}::no-change")
+  fi
+  ccq_manage_join_semicolon "${sanitized[@]}"
+}
+
+ccq_manage_items_are_noop() {
+  local raw_items="${1:-}"
+  local item found=0
+  raw_items="${raw_items//$'\n'/;}"
+  for item in ${(s:;:)raw_items}; do
+    [ -n "${item}" ] || continue
+    found=1
+    case "${item}" in
+      noop::*) ;;
+      *) return 1 ;;
+    esac
+  done
+  [ "${found}" = "1" ]
+}
+
+ccq_manage_reset_update_summary() {
+  CCQ_MANAGE_UPDATE_UPDATED=()
+  CCQ_MANAGE_UPDATE_UPTODATE=()
+  CCQ_MANAGE_UPDATE_FAILED=()
+  CCQ_MANAGE_UPDATE_SKIPPED=()
+}
+
+ccq_manage_show_update_summary() {
+  ccq_ui_primary ""
+  ccq_ui_primary "更新结果摘要："
+  ccq_ui_success "  已更新: ${#CCQ_MANAGE_UPDATE_UPDATED[@]}"
+  local item
+  for item in "${CCQ_MANAGE_UPDATE_UPDATED[@]}"; do
+    ccq_ui_info "    ${item}"
+  done
+  if [ "${#CCQ_MANAGE_UPDATE_UPTODATE[@]}" -gt 0 ]; then
+    ccq_ui_dim "  已是最新: ${#CCQ_MANAGE_UPDATE_UPTODATE[@]}"
+    for item in "${CCQ_MANAGE_UPDATE_UPTODATE[@]}"; do
+      ccq_ui_dim "    ${item}"
+    done
+  fi
+  if [ "${#CCQ_MANAGE_UPDATE_SKIPPED[@]}" -gt 0 ]; then
+    ccq_ui_warning "  已跳过: ${#CCQ_MANAGE_UPDATE_SKIPPED[@]}"
+    for item in "${CCQ_MANAGE_UPDATE_SKIPPED[@]}"; do
+      ccq_ui_warning "    ${item}"
+    done
+  fi
+  if [ "${#CCQ_MANAGE_UPDATE_FAILED[@]}" -gt 0 ]; then
+    ccq_ui_danger "  失败: ${#CCQ_MANAGE_UPDATE_FAILED[@]}"
+    for item in "${CCQ_MANAGE_UPDATE_FAILED[@]}"; do
+      ccq_ui_danger "    ${item}"
+    done
+  fi
+}
+
+ccq_manage_run_update_step() {
+  local step_id="${1:-}"
+  local update_function step_name result success updated_items version error_message status safe_items
+  [ -n "${step_id}" ] || return 1
+  update_function="$(ccq_get_step_field "${step_id}" UpdateFunction 2>/dev/null || true)"
+  step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
+
+  if [ -z "${update_function}" ] || ! command -v "${update_function}" >/dev/null 2>&1; then
+    CCQ_MANAGE_UPDATE_SKIPPED+=("${step_name} - 未注册更新函数")
+    ccq_show_step_progress "${step_name}" "Skipped" "未注册更新函数"
+    return 0
+  fi
+
+  ccq_ui_primary "─── 更新: ${step_name} ───"
+  result="$(${update_function} 2>&1 || true)"
+  success="$(ccq_manage_result_field "${result}" Success)"
+  updated_items="$(ccq_manage_result_field "${result}" UpdatedItems)"
+  version="$(ccq_manage_result_field "${result}" Version)"
+  error_message="$(ccq_manage_result_field "${result}" ErrorMessage)"
+  status="$(ccq_manage_result_field "${result}" Status)"
+  safe_items="$(ccq_manage_safe_updated_items "${step_id}" "${updated_items}")"
+
+  if ccq_normalize_success "${success}"; then
+    if ccq_manage_items_are_noop "${safe_items}"; then
+      CCQ_MANAGE_UPDATE_UPTODATE+=("${step_name} - ${safe_items}")
+      ccq_show_step_progress "${step_name}" "Skipped" "内容无变更"
+    else
+      CCQ_MANAGE_UPDATE_UPDATED+=("${step_name} - ${safe_items}${version:+ - ${version}}")
+      ccq_show_step_progress "${step_name}" "Success" "更新完成"
+    fi
+    return 0
+  fi
+
+  case "${status}" in
+    ManualRequired|Unsupported)
+      CCQ_MANAGE_UPDATE_SKIPPED+=("${step_name} - ${status}: ${error_message:-需要手动处理}")
+      ccq_show_step_progress "${step_name}" "${status}" "${error_message:-需要手动处理}"
+      return 0
+      ;;
+    *)
+      CCQ_MANAGE_UPDATE_FAILED+=("${step_name} - ${error_message:-更新失败}")
+      ccq_show_step_progress "${step_name}" "Failed" "${error_message:-更新失败}"
+      return 1
+      ;;
+  esac
+}
+
+ccq_manage_update_action() {
+  if [ "${CCQ_PARAM_LIST_UPDATES}" = "1" ]; then
+    ccq_manage_update_status
+    return 0
+  fi
+
+  ccq_manage_update_status
+  local selected_ids step_id fail_count=0
+  selected_ids="$(ccq_manage_select_update_steps)" || return 0
+  ccq_manage_reset_update_summary
+  for step_id in ${selected_ids}; do
+    ccq_manage_run_update_step "${step_id}" || fail_count=$((fail_count + 1))
+  done
+  ccq_manage_show_update_summary
+  [ "${fail_count}" -eq 0 ]
+}
+
+ccq_manage_provider_dir() {
+  printf '%s\n' "${HOME}/.claude/providers"
+}
+
+ccq_manage_settings_path() {
+  printf '%s\n' "${HOME}/.claude/settings.json"
+}
+
+ccq_manage_show_provider_status() {
+  local providers_dir settings_path file provider_name active_base_url active_token
+  providers_dir="$(ccq_manage_provider_dir)"
+  settings_path="$(ccq_manage_settings_path)"
+
+  ccq_ui_primary "供应商状态："
+  if [ -d "${providers_dir}" ]; then
+    for file in "${providers_dir}"/*.json; do
+      [ -f "${file}" ] || continue
+      provider_name="$(basename "${file}" .json)"
+      ccq_ui_info "  - ${provider_name} (${file})"
+    done
+  else
+    ccq_ui_warning "  尚未发现 provider profile 目录"
+  fi
+
+  if [ -f "${settings_path}" ] && command -v node >/dev/null 2>&1; then
+    active_base_url="$(node -e 'const fs=require("fs"); const p=process.argv[1]; const j=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(j.env?.ANTHROPIC_BASE_URL || "");' "${settings_path}" 2>/dev/null || true)"
+    active_token="$(node -e 'const fs=require("fs"); const p=process.argv[1]; const j=JSON.parse(fs.readFileSync(p,"utf8")); process.stdout.write(j.env?.ANTHROPIC_AUTH_TOKEN || "");' "${settings_path}" 2>/dev/null || true)"
+    ccq_ui_info "  当前 Base URL: $(ccq_manage_mask_status_value "${active_base_url}")"
+    ccq_ui_info "  当前 Token: $(ccq_manage_mask_status_value "${active_token}")"
+  fi
+}
+
+ccq_manage_provider_action() {
+  if command -v ccq_provider_show_status >/dev/null 2>&1; then
+    if [ "${CCQ_PARAM_LIST_PROVIDERS}" = "1" ]; then
+      ccq_provider_show_status
+      return 0
+    fi
+    if [ -n "${CCQ_PARAM_PROVIDER}" ]; then
+      ccq_provider_switch_key "${CCQ_PARAM_PROVIDER}" || { ccq_ui_danger "供应商切换失败: ${CCQ_PARAM_PROVIDER}"; return 1; }
+      ccq_ui_success "供应商已切换: ${CCQ_PARAM_PROVIDER}"
+      return 0
+    fi
+    ccq_provider_manage_menu
+    return $?
+  fi
+
+  ccq_manage_show_provider_status
+  ccq_ui_warning "Provider 管理函数尚未加载，请确认 ApiKey.zsh 已实现并被入口加载"
+}
+
+ccq_manage_mcp_meta_path() {
+  printf '%s\n' "${HOME}/.ccq/mcp-meta.json"
+}
+
+ccq_manage_mcp_action() {
+  if command -v ccq_mcp_manage_menu >/dev/null 2>&1; then
+    ccq_mcp_manage_menu
+    return $?
+  fi
+
+  local meta_path
+  meta_path="$(ccq_manage_mcp_meta_path)"
+  ccq_ui_primary "MCP 管理："
+  if [ -f "${meta_path}" ]; then
+    ccq_ui_info "  MCP vault: ${meta_path}"
+  else
+    ccq_ui_warning "  尚未发现 MCP vault: ${meta_path}"
+  fi
+  ccq_ui_warning "MCP 管理函数尚未加载，请确认 Mcp.zsh 已实现并被入口加载"
+}
+
+ccq_manage_skills_action() {
+  if command -v ccq_skills_manage_menu >/dev/null 2>&1; then
+    ccq_skills_manage_menu
+    return $?
+  fi
+
+  ccq_ui_primary "Skills 管理："
+  if command -v skills >/dev/null 2>&1; then
+    ccq_ui_info "  skills: $(command -v skills)"
+  elif command -v npx >/dev/null 2>&1; then
+    ccq_ui_info "  npx 可用，可执行官方 skills 命令"
+  else
+    ccq_ui_warning "  未检测到 skills 或 npx"
+  fi
+  ccq_ui_warning "Skills 步骤模块未加载，无法打开完整 Skills 管理菜单"
+}
+
+ccq_manage_select_action() {
+  ccq_manage_prompt_single "CCQ 环境管理" 0 \
+    "更新管理 - 检查可更新组件" \
+    "供应商管理 - 状态查看 / CRUD / 切换" \
+    "MCP 管理 - 状态查看 / 启用禁用 / 删除" \
+    "Skills 管理 - 状态查看 / 安装更新卸载"
+}
+
+ccq_manage_dispatch_action() {
+  local action="${1:-}"
+  case "${action}" in
+    Update|update|更新管理) ccq_manage_update_action ;;
+    Provider|provider|供应商管理) ccq_manage_provider_action ;;
+    Mcp|MCP|mcp|MCP管理) ccq_manage_mcp_action ;;
+    Skills|skills|Skills管理) ccq_manage_skills_action ;;
+    *) ccq_ui_danger "未知管理动作: ${action}"; return 2 ;;
+  esac
+}
+
+ccq_manage_main() {
+  ccq_manage_parse_args "$@"
+  ccq_manage_load_core
+  ccq_manage_load_step_modules
+
+  ccq_show_banner "CCQ macOS Manage"
+
+  if [ -n "${CCQ_PARAM_ACTION}" ]; then
+    ccq_manage_dispatch_action "${CCQ_PARAM_ACTION}"
+    return $?
+  fi
+
+  if [ ! -r /dev/tty ]; then
+    ccq_ui_warning "非交互环境请使用 -Action Update/Provider/Mcp/Skills"
+    return 1
+  fi
+
+  local choice
+  while true; do
+    choice="$(ccq_manage_select_action)" || { ccq_ui_primary "退出 CCQ 管理面板" "developer"; break; }
+    case "${choice}" in
+      0) ccq_manage_update_action ;;
+      1) ccq_manage_provider_action ;;
+      2) ccq_manage_mcp_action ;;
+      3) ccq_manage_skills_action ;;
+    esac
+  done
+}
+
+ccq_manage_main "$@"

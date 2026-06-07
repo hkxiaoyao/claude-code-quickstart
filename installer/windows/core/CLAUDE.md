@@ -1,6 +1,6 @@
-# installer/core/ — 核心基础库
+# installer/windows/core/ — Windows 核心基础库
 
-> 面包屑：[根目录](../../CLAUDE.md) › [installer/](../CLAUDE.md) › core/
+> 面包屑：[根目录](../../../CLAUDE.md) › [installer/](../../CLAUDE.md) › windows/ › core/
 > 生成时间：2026-03-06 (Install+Manage 分离架构)
 
 所有核心模块通过 **dot-source** 加载（非 Module），无 `Export-ModuleMember`，函数在调用方作用域内直接可用。

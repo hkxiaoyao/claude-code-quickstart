@@ -1,0 +1,480 @@
+#!/usr/bin/env zsh
+# ApiKey.zsh - macOS 第三方供应商配置步骤
+# 功能: 复用 contracts provider 契约写入 provider profile、settings.json 和 .claude.json
+
+if [ -n "${CCQ_STEP_APIKEY_ZSH_LOADED:-}" ]; then
+  return 0 2>/dev/null || exit 0
+fi
+CCQ_STEP_APIKEY_ZSH_LOADED=1
+
+: "${CCQ_PROVIDER_CONTRACT:=${CCQ_CONTRACTS_DIR:-${CCQ_INSTALLER_ROOT}/contracts}/providers.json}"
+
+ccq_provider_settings_path() { printf '%s\n' "${HOME}/.claude/settings.json"; }
+ccq_provider_profiles_dir() { printf '%s\n' "${HOME}/.claude/providers"; }
+ccq_claude_json_path() { printf '%s\n' "${HOME}/.claude.json"; }
+
+ccq_apikey_result() {
+  printf 'IsInstalled=%s\n' "${1:-false}"
+  printf 'Version=\n'
+  printf 'Message=%s\n' "${2:-}"
+}
+
+ccq_apikey_install_result() {
+  printf 'Success=%s\n' "${1:-false}"
+  printf 'Provider=%s\n' "${2:-}"
+  printf 'BaseUrlConfigured=%s\n' "${3:-false}"
+  printf 'ErrorMessage=%s\n' "${4:-}"
+}
+
+ccq_provider_contract_node() {
+  command -v node >/dev/null 2>&1 || return 1
+  [ -f "${CCQ_PROVIDER_CONTRACT}" ] || return 1
+}
+
+ccq_provider_builtin_lines() {
+  ccq_provider_contract_node || return 1
+  node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+for (const [key, p] of Object.entries(c.BuiltinProviders || {})) {
+  console.log([key, p.Name || key, p.Description || ""].join("\t"));
+}
+' "${CCQ_PROVIDER_CONTRACT}"
+}
+
+ccq_provider_profile_path() {
+  local key="${1:-}"
+  printf '%s/%s.json\n' "$(ccq_provider_profiles_dir)" "${key}"
+}
+
+ccq_provider_tty() {
+  [ -r /dev/tty ] && [ -w /dev/tty ]
+}
+
+ccq_provider_prompt_secret() {
+  local prompt="${1:-API Key}"
+  local value=""
+  ccq_provider_tty || return 1
+  printf '%s: ' "${prompt}" >/dev/tty
+  IFS= read -r -s value </dev/tty || return 1
+  printf '\n' >/dev/tty
+  printf '%s' "${value}"
+}
+
+ccq_provider_prompt_text() {
+  local prompt="${1:-请输入}"
+  local default_value="${2:-}"
+  local value=""
+  ccq_provider_tty || return 1
+  if [ -n "${default_value}" ]; then
+    printf '%s [%s]: ' "${prompt}" "${default_value}" >/dev/tty
+    IFS= read -r value </dev/tty || return 1
+    printf '%s' "${value:-${default_value}}"
+  else
+    printf '%s: ' "${prompt}" >/dev/tty
+    IFS= read -r value </dev/tty || return 1
+    printf '%s' "${value}"
+  fi
+}
+
+ccq_provider_read_model_env() {
+  ccq_provider_contract_node || return 1
+  local output="{}"
+  output="$(node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const labels = c.ManagedEnv.ProviderModelEnvLabels || {};
+for (const key of c.ManagedEnv.ProviderManagedModelEnvKeys || []) {
+  console.log([key, labels[key] || key].join("\t"));
+}
+' "${CCQ_PROVIDER_CONTRACT}")" || return 1
+
+  local patch="{}" line key label value
+  while IFS= read -r line; do
+    [ -n "${line}" ] || continue
+    key="${line%%$'\t'*}"
+    label="${line#*$'\t'}"
+    value="$(ccq_provider_prompt_text "  ${label} (${key})，留空跳过" "")"
+    if [ -n "${value}" ]; then
+      patch="$(MODEL_KEY="${key}" MODEL_VALUE="${value}" PATCH_JSON="${patch}" node -e '
+const patch = JSON.parse(process.env.PATCH_JSON || "{}");
+patch[process.env.MODEL_KEY] = process.env.MODEL_VALUE;
+process.stdout.write(JSON.stringify(patch));
+')"
+    fi
+  done <<EOF
+${output}
+EOF
+  printf '%s\n' "${patch}"
+}
+
+ccq_provider_build_profile_json() {
+  local key="${1:-}"
+  local provider_name="${2:-}"
+  local base_url="${3:-}"
+  local api_key="${4:-}"
+  local model_env_json="${5:-{}}"
+  ccq_provider_contract_node || return 1
+  printf '%s' "${api_key}" | PROVIDER_KEY="${key}" PROVIDER_NAME="${provider_name}" PROVIDER_BASE_URL="${base_url}" MODEL_ENV_JSON="${model_env_json}" node -e '
+const fs = require("fs");
+const apiKey = fs.readFileSync(0, "utf8");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const key = process.env.PROVIDER_KEY;
+const builtin = (c.BuiltinProviders || {})[key] || {};
+const modelEnv = JSON.parse(process.env.MODEL_ENV_JSON || "{}");
+const profile = {
+  _meta: {
+    provider: process.env.PROVIDER_NAME,
+    key,
+    baseUrl: process.env.PROVIDER_BASE_URL,
+    configuredAt: new Date().toISOString()
+  },
+  env: {
+    ANTHROPIC_AUTH_TOKEN: apiKey,
+    ANTHROPIC_BASE_URL: process.env.PROVIDER_BASE_URL
+  }
+};
+for (const [k, v] of Object.entries(builtin.ExtraEnv || {})) {
+  if (v !== undefined && v !== null && String(v).trim()) profile.env[k] = String(v);
+}
+const finalModelEnv = Object.keys(modelEnv).length ? modelEnv : (builtin.ModelEnv || {});
+if (Object.keys(finalModelEnv).length) profile.modelEnv = finalModelEnv;
+process.stdout.write(JSON.stringify(profile, null, 2) + "\n");
+' "${CCQ_PROVIDER_CONTRACT}"
+}
+
+ccq_provider_switch_profile() {
+  local profile_path="${1:-}"
+  local settings_path merged_json
+  settings_path="$(ccq_provider_settings_path)"
+  ccq_provider_contract_node || return 1
+  merged_json="$(SETTINGS_PATH="${settings_path}" PROFILE_PATH="${profile_path}" node -e '
+const fs = require("fs");
+const settingsPath = process.env.SETTINGS_PATH;
+const profilePath = process.env.PROFILE_PATH;
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+let settings = {};
+if (fs.existsSync(settingsPath)) {
+  const raw = fs.readFileSync(settingsPath, "utf8").trim();
+  if (raw) settings = JSON.parse(raw);
+}
+if (!settings.env || typeof settings.env !== "object" || Array.isArray(settings.env)) settings.env = {};
+const env = settings.env;
+const keys = [
+  contract.ManagedEnv.AuthTokenKey,
+  contract.ManagedEnv.BaseUrlKey,
+  ...(contract.ManagedEnv.ProviderManagedModelEnvKeys || []),
+  ...(contract.ManagedEnv.ProviderManagedExtraEnvKeys || [])
+];
+for (const key of keys) delete env[key];
+for (const [key, value] of Object.entries(profile.env || {})) {
+  if (value !== undefined && value !== null && String(value).trim()) env[key] = String(value);
+}
+for (const [key, value] of Object.entries(profile.modelEnv || {})) {
+  if (value !== undefined && value !== null && String(value).trim()) env[key] = String(value);
+}
+process.stdout.write(JSON.stringify(settings, null, 2) + "\n");
+' "${CCQ_PROVIDER_CONTRACT}")" || return 1
+  ccq_json_write_atomic "${settings_path}" "${merged_json}"
+}
+
+ccq_provider_write_onboarding() {
+  local claude_json_path merged_json
+  claude_json_path="$(ccq_claude_json_path)"
+  merged_json="$(node -e '
+const fs = require("fs");
+const target = process.argv[1];
+let data = {};
+if (fs.existsSync(target)) {
+  const raw = fs.readFileSync(target, "utf8").trim();
+  if (raw) data = JSON.parse(raw);
+}
+data.hasCompletedOnboarding = true;
+process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+' "${claude_json_path}")" || return 1
+  ccq_json_write_atomic "${claude_json_path}" "${merged_json}"
+}
+
+ccq_provider_select_builtin() {
+  local lines line key name desc options=() keys=()
+  ccq_provider_tty || return 1
+  lines="$(ccq_provider_builtin_lines)" || return 1
+  for line in ${(f)lines}; do
+    key="${line%%$'\t'*}"
+    local rest="${line#*$'\t'}"
+    name="${rest%%$'\t'*}"
+    desc="${rest#*$'\t'}"
+    keys+=("${key}")
+    options+=("${name} - ${desc}")
+  done
+
+  printf '%s\n' "请选择第三方供应商" >/dev/tty
+  local i=1
+  for line in "${options[@]}"; do
+    printf '  %s) %s\n' "${i}" "${line}" >/dev/tty
+    i=$((i + 1))
+  done
+
+  local choice
+  while true; do
+    printf '请输入编号 [1-%s]，或 q 取消: ' "${#options[@]}" >/dev/tty
+    IFS= read -r choice </dev/tty || return 1
+    case "${choice}" in
+      q|Q) return 1 ;;
+      ''|*[!0-9]*) printf '%s\n' "请输入有效编号" >/dev/tty ;;
+      *)
+        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${#options[@]}" ]; then
+          printf '%s\n' "${keys[$choice]}"
+          return 0
+        fi
+        printf '%s\n' "编号超出范围" >/dev/tty
+        ;;
+    esac
+  done
+}
+
+ccq_provider_get_builtin_field() {
+  local key="${1:-}"
+  local field="${2:-}"
+  node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const p = (c.BuiltinProviders || {})[process.argv[2]] || {};
+const value = p[process.argv[3]] || "";
+process.stdout.write(String(value));
+' "${CCQ_PROVIDER_CONTRACT}" "${key}" "${field}"
+}
+
+ccq_provider_requires_model_config() {
+  local key="${1:-}"
+  node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const p = (c.BuiltinProviders || {})[process.argv[2]] || {};
+process.exit(p.RequireModelConfig ? 0 : 1);
+' "${CCQ_PROVIDER_CONTRACT}" "${key}"
+}
+
+ccq_provider_env_value_exists() {
+  local file_path="${1:-}"
+  local path_expr="${2:-}"
+  local value
+  value="$(ccq_json_get "${file_path}" "${path_expr}" 2>/dev/null || true)"
+  [ -n "${value}" ]
+}
+
+Test-ApiKeyInstalled() {
+  local settings_path
+  settings_path="$(ccq_provider_settings_path)"
+  if [ ! -f "${settings_path}" ]; then
+    ccq_apikey_result false "settings.json 不存在"
+    return 0
+  fi
+  if ccq_provider_env_value_exists "${settings_path}" "env.ANTHROPIC_AUTH_TOKEN" && ccq_provider_env_value_exists "${settings_path}" "env.ANTHROPIC_BASE_URL"; then
+    ccq_apikey_result true "供应商配置已存在"
+    return 0
+  fi
+  ccq_apikey_result false "供应商配置未完成"
+}
+
+Install-ApiKey() {
+  if ! ccq_provider_contract_node; then
+    ccq_apikey_install_result false "" false "Node.js 不可用或 providers 契约不存在"
+    return 1
+  fi
+
+  local selected_key provider_name base_url api_key model_env_json profile_json profile_path
+  selected_key="$(ccq_provider_select_builtin)" || {
+    ccq_apikey_install_result false "" false "用户取消供应商选择"
+    return 1
+  }
+  provider_name="$(ccq_provider_get_builtin_field "${selected_key}" Name)"
+  base_url="$(ccq_provider_get_builtin_field "${selected_key}" BaseUrl)"
+
+  if [ "${selected_key}" = "custom" ]; then
+    provider_name="$(ccq_provider_prompt_text "供应商名称" "自定义供应商")"
+    base_url="$(ccq_provider_prompt_text "Base URL" "")"
+  else
+    base_url="$(ccq_provider_prompt_text "Base URL" "${base_url}")"
+  fi
+
+  if [ -z "${provider_name}" ] || [ -z "${base_url}" ]; then
+    ccq_apikey_install_result false "${provider_name}" false "供应商名称或 Base URL 为空"
+    return 1
+  fi
+
+  api_key="$(ccq_provider_prompt_secret "API Key（输入不会显示）")"
+  if [ -z "${api_key}" ]; then
+    ccq_apikey_install_result false "${provider_name}" true "API Key 为空"
+    return 1
+  fi
+
+  model_env_json="{}"
+  if [ "${selected_key}" = "custom" ] || ccq_provider_requires_model_config "${selected_key}"; then
+    ccq_ui_primary "此供应商需要配置模型名称；留空表示不写入对应模型键" "essential"
+    model_env_json="$(ccq_provider_read_model_env)" || model_env_json="{}"
+  fi
+
+  profile_json="$(ccq_provider_build_profile_json "${selected_key}" "${provider_name}" "${base_url}" "${api_key}" "${model_env_json}")" || {
+    api_key=""
+    ccq_apikey_install_result false "${provider_name}" true "供应商 Profile 构建失败"
+    return 1
+  }
+  api_key=""
+
+  profile_path="$(ccq_provider_profile_path "${selected_key}")"
+  if ! ccq_json_write_atomic "${profile_path}" "${profile_json}"; then
+    ccq_apikey_install_result false "${provider_name}" true "供应商 Profile 写入失败"
+    return 1
+  fi
+
+  if ! ccq_provider_switch_profile "${profile_path}"; then
+    ccq_apikey_install_result false "${provider_name}" true "settings.json 激活供应商失败"
+    return 1
+  fi
+
+  ccq_provider_write_onboarding >/dev/null 2>&1 || true
+  ccq_apikey_install_result true "${provider_name}" true ""
+}
+
+Verify-ApiKey() {
+  local settings_path
+  settings_path="$(ccq_provider_settings_path)"
+  if ccq_provider_env_value_exists "${settings_path}" "env.ANTHROPIC_AUTH_TOKEN" && ccq_provider_env_value_exists "${settings_path}" "env.ANTHROPIC_BASE_URL"; then
+    printf 'Success=true\n'
+    printf 'ErrorMessage=\n'
+    return 0
+  fi
+  printf 'Success=false\n'
+  printf 'ErrorMessage=供应商配置验证失败\n'
+  return 1
+}
+
+ccq_provider_active_base_url() {
+  local settings_path
+  settings_path="$(ccq_provider_settings_path)"
+  ccq_json_get "${settings_path}" "env.ANTHROPIC_BASE_URL" 2>/dev/null || true
+}
+
+ccq_provider_profile_field() {
+  local profile_path="${1:-}"
+  local field="${2:-provider}"
+  [ -f "${profile_path}" ] || return 1
+  node -e '
+const fs = require("fs");
+const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const field = process.argv[2];
+const meta = profile._meta || {};
+if (field === "key") process.stdout.write(meta.key || "");
+else if (field === "provider") process.stdout.write(meta.provider || "");
+else if (field === "baseUrl") process.stdout.write(meta.baseUrl || profile.env?.ANTHROPIC_BASE_URL || "");
+else process.stdout.write("");
+' "${profile_path}" "${field}"
+}
+
+ccq_provider_show_status() {
+  local profiles_dir file key name base_url active_base active_tag
+  profiles_dir="$(ccq_provider_profiles_dir)"
+  active_base="$(ccq_provider_active_base_url)"
+  ccq_ui_primary "供应商状态："
+  if [ ! -d "${profiles_dir}" ]; then
+    ccq_ui_warning "  尚未发现 provider profile 目录"
+    return 0
+  fi
+  local found=0
+  for file in "${profiles_dir}"/*.json; do
+    [ -f "${file}" ] || continue
+    found=1
+    key="$(basename "${file}" .json)"
+    name="$(ccq_provider_profile_field "${file}" provider)"
+    base_url="$(ccq_provider_profile_field "${file}" baseUrl)"
+    active_tag=""
+    [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ] && active_tag=" [active]"
+    ccq_ui_info "  - ${key}: ${name:-未知供应商}${active_tag} / Base URL: $(ccq_mask_secret_value "${base_url}")"
+  done
+  [ "${found}" = "1" ] || ccq_ui_warning "  尚未配置任何供应商"
+}
+
+ccq_provider_switch_key() {
+  local key="${1:-}"
+  local profile_path
+  [ -n "${key}" ] || return 1
+  profile_path="$(ccq_provider_profile_path "${key}")"
+  [ -f "${profile_path}" ] || return 1
+  ccq_provider_switch_profile "${profile_path}"
+}
+
+ccq_provider_remove_key() {
+  local key="${1:-}"
+  local profile_path base_url active_base
+  [ -n "${key}" ] || return 1
+  profile_path="$(ccq_provider_profile_path "${key}")"
+  [ -f "${profile_path}" ] || return 1
+  base_url="$(ccq_provider_profile_field "${profile_path}" baseUrl)"
+  active_base="$(ccq_provider_active_base_url)"
+  if [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ]; then
+    CCQ_PROVIDER_ERROR="不能删除当前活跃供应商"
+    return 1
+  fi
+  rm -f "${profile_path}"
+}
+
+ccq_provider_edit_key() {
+  local key="${1:-}"
+  local profile_path choice new_value updated_json active_base base_url
+  [ -n "${key}" ] || return 1
+  profile_path="$(ccq_provider_profile_path "${key}")"
+  [ -f "${profile_path}" ] || return 1
+  ccq_provider_tty || return 1
+
+  printf '\n编辑供应商 %s\n  1) API Key\n  2) Base URL\n  3) 名称\n  q) 取消\n请输入编号: ' "${key}" >/dev/tty
+  IFS= read -r choice </dev/tty || return 1
+  case "${choice}" in
+    q|Q) return 0 ;;
+    1) new_value="$(ccq_provider_prompt_secret "新的 API Key（输入不会显示）")" || return 1 ;;
+    2) new_value="$(ccq_provider_prompt_text "新的 Base URL")" || return 1 ;;
+    3) new_value="$(ccq_provider_prompt_text "新的供应商名称")" || return 1 ;;
+    *) CCQ_PROVIDER_ERROR="未知编辑选项"; return 1 ;;
+  esac
+  [ -n "${new_value}" ] || { CCQ_PROVIDER_ERROR="新值不能为空"; return 1; }
+
+  updated_json="$(CHOICE="${choice}" NEW_VALUE="${new_value}" node -e '
+const fs = require("fs");
+const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+if (!profile._meta) profile._meta = {};
+if (!profile.env) profile.env = {};
+if (process.env.CHOICE === "1") profile.env.ANTHROPIC_AUTH_TOKEN = process.env.NEW_VALUE;
+if (process.env.CHOICE === "2") { profile._meta.baseUrl = process.env.NEW_VALUE; profile.env.ANTHROPIC_BASE_URL = process.env.NEW_VALUE; }
+if (process.env.CHOICE === "3") profile._meta.provider = process.env.NEW_VALUE;
+profile._meta.configuredAt = profile._meta.configuredAt || new Date().toISOString();
+profile._meta.updatedAt = new Date().toISOString();
+process.stdout.write(JSON.stringify(profile, null, 2) + "\n");
+' "${profile_path}")" || return 1
+  new_value=""
+  ccq_json_write_atomic "${profile_path}" "${updated_json}" || return 1
+
+  base_url="$(ccq_provider_profile_field "${profile_path}" baseUrl)"
+  active_base="$(ccq_provider_active_base_url)"
+  if [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ]; then
+    ccq_provider_switch_profile "${profile_path}" || return 1
+  fi
+}
+
+ccq_provider_manage_menu() {
+  local choice key
+  while true; do
+    ccq_provider_show_status
+    [ -r /dev/tty ] || return 0
+    printf '\n供应商管理：1) 添加 2) 编辑 3) 删除 4) 切换 q) 返回: ' >/dev/tty
+    IFS= read -r choice </dev/tty || return 1
+    case "${choice}" in
+      q|Q) return 0 ;;
+      1) Install-ApiKey >/dev/null || ccq_ui_warning "添加供应商失败" ;;
+      2) key="$(ccq_provider_prompt_text "要编辑的供应商 key")" && ccq_provider_edit_key "${key}" || ccq_ui_warning "编辑失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
+      3) key="$(ccq_provider_prompt_text "要删除的供应商 key")" && ccq_provider_remove_key "${key}" || ccq_ui_warning "删除失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
+      4) key="$(ccq_provider_prompt_text "要切换的供应商 key")" && ccq_provider_switch_key "${key}" || ccq_ui_warning "切换失败" ;;
+      *) ccq_ui_warning "未知选项" ;;
+    esac
+  done
+}

@@ -5,104 +5,402 @@
 
 Set-StrictMode -Version Latest
 
-# ─── 内置供应商模板（单一数据源，ApiKey.ps1 也引用此处）───────────────────────
+# ─── 供应商契约初始化（contracts-first，fallback 自包含）──────────────────────
 
-$script:ProviderManagedModelEnvKeys = @(
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL"
-)
-$script:ProviderModelEnvLabels = @{
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "Haiku 模型"
-    "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "Opus 模型"
-    "ANTHROPIC_DEFAULT_SONNET_MODEL" = "Sonnet 模型"
-}
-$script:ProviderManagedExtraEnvKeys = @(
-    "ANTHROPIC_MODEL",
-    "CLAUDE_CODE_SUBAGENT_MODEL",
-    "CLAUDE_CODE_EFFORT_LEVEL",
-    "CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK",
-    "API_TIMEOUT_MS",
-    "ENABLE_TOOL_SEARCH"
-)
-$script:LegacyProviderModelKey = "model" + "Mapping"
+$script:_providerContractCache = $null
 
-$script:BuiltinProviders = @{
-    "zhipu" = @{
-        Name        = "智谱 GLM"
-        Description = "智谱 GLM Coding Plan，默认使用 GLM-5.1 系列模型"
-        BaseUrl     = "https://open.bigmodel.cn/api/anthropic"
-        PlatformUrl = "https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
-        ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "glm-4.5-air"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "glm-5.1"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "glm-5.1"
+function Get-ProviderWindowsRoot {
+    <#
+    .SYNOPSIS
+    返回 Windows 平台根目录 installer/windows。
+    #>
+    param()
+
+    if (Get-Variable -Name WindowsRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $windowsRoot = [string]$script:WindowsRoot
+        if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) { return $windowsRoot }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $currentRoot = $PSScriptRoot
+        if ((Split-Path -Leaf $currentRoot) -ieq 'core') {
+            return (Split-Path -Parent $currentRoot)
         }
-        ExtraEnv    = @{
-            "API_TIMEOUT_MS" = "3000000"
+        return $currentRoot
+    }
+
+    return ''
+}
+
+function Get-ProviderInstallerRoot {
+    <#
+    .SYNOPSIS
+    返回 installer 根目录，用于定位 contracts。
+    #>
+    param()
+
+    if (Get-Variable -Name InstallerRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $installerRoot = [string]$script:InstallerRoot
+        if (-not [string]::IsNullOrWhiteSpace($installerRoot)) { return $installerRoot }
+    }
+
+    $windowsRoot = Get-ProviderWindowsRoot
+    if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) {
+        return (Split-Path -Parent $windowsRoot)
+    }
+
+    return ''
+}
+
+function Get-ProviderContractsRoot {
+    <#
+    .SYNOPSIS
+    返回 contracts 根目录；内嵌 artifact 可通过环境变量指定。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CONTRACTS_DIR)) {
+        return $env:CCQ_CONTRACTS_DIR
+    }
+
+    $installerRoot = Get-ProviderInstallerRoot
+    if ([string]::IsNullOrWhiteSpace($installerRoot)) { return '' }
+    return (Join-Path $installerRoot 'contracts')
+}
+
+function Get-ProviderContractPath {
+    <#
+    .SYNOPSIS
+    返回 providers.json 契约路径。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_PROVIDER_CONTRACT)) {
+        return $env:CCQ_PROVIDER_CONTRACT
+    }
+
+    $contractsRoot = Get-ProviderContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) { return '' }
+    return (Join-Path $contractsRoot 'providers.json')
+}
+
+function Get-ProviderContractValue {
+    <#
+    .SYNOPSIS
+    安全读取 IDictionary 字段，避免 StrictMode 下访问缺失键。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Table,
+
+        [Parameter(Mandatory)]
+        [string]$Key,
+
+        [object]$Default = $null
+    )
+
+    if ($Table.Contains($Key) -and $null -ne $Table[$Key]) { return $Table[$Key] }
+    return $Default
+}
+
+function ConvertTo-ProviderStringHashtable {
+    <#
+    .SYNOPSIS
+    将 JSON hashtable 规范化为 string → string hashtable。
+    #>
+    param([object]$Table)
+
+    $result = @{}
+    if ($Table -is [System.Collections.IDictionary]) {
+        foreach ($entry in $Table.GetEnumerator()) {
+            $result[[string]$entry.Key] = [string]$entry.Value
         }
     }
-    "minimax" = @{
-        Name        = "MiniMax"
-        Description = "MiniMax API，默认使用 MiniMax-M3"
-        BaseUrl     = "https://api.minimaxi.com/anthropic"
-        PlatformUrl = "https://platform.minimaxi.com/user-center/basic-information/interface-key"
-        ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "MiniMax-M3"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "MiniMax-M3"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "MiniMax-M3"
+    return $result
+}
+
+function ConvertTo-BuiltinProvidersFromContract {
+    <#
+    .SYNOPSIS
+    将 providers.json 的 BuiltinProviders 转换为运行时模板表。
+    #>
+    param([object]$Providers)
+
+    $result = @{}
+    if (-not ($Providers -is [System.Collections.IDictionary])) { return $result }
+
+    foreach ($providerEntry in $Providers.GetEnumerator()) {
+        $provider = $providerEntry.Value
+        if (-not ($provider -is [System.Collections.IDictionary])) { continue }
+
+        $item = @{
+            Name        = [string](Get-ProviderContractValue -Table $provider -Key 'Name' -Default '')
+            Description = [string](Get-ProviderContractValue -Table $provider -Key 'Description' -Default '')
+            BaseUrl     = [string](Get-ProviderContractValue -Table $provider -Key 'BaseUrl' -Default '')
+            PlatformUrl = [string](Get-ProviderContractValue -Table $provider -Key 'PlatformUrl' -Default '')
         }
-        ExtraEnv    = @{
-            "ANTHROPIC_MODEL" = "MiniMax-M3"
-            "API_TIMEOUT_MS"  = "3000000"
+
+        $modelEnv = ConvertTo-ProviderStringHashtable -Table (Get-ProviderContractValue -Table $provider -Key 'ModelEnv' -Default $null)
+        if ($modelEnv.Count -gt 0) { $item['ModelEnv'] = $modelEnv }
+
+        $extraEnv = ConvertTo-ProviderStringHashtable -Table (Get-ProviderContractValue -Table $provider -Key 'ExtraEnv' -Default $null)
+        if ($extraEnv.Count -gt 0) { $item['ExtraEnv'] = $extraEnv }
+
+        if ($provider.Contains('RequireModelConfig')) {
+            $item['RequireModelConfig'] = [bool](Get-ProviderContractValue -Table $provider -Key 'RequireModelConfig' -Default $false)
         }
+
+        $result[[string]$providerEntry.Key] = $item
     }
-    "moonshot" = @{
-        Name        = "Kimi Code"
-        Description = "Kimi Code 会员专属 API，使用 sk-kimi- 前缀 Key"
-        BaseUrl     = "https://api.kimi.com/coding/"
-        PlatformUrl = "https://www.kimi.com/code/console"
-        ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "kimi-for-coding"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "kimi-for-coding"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "kimi-for-coding"
-        }
-        ExtraEnv    = @{
-            "ANTHROPIC_MODEL"              = "kimi-for-coding"
-            "CLAUDE_CODE_SUBAGENT_MODEL"   = "kimi-for-coding"
-            "ENABLE_TOOL_SEARCH"           = "false"
-        }
+
+    return $result
+}
+
+function Get-ProviderContract {
+    <#
+    .SYNOPSIS
+    优先读取 installer/contracts/providers.json；不可用时返回 $null。
+    #>
+    param()
+
+    if ($null -ne $script:_providerContractCache) { return $script:_providerContractCache }
+
+    $contractPath = Get-ProviderContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath -PathType Leaf)) {
+        return $null
     }
-    "deepseek" = @{
-        Name        = "DeepSeek"
-        Description = "DeepSeek Anthropic API，支持 V4 Pro/Flash 与 1M 上下文"
-        BaseUrl     = "https://api.deepseek.com/anthropic"
-        PlatformUrl = "https://platform.deepseek.com/api_keys"
-        ModelEnv    = @{
-            "ANTHROPIC_DEFAULT_HAIKU_MODEL"  = "deepseek-v4-flash"
-            "ANTHROPIC_DEFAULT_OPUS_MODEL"   = "deepseek-v4-pro[1m]"
-            "ANTHROPIC_DEFAULT_SONNET_MODEL" = "deepseek-v4-pro[1m]"
-        }
-        ExtraEnv    = @{
-            "ANTHROPIC_MODEL"            = "deepseek-v4-pro[1m]"
-            "CLAUDE_CODE_SUBAGENT_MODEL" = "deepseek-v4-flash"
-            "CLAUDE_CODE_EFFORT_LEVEL"   = "max"
-        }
-    }
-    "bailian" = @{
-        Name              = "阿里云百炼"
-        Description       = "阿里云百炼平台，需用户自行配置模型"
-        BaseUrl           = "https://coding.dashscope.aliyuncs.com/apps/anthropic"
-        PlatformUrl       = "https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail"
-        RequireModelConfig = $true
-    }
-    "custom" = @{
-        Name        = "自定义供应商"
-        Description = "手动配置 Base URL 和 API Key"
-        BaseUrl     = ""
-        PlatformUrl = ""
+
+    try {
+        $script:_providerContractCache = Get-Content -Path $contractPath -Encoding UTF8 -Raw | ConvertFrom-Json -AsHashtable
+        return $script:_providerContractCache
+    } catch {
+        Write-Verbose "读取 providers 契约失败，改用 Provider 内联 fallback: $($_.Exception.Message)"
+        return $null
     }
 }
+
+function ConvertTo-ProviderRuntimeConfig {
+    <#
+    .SYNOPSIS
+    将 providers.json 契约转换为 Provider.ps1 运行时配置。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Contract
+    )
+
+    $managedEnv = Get-ProviderContractValue -Table $Contract -Key 'ManagedEnv' -Default @{}
+    return @{
+        ProviderManagedModelEnvKeys = @(Get-ProviderContractValue -Table $managedEnv -Key 'ProviderManagedModelEnvKeys' -Default @() | ForEach-Object { [string]$_ })
+        ProviderModelEnvLabels      = ConvertTo-ProviderStringHashtable -Table (Get-ProviderContractValue -Table $managedEnv -Key 'ProviderModelEnvLabels' -Default @{})
+        ProviderManagedExtraEnvKeys = @(Get-ProviderContractValue -Table $managedEnv -Key 'ProviderManagedExtraEnvKeys' -Default @() | ForEach-Object { [string]$_ })
+        LegacyProviderModelKey      = [string](Get-ProviderContractValue -Table $managedEnv -Key 'LegacyProviderModelKey' -Default 'modelMapping')
+        BuiltinProviders            = ConvertTo-BuiltinProvidersFromContract -Providers (Get-ProviderContractValue -Table $Contract -Key 'BuiltinProviders' -Default @{})
+    }
+}
+
+function Get-InlineProviderRuntimeConfig {
+    <#
+    .SYNOPSIS
+    返回 release artifact 或 contracts 不可用时使用的内联 fallback 配置。
+    #>
+    param()
+
+    return @{
+        ProviderManagedModelEnvKeys = @(
+            'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+            'ANTHROPIC_DEFAULT_OPUS_MODEL',
+            'ANTHROPIC_DEFAULT_SONNET_MODEL'
+        )
+        ProviderModelEnvLabels = @{
+            'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'Haiku 模型'
+            'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'Opus 模型'
+            'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'Sonnet 模型'
+        }
+        ProviderManagedExtraEnvKeys = @(
+            'ANTHROPIC_MODEL',
+            'CLAUDE_CODE_SUBAGENT_MODEL',
+            'CLAUDE_CODE_EFFORT_LEVEL',
+            'CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK',
+            'API_TIMEOUT_MS',
+            'ENABLE_TOOL_SEARCH'
+        )
+        LegacyProviderModelKey = 'modelMapping'
+        BuiltinProviders = @{
+            'zhipu' = @{
+                Name        = '智谱 GLM'
+                Description = '智谱 GLM Coding Plan，默认使用 GLM-5.1 系列模型'
+                BaseUrl     = 'https://open.bigmodel.cn/api/anthropic'
+                PlatformUrl = 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys'
+                ModelEnv    = @{
+                    'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'glm-4.5-air'
+                    'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'glm-5.1'
+                    'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'glm-5.1'
+                }
+                ExtraEnv    = @{
+                    'API_TIMEOUT_MS' = '3000000'
+                }
+            }
+            'minimax' = @{
+                Name        = 'MiniMax'
+                Description = 'MiniMax API，默认使用 MiniMax-M3'
+                BaseUrl     = 'https://api.minimaxi.com/anthropic'
+                PlatformUrl = 'https://platform.minimaxi.com/user-center/basic-information/interface-key'
+                ModelEnv    = @{
+                    'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'MiniMax-M3'
+                    'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'MiniMax-M3'
+                    'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'MiniMax-M3'
+                }
+                ExtraEnv    = @{
+                    'ANTHROPIC_MODEL' = 'MiniMax-M3'
+                    'API_TIMEOUT_MS'  = '3000000'
+                }
+            }
+            'moonshot' = @{
+                Name        = 'Kimi Code'
+                Description = 'Kimi Code 会员专属 API，使用 sk-kimi- 前缀 Key'
+                BaseUrl     = 'https://api.kimi.com/coding/'
+                PlatformUrl = 'https://www.kimi.com/code/console'
+                ModelEnv    = @{
+                    'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'kimi-for-coding'
+                    'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'kimi-for-coding'
+                    'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'kimi-for-coding'
+                }
+                ExtraEnv    = @{
+                    'ANTHROPIC_MODEL'            = 'kimi-for-coding'
+                    'CLAUDE_CODE_SUBAGENT_MODEL' = 'kimi-for-coding'
+                    'ENABLE_TOOL_SEARCH'         = 'false'
+                }
+            }
+            'deepseek' = @{
+                Name        = 'DeepSeek'
+                Description = 'DeepSeek Anthropic API，支持 V4 Pro/Flash 与 1M 上下文'
+                BaseUrl     = 'https://api.deepseek.com/anthropic'
+                PlatformUrl = 'https://platform.deepseek.com/api_keys'
+                ModelEnv    = @{
+                    'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'deepseek-v4-flash'
+                    'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'deepseek-v4-pro[1m]'
+                    'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'deepseek-v4-pro[1m]'
+                }
+                ExtraEnv    = @{
+                    'ANTHROPIC_MODEL'            = 'deepseek-v4-pro[1m]'
+                    'CLAUDE_CODE_SUBAGENT_MODEL' = 'deepseek-v4-flash'
+                    'CLAUDE_CODE_EFFORT_LEVEL'   = 'max'
+                }
+            }
+            'bailian' = @{
+                Name               = '阿里云百炼'
+                Description        = '阿里云百炼平台，需用户自行配置模型'
+                BaseUrl            = 'https://coding.dashscope.aliyuncs.com/apps/anthropic'
+                PlatformUrl        = 'https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail'
+                RequireModelConfig = $true
+            }
+            'custom' = @{
+                Name        = '自定义供应商'
+                Description = '手动配置 Base URL 和 API Key'
+                BaseUrl     = ''
+                PlatformUrl = ''
+            }
+        }
+    }
+}
+
+function ConvertTo-ProviderComparableJson {
+    <#
+    .SYNOPSIS
+    生成用于比较 providers contract 与内联 fallback 的稳定 JSON。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ProviderConfig
+    )
+
+    $labels = [ordered]@{}
+    foreach ($key in @($ProviderConfig['ProviderModelEnvLabels'].Keys | Sort-Object)) {
+        $labels[[string]$key] = [string]$ProviderConfig['ProviderModelEnvLabels'][$key]
+    }
+
+    $providers = [ordered]@{}
+    foreach ($providerKey in @($ProviderConfig['BuiltinProviders'].Keys | Sort-Object)) {
+        $provider = $ProviderConfig['BuiltinProviders'][$providerKey]
+        $modelEnv = [ordered]@{}
+        if ($provider.ContainsKey('ModelEnv')) {
+            foreach ($key in @($provider['ModelEnv'].Keys | Sort-Object)) {
+                $modelEnv[[string]$key] = [string]$provider['ModelEnv'][$key]
+            }
+        }
+        $extraEnv = [ordered]@{}
+        if ($provider.ContainsKey('ExtraEnv')) {
+            foreach ($key in @($provider['ExtraEnv'].Keys | Sort-Object)) {
+                $extraEnv[[string]$key] = [string]$provider['ExtraEnv'][$key]
+            }
+        }
+
+        $providers[[string]$providerKey] = [ordered]@{
+            Name               = [string](Get-ProviderContractValue -Table $provider -Key 'Name' -Default '')
+            Description        = [string](Get-ProviderContractValue -Table $provider -Key 'Description' -Default '')
+            BaseUrl            = [string](Get-ProviderContractValue -Table $provider -Key 'BaseUrl' -Default '')
+            PlatformUrl        = [string](Get-ProviderContractValue -Table $provider -Key 'PlatformUrl' -Default '')
+            RequireModelConfig = [bool](Get-ProviderContractValue -Table $provider -Key 'RequireModelConfig' -Default $false)
+            ModelEnv           = $modelEnv
+            ExtraEnv           = $extraEnv
+        }
+    }
+
+    $normalized = [ordered]@{
+        ProviderManagedModelEnvKeys = @($ProviderConfig['ProviderManagedModelEnvKeys'] | ForEach-Object { [string]$_ })
+        ProviderModelEnvLabels      = $labels
+        ProviderManagedExtraEnvKeys = @($ProviderConfig['ProviderManagedExtraEnvKeys'] | ForEach-Object { [string]$_ })
+        LegacyProviderModelKey      = [string]$ProviderConfig['LegacyProviderModelKey']
+        BuiltinProviders            = $providers
+    }
+
+    return ($normalized | ConvertTo-Json -Depth 10 -Compress)
+}
+
+function Assert-ProviderFallbackConsistency {
+    <#
+    .SYNOPSIS
+    确保 providers.json 与 Provider.ps1 内联 fallback 保持一致。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ContractConfig
+    )
+
+    $contractJson = ConvertTo-ProviderComparableJson -ProviderConfig $ContractConfig
+    $fallbackJson = ConvertTo-ProviderComparableJson -ProviderConfig (Get-InlineProviderRuntimeConfig)
+    if ($contractJson -ne $fallbackJson) {
+        throw 'installer/contracts/providers.json 与 Provider.ps1 内联 fallback 不一致，请同步更新二者。'
+    }
+}
+
+function Initialize-ProviderRuntimeConfig {
+    <#
+    .SYNOPSIS
+    初始化 Provider 运行时常量；源码模式优先读取 providers.json。
+    #>
+    param()
+
+    $contract = Get-ProviderContract
+    if ($null -ne $contract) {
+        $config = ConvertTo-ProviderRuntimeConfig -Contract $contract
+        Assert-ProviderFallbackConsistency -ContractConfig $config
+    } else {
+        $config = Get-InlineProviderRuntimeConfig
+    }
+
+    $script:ProviderManagedModelEnvKeys = @($config['ProviderManagedModelEnvKeys'])
+    $script:ProviderModelEnvLabels = @{}
+    foreach ($entry in $config['ProviderModelEnvLabels'].GetEnumerator()) {
+        $script:ProviderModelEnvLabels[[string]$entry.Key] = [string]$entry.Value
+    }
+    $script:ProviderManagedExtraEnvKeys = @($config['ProviderManagedExtraEnvKeys'])
+    $script:LegacyProviderModelKey = [string]$config['LegacyProviderModelKey']
+    $script:BuiltinProviders = $config['BuiltinProviders']
+}
+
+Initialize-ProviderRuntimeConfig
 
 # ─── 辅助函数 ──────────────────────────────────────────────────────────────────
 

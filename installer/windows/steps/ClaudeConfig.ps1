@@ -8,40 +8,368 @@ $ErrorActionPreference = 'Stop'
 
 # 依赖: Ui.ps1, Profile.ps1（由入口脚本 dot-source 加载）
 
-# ─── ClaudeConfig 字段归属声明 ──────────────────────────────────────────────────────
+# ─── ClaudeConfig 契约初始化（contracts-first，fallback 自包含）────────────────────
 
-# ClaudeConfig 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
-$script:ClaudeConfigEnvDefaults = @{
-    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"          = "90"
-    "CLAUDE_CODE_ATTRIBUTION_HEADER"           = "0"
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" = "1"
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"     = "1"
-    "DISABLE_INSTALLATION_CHECKS"              = "1"
-    "MAX_THINKING_TOKENS"                      = "31999"
+$script:_claudeConfigContractCache = $null
+
+function Get-ClaudeConfigWindowsRoot {
+    <#
+    .SYNOPSIS
+    返回 Windows 平台根目录 installer/windows。
+    #>
+    param()
+
+    if (Get-Variable -Name WindowsRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $windowsRoot = [string]$script:WindowsRoot
+        if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) { return $windowsRoot }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $currentRoot = $PSScriptRoot
+        if ((Split-Path -Leaf $currentRoot) -ieq 'steps') {
+            return (Split-Path -Parent $currentRoot)
+        }
+        return $currentRoot
+    }
+
+    return ''
 }
 
-# ClaudeConfig 废弃的 env 键（Update 时从 settings.env 中删除）
-$script:ClaudeConfigDeprecatedEnvKeys = @()
+function Get-ClaudeConfigInstallerRoot {
+    <#
+    .SYNOPSIS
+    返回 installer 根目录，用于定位 contracts。
+    #>
+    param()
 
-# ClaudeConfig 负责的基础权限列表（合并策略：只添加缺失项，不删除已有项）
-$script:ClaudeConfigBasePermissions = @(
-    "Bash",
-    "BashOutput",
-    "Edit",
-    "Glob",
-    "Grep",
-    "KillShell",
-    "NotebookEdit",
-    "PowerShell",
-    "Read",
-    "SlashCommand",
-    "Skill",
-    "Task",
-    "TodoWrite",
-    "WebFetch",
-    "WebSearch",
-    "Write"
-)
+    if (Get-Variable -Name InstallerRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $installerRoot = [string]$script:InstallerRoot
+        if (-not [string]::IsNullOrWhiteSpace($installerRoot)) { return $installerRoot }
+    }
+
+    $windowsRoot = Get-ClaudeConfigWindowsRoot
+    if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) {
+        return (Split-Path -Parent $windowsRoot)
+    }
+
+    return ''
+}
+
+function Get-ClaudeConfigContractsRoot {
+    <#
+    .SYNOPSIS
+    返回 contracts 根目录；内嵌 artifact 可通过环境变量指定。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CONTRACTS_DIR)) {
+        return $env:CCQ_CONTRACTS_DIR
+    }
+
+    $installerRoot = Get-ClaudeConfigInstallerRoot
+    if ([string]::IsNullOrWhiteSpace($installerRoot)) { return '' }
+    return (Join-Path $installerRoot 'contracts')
+}
+
+function Get-ClaudeConfigContractPath {
+    <#
+    .SYNOPSIS
+    返回 claude-config.json 契约路径。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CLAUDE_CONFIG_CONTRACT)) {
+        return $env:CCQ_CLAUDE_CONFIG_CONTRACT
+    }
+
+    $contractsRoot = Get-ClaudeConfigContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) { return '' }
+    return (Join-Path $contractsRoot 'claude-config.json')
+}
+
+function Get-ClaudeConfigContractValue {
+    <#
+    .SYNOPSIS
+    安全读取 IDictionary 字段，避免 StrictMode 下访问缺失键。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Table,
+
+        [Parameter(Mandatory)]
+        [string]$Key,
+
+        [object]$Default = $null
+    )
+
+    if ($Table.Contains($Key) -and $null -ne $Table[$Key]) { return $Table[$Key] }
+    return $Default
+}
+
+function ConvertTo-ClaudeConfigRuntimeObject {
+    <#
+    .SYNOPSIS
+    将 JSON 对象递归转换为 PowerShell 运行时 hashtable / array。
+    #>
+    param([object]$Value)
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        $result = @{}
+        foreach ($key in $Value.Keys) {
+            $result[[string]$key] = ConvertTo-ClaudeConfigRuntimeObject -Value $Value[$key]
+        }
+        return $result
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        return @($Value | ForEach-Object { ConvertTo-ClaudeConfigRuntimeObject -Value $_ })
+    }
+
+    return $Value
+}
+
+function ConvertTo-ClaudeConfigStringHashtable {
+    <#
+    .SYNOPSIS
+    将 JSON hashtable 规范化为 string → string hashtable。
+    #>
+    param([object]$Table)
+
+    $result = @{}
+    if ($Table -is [System.Collections.IDictionary]) {
+        foreach ($entry in $Table.GetEnumerator()) {
+            $result[[string]$entry.Key] = [string]$entry.Value
+        }
+    }
+    return $result
+}
+
+function Get-ClaudeConfigContract {
+    <#
+    .SYNOPSIS
+    优先读取 installer/contracts/claude-config.json；不可用时返回 $null。
+    #>
+    param()
+
+    if ($null -ne $script:_claudeConfigContractCache) { return $script:_claudeConfigContractCache }
+
+    $contractPath = Get-ClaudeConfigContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $script:_claudeConfigContractCache = Get-Content -Path $contractPath -Encoding UTF8 -Raw | ConvertFrom-Json -AsHashtable
+        return $script:_claudeConfigContractCache
+    } catch {
+        Write-Verbose "读取 ClaudeConfig 契约失败，改用内联 fallback: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function ConvertTo-ClaudeConfigRuntimeConfig {
+    <#
+    .SYNOPSIS
+    将 claude-config.json 契约转换为 ClaudeConfig.ps1 运行时配置。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Contract
+    )
+
+    $ownership = Get-ClaudeConfigContractValue -Table $Contract -Key 'Ownership' -Default @{}
+    return @{
+        TopLevelDefaults               = [hashtable](ConvertTo-ClaudeConfigRuntimeObject -Value (Get-ClaudeConfigContractValue -Table $Contract -Key 'TopLevelDefaults' -Default @{}))
+        ClaudeConfigEnvDefaults        = ConvertTo-ClaudeConfigStringHashtable -Table (Get-ClaudeConfigContractValue -Table $Contract -Key 'ClaudeConfigEnvDefaults' -Default @{})
+        ClaudeConfigDeprecatedEnvKeys  = @(Get-ClaudeConfigContractValue -Table $Contract -Key 'ClaudeConfigDeprecatedEnvKeys' -Default @() | ForEach-Object { [string]$_ })
+        ClaudeConfigBasePermissions    = @(Get-ClaudeConfigContractValue -Table $Contract -Key 'ClaudeConfigBasePermissions' -Default @() | ForEach-Object { [string]$_ })
+        DoNotManageTopLevelKeys        = @(Get-ClaudeConfigContractValue -Table $ownership -Key 'DoNotManageTopLevelKeys' -Default @() | ForEach-Object { [string]$_ })
+        DoNotManageEnvKeys             = @(Get-ClaudeConfigContractValue -Table $ownership -Key 'DoNotManageEnvKeys' -Default @() | ForEach-Object { [string]$_ })
+        InstallStrategy                = [string](Get-ClaudeConfigContractValue -Table $ownership -Key 'InstallStrategy' -Default 'fill-missing-only')
+        UpdateStrategy                 = [string](Get-ClaudeConfigContractValue -Table $ownership -Key 'UpdateStrategy' -Default 'align-owned-env-and-append-permissions')
+    }
+}
+
+function Get-InlineClaudeConfigRuntimeConfig {
+    <#
+    .SYNOPSIS
+    返回 release artifact 或 contracts 不可用时使用的内联 fallback 配置。
+    #>
+    param()
+
+    return @{
+        TopLevelDefaults = @{
+            language = '简体中文'
+            alwaysThinkingEnabled = $true
+            plansDirectory = '.claude/plan'
+            attribution = @{ commit = ''; pr = '' }
+        }
+        ClaudeConfigEnvDefaults = @{
+            'CLAUDE_AUTOCOMPACT_PCT_OVERRIDE'          = '90'
+            'CLAUDE_CODE_ATTRIBUTION_HEADER'           = '0'
+            'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC' = '1'
+            'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'     = '1'
+            'DISABLE_INSTALLATION_CHECKS'              = '1'
+            'MAX_THINKING_TOKENS'                      = '31999'
+        }
+        ClaudeConfigDeprecatedEnvKeys = @()
+        ClaudeConfigBasePermissions = @(
+            'Bash',
+            'BashOutput',
+            'Edit',
+            'Glob',
+            'Grep',
+            'KillShell',
+            'NotebookEdit',
+            'PowerShell',
+            'Read',
+            'SlashCommand',
+            'Skill',
+            'Task',
+            'TodoWrite',
+            'WebFetch',
+            'WebSearch',
+            'Write'
+        )
+        DoNotManageTopLevelKeys = @('model', 'statusLine', 'hooks', 'outputStyle', 'mcpServers')
+        DoNotManageEnvKeys = @(
+            'ANTHROPIC_AUTH_TOKEN',
+            'ANTHROPIC_BASE_URL',
+            'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+            'ANTHROPIC_DEFAULT_OPUS_MODEL',
+            'ANTHROPIC_DEFAULT_SONNET_MODEL',
+            'ANTHROPIC_MODEL',
+            'CLAUDE_CODE_SUBAGENT_MODEL',
+            'CLAUDE_CODE_EFFORT_LEVEL',
+            'CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK',
+            'API_TIMEOUT_MS',
+            'ENABLE_TOOL_SEARCH',
+            'CODEAGENT_POST_MESSAGE_DELAY',
+            'CODEX_TIMEOUT',
+            'BASH_DEFAULT_TIMEOUT_MS',
+            'BASH_MAX_TIMEOUT_MS'
+        )
+        InstallStrategy = 'fill-missing-only'
+        UpdateStrategy = 'align-owned-env-and-append-permissions'
+    }
+}
+
+function ConvertTo-ClaudeConfigComparableObject {
+    <#
+    .SYNOPSIS
+    递归生成稳定比较对象。
+    #>
+    param([object]$Value)
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        $ordered = [ordered]@{}
+        foreach ($key in @($Value.Keys | Sort-Object)) {
+            $ordered[[string]$key] = ConvertTo-ClaudeConfigComparableObject -Value $Value[$key]
+        }
+        return $ordered
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        return @($Value | ForEach-Object { ConvertTo-ClaudeConfigComparableObject -Value $_ })
+    }
+
+    return $Value
+}
+
+function ConvertTo-ClaudeConfigComparableJson {
+    <#
+    .SYNOPSIS
+    生成用于比较 ClaudeConfig contract 与内联 fallback 的稳定 JSON。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Config
+    )
+
+    return (ConvertTo-ClaudeConfigComparableObject -Value $Config | ConvertTo-Json -Depth 20 -Compress)
+}
+
+function Assert-ClaudeConfigFallbackConsistency {
+    <#
+    .SYNOPSIS
+    确保 claude-config.json 与 ClaudeConfig.ps1 内联 fallback 保持一致。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ContractConfig
+    )
+
+    $contractJson = ConvertTo-ClaudeConfigComparableJson -Config $ContractConfig
+    $fallbackJson = ConvertTo-ClaudeConfigComparableJson -Config (Get-InlineClaudeConfigRuntimeConfig)
+    if ($contractJson -ne $fallbackJson) {
+        throw 'installer/contracts/claude-config.json 与 ClaudeConfig.ps1 内联 fallback 不一致，请同步更新二者。'
+    }
+}
+
+function Initialize-ClaudeConfigRuntimeConfig {
+    <#
+    .SYNOPSIS
+    初始化 ClaudeConfig 运行时常量；源码模式优先读取 claude-config.json。
+    #>
+    param()
+
+    $contract = Get-ClaudeConfigContract
+    if ($null -ne $contract) {
+        $config = ConvertTo-ClaudeConfigRuntimeConfig -Contract $contract
+        Assert-ClaudeConfigFallbackConsistency -ContractConfig $config
+    } else {
+        $config = Get-InlineClaudeConfigRuntimeConfig
+    }
+
+    $script:ClaudeConfigTopLevelDefaults = $config['TopLevelDefaults']
+    $script:ClaudeConfigEnvDefaults = $config['ClaudeConfigEnvDefaults']
+    $script:ClaudeConfigDeprecatedEnvKeys = @($config['ClaudeConfigDeprecatedEnvKeys'])
+    $script:ClaudeConfigBasePermissions = @($config['ClaudeConfigBasePermissions'])
+    $script:ClaudeConfigDoNotManageTopLevelKeys = @($config['DoNotManageTopLevelKeys'])
+    $script:ClaudeConfigDoNotManageEnvKeys = @($config['DoNotManageEnvKeys'])
+    $script:ClaudeConfigInstallStrategy = [string]$config['InstallStrategy']
+    $script:ClaudeConfigUpdateStrategy = [string]$config['UpdateStrategy']
+}
+
+Initialize-ClaudeConfigRuntimeConfig
+
+# ─── 顶层默认值应用 ────────────────────────────────────────────────────────────
+
+function Set-ClaudeConfigTopLevelDefaults {
+    <#
+    .SYNOPSIS
+    按契约补齐 ClaudeConfig 管辖的顶层默认值。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$Settings,
+
+        [Parameter(Mandatory)]
+        [System.Collections.ArrayList]$UpdatedItems,
+
+        [switch]$AlignPlansDirectory
+    )
+
+    foreach ($entry in $script:ClaudeConfigTopLevelDefaults.GetEnumerator()) {
+        $key = [string]$entry.Key
+        if ($script:ClaudeConfigDoNotManageTopLevelKeys -contains $key) {
+            continue
+        }
+
+        $value = $entry.Value
+        if (-not $Settings.ContainsKey($key) -or $null -eq $Settings[$key] -or [string]::IsNullOrWhiteSpace([string]$Settings[$key])) {
+            $Settings[$key] = ConvertTo-ClaudeConfigRuntimeObject -Value $value
+            [void]$UpdatedItems.Add("config::${key}::added")
+            continue
+        }
+
+        if ($AlignPlansDirectory -and $key -eq 'plansDirectory' -and [string]$Settings[$key] -ne [string]$value) {
+            $oldValue = [string]$Settings[$key]
+            $Settings[$key] = [string]$value
+            [void]$UpdatedItems.Add("config::plansDirectory::${oldValue}->$value")
+        }
+    }
+}
 
 # ─── Fingerprint（供 Manage 更新指纹预检使用）─────────────────────────────────
 
@@ -58,9 +386,15 @@ function Get-ClaudeConfigFingerprint {
     }
     $parts += "deprecated:" + (($script:ClaudeConfigDeprecatedEnvKeys | Sort-Object) -join ",")
     $parts += "permissions:" + (($script:ClaudeConfigBasePermissions | Sort-Object) -join ",")
-    $parts += "top-level:language"
-    $parts += "top-level:alwaysThinkingEnabled"
-    $parts += "top-level:plansDirectory=.claude/plan"
+    foreach ($key in ($script:ClaudeConfigTopLevelDefaults.Keys | Sort-Object)) {
+        $value = $script:ClaudeConfigTopLevelDefaults[$key]
+        $valueText = if ($value -is [System.Collections.IDictionary]) {
+            $value | ConvertTo-Json -Depth 10 -Compress
+        } else {
+            [string]$value
+        }
+        $parts += "top-level:${key}=${valueText}"
+    }
     return Get-StringFingerprint -Text ($parts -join "`n")
 }
 
@@ -120,10 +454,11 @@ function Compare-ClaudeConfigDrift {
         $result.Details.MissingAlwaysThinkingEnabled = $true
         $result.NeedsInstallCompletion               = $true
     }
+    $defaultPlansDirectory = [string]$script:ClaudeConfigTopLevelDefaults['plansDirectory']
     if (-not $settings.ContainsKey("plansDirectory") -or [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
         $result.Details.MissingPlansDirectory = $true
         $result.NeedsInstallCompletion        = $true
-    } elseif ([string]$settings["plansDirectory"] -ne ".claude/plan") {
+    } elseif ([string]$settings["plansDirectory"] -ne $defaultPlansDirectory) {
         $result.NeedsUpdateAlignment = $true
     }
 
@@ -284,19 +619,8 @@ function Install-ClaudeConfig {
             }
         }
 
-        # 语言与 thinking 设置（仅缺失时填充）
-        if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
-            $settings["language"] = "简体中文"
-            [void]$updatedItems.Add("config::language::added")
-        }
-        if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
-            $settings["alwaysThinkingEnabled"] = $true
-            [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
-        }
-        if (-not $settings.ContainsKey("plansDirectory") -or [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
-            $settings["plansDirectory"] = ".claude/plan"
-            [void]$updatedItems.Add("config::plansDirectory::added")
-        }
+        # 顶层配置：按 contracts 仅补缺失，不触碰 DoNotManageTopLevelKeys
+        Set-ClaudeConfigTopLevelDefaults -Settings $settings -UpdatedItems $updatedItems
 
         # 模型设置：不自动填充，由用户自行选择
 
@@ -552,28 +876,8 @@ function Update-ClaudeConfig {
         }
         $settings["permissions"]["allow"] = @($allowList)
 
-        # language / thinking / plansDirectory / attribution：仅补缺失（model 不自动填充，由用户自行选择）
-        if (-not $settings.ContainsKey("language") -or [string]::IsNullOrWhiteSpace([string]$settings["language"])) {
-            $settings["language"] = "简体中文"
-            [void]$updatedItems.Add("config::language::added")
-        }
-        if (-not $settings.ContainsKey("alwaysThinkingEnabled")) {
-            $settings["alwaysThinkingEnabled"] = $true
-            [void]$updatedItems.Add("config::alwaysThinkingEnabled::added")
-        }
-        if (-not $settings.ContainsKey("plansDirectory") -or
-            [string]::IsNullOrWhiteSpace([string]$settings["plansDirectory"])) {
-            $settings["plansDirectory"] = ".claude/plan"
-            [void]$updatedItems.Add("config::plansDirectory::added")
-        } elseif ([string]$settings["plansDirectory"] -ne ".claude/plan") {
-            $oldPlansDirectory = [string]$settings["plansDirectory"]
-            $settings["plansDirectory"] = ".claude/plan"
-            [void]$updatedItems.Add("config::plansDirectory::${oldPlansDirectory}->.claude/plan")
-        }
-        if (-not $settings.ContainsKey("attribution") -or -not $settings["attribution"]) {
-            $settings["attribution"] = @{ "commit" = ""; "pr" = "" }
-            [void]$updatedItems.Add("config::attribution::added")
-        }
+        # 顶层配置：按 contracts 补缺失；Update 仅对 plansDirectory 做声明式对齐
+        Set-ClaudeConfigTopLevelDefaults -Settings $settings -UpdatedItems $updatedItems -AlignPlansDirectory
 
         # 原子写入
         $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"

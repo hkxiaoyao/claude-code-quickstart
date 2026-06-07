@@ -1,6 +1,6 @@
-# installer/steps/ — 安装步骤模块
+# installer/windows/steps/ — Windows 安装步骤模块
 
-> 面包屑：[根目录](../../CLAUDE.md) › [installer/](../CLAUDE.md) › steps/
+> 面包屑：[根目录](../../../CLAUDE.md) › [installer/](../../CLAUDE.md) › windows/ › steps/
 > 生成时间：2026-03-06 (Install+Manage 分离架构)
 
 ---
@@ -56,14 +56,17 @@ function Update-<StepId> {
 }
 ```
 
-> 9 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、Skills、CodexCli、AntigravityCli、OpenSpec。
-> 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
+> Windows 9 个步骤实现了 Update 函数：ClaudeCode、ClaudeConfig、ClaudeMd、Ccline、CcgWorkflow、Skills、CodexCli、AntigravityCli、OpenSpec。
+> Windows 5 个步骤不可更新（UpdateFunction 为空）：NodeJS、Git、ApiKey、CcSwitch、Mcp。
+> macOS 通过 `installer/contracts/steps.json` 复用 StepId；CcSwitch 额外注册 `MacOSUpdateFunction = Update-CcSwitch`，走 Homebrew Cask 更新，不改变 Windows CcSwitch 的不可更新语义。
 
 > **注意**：Bootstrap.ps1 的 `Invoke-StepLifecycle` / `Invoke-UpdateLifecycle` 同时兼容 `bool` 和 `hashtable` 两种返回类型（向后兼容旧步骤）。
 
 ---
 
 ## 步骤总览
+
+Windows 与 macOS 保持相同 StepId、分组、依赖和用户可见能力边界；跨平台元数据以 `installer/contracts/steps.json` 为契约，平台实现分别位于 `installer/windows/steps/*.ps1` 与 `installer/macos/steps/*.zsh`。
 
 | StepId | 名称 | 文件 | 可选 | SkipIfInstalled | 可更新 | 主要依赖 | 分组 |
 |--------|------|------|:----:|:---------------:|:------:|---------|------|
@@ -197,7 +200,7 @@ Install-ApiKey($state)
 
 ### 供应商后续管理
 
-安装完成后，供应商的增删改查和切换统一通过 `Manage-ClaudeEnv.ps1 -Action Provider` 管理（详见 [core/CLAUDE.md](../core/CLAUDE.md) Provider.ps1 章节）。
+安装完成后，供应商的增删改查和切换统一通过 `installer/windows/Manage-ClaudeEnv.ps1 -Action Provider` 管理（详见 [windows/core/CLAUDE.md](../core/CLAUDE.md) Provider.ps1 章节）。
 
 > **禁止**写入 `anthropicApiKey`、`openaiApiKey` 等顶层字段。
 > **禁止**写入 Anthropic / OpenAI / Azure 供应商。
@@ -241,7 +244,16 @@ Install-ApiKey($state)
 
 **功能**：Claude Code / Codex / Gemini CLI 全方位辅助桌面软件
 
-**安装**：从 GitHub Release (`farion1231/cc-switch`) 下载 MSI/EXE → 静默安装（需管理员权限）。非 CLI 工具，安装后通过开始菜单或桌面快捷方式启动。
+**Windows 安装**：从 GitHub Release (`farion1231/cc-switch`) 下载 MSI/EXE → 静默安装（需管理员权限）。非 CLI 工具，安装后通过开始菜单或桌面快捷方式启动。
+
+**macOS 安装**：`installer/macos/steps/CcSwitch.zsh` 使用 Homebrew Cask：
+
+```sh
+brew install --cask cc-switch
+brew upgrade --cask cc-switch
+```
+
+Homebrew 不可用、安装失败或验证失败时返回 `ManualRequired` 并输出 GitHub Release 手动指引；该状态不计入安装摘要的 Success。
 
 ---
 
@@ -419,7 +431,7 @@ $installOut = Invoke-NpmGlobalInstall -PackageName "codex-cli"
 
 **命令名**：`agy`
 
-**安装方式**：官方未提供 npm 包，Windows 通过远程 PowerShell 安装脚本安装：
+**Windows 安装方式**：官方未提供 npm 包，Windows 通过远程 PowerShell 安装脚本安装：
 
 ```powershell
 irm https://antigravity.google/cli/install.ps1 | iex
@@ -427,9 +439,17 @@ irm https://antigravity.google/cli/install.ps1 | iex
 
 封装在 `Invoke-AntigravityCliInstaller`，通过 `pwsh -NoProfile -ExecutionPolicy Bypass -Command` 执行。官方脚本将 `agy.exe` 安装到 `%LOCALAPPDATA%\Antigravity\` 并更新用户 PATH。
 
+**macOS 安装方式**：`installer/macos/steps/AntigravityCli.zsh` 使用官方 macOS/Linux 安装脚本：
+
+```sh
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+安装后检测 `agy --version`，并补充当前会话 PATH 的 `~/.local/bin`。安装或更新失败时返回 `ManualRequired` 与手动指引，不伪报 Success。
+
 **版本检测**：统一通过 `agy --version` 完成（`Get-AntigravityCliVersion`），无 npm list 路径。
 
-**更新策略**：优先执行 `agy update`（官方自更新）；命令不可用或失败时回退到官方安装脚本覆盖安装。`UpdatedItems` 使用 `agy::antigravity-cli::<old>-><new>` 或 `noop::AntigravityCli::no-change`。
+**更新策略**：Windows 优先执行 `agy update`（官方自更新），命令不可用或失败时回退到官方安装脚本覆盖安装；macOS 同样优先尝试 `agy update`，随后通过 `install.sh` 刷新。`UpdatedItems` 使用 `agy::antigravity-cli::<old>-><new>`、`agy::antigravity-cli::installed` 或 `noop::AntigravityCli::no-change`。
 
 **更新检测**：非 npm 包，无法获取远程最新版本、无法判断是否有更新，`Get-UpdateStatus` 将其 `HasUpdate` 置为 `$null`（语义为"无法获取更新状态"，默认勾选），执行 `agy update` 由官方 CLI 自行判断是否有新版本。
 

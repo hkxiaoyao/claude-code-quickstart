@@ -4,8 +4,8 @@
 .antigravitycli/
 openspec/
 
-# ─── 构建产物（将来 build/ 里的打包输出，由 GitHub Actions 自动构建）───
-installer/build/dist/
+# ─── 构建产物（由本地构建或 GitHub Actions 自动生成）───
+dist/
 installer/build/*.zip
 installer/build/*.exe
 

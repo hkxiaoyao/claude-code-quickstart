@@ -1,0 +1,52 @@
+{
+  "SchemaVersion": 1,
+  "Templates": [
+    {
+      "Id": "claude-md.global.windows",
+      "Source": "installer/windows/steps/ClaudeMd.ps1",
+      "ManagedByStepId": "ClaudeMd",
+      "Platform": "Windows",
+      "TargetPath": "~/.claude/CLAUDE.md",
+      "FingerprintFunction": "Get-ClaudeMdFingerprint",
+      "Status": "existing"
+    },
+    {
+      "Id": "claude-md.global.macos",
+      "Source": "installer/macos/steps/ClaudeMd.zsh",
+      "ManagedByStepId": "ClaudeMd",
+      "Platform": "MacOS",
+      "TargetPath": "~/.claude/CLAUDE.md",
+      "Status": "planned"
+    },
+    {
+      "Id": "mcp-rules.search",
+      "Source": "installer/windows/core/McpManager.ps1",
+      "ManagedByStepId": "Mcp",
+      "Platform": "cross-platform",
+      "TargetPath": "~/.claude/rules/ccq-mcp-search.md",
+      "Renderer": "Render-McpToolChain",
+      "Category": "Search",
+      "Status": "existing"
+    },
+    {
+      "Id": "mcp-rules.documentation",
+      "Source": "installer/windows/core/McpManager.ps1",
+      "ManagedByStepId": "Mcp",
+      "Platform": "cross-platform",
+      "TargetPath": "~/.claude/rules/ccq-mcp-docs.md",
+      "Renderer": "Render-McpToolChain",
+      "Category": "Documentation",
+      "Status": "existing"
+    },
+    {
+      "Id": "mcp-rules.development",
+      "Source": "installer/windows/core/McpManager.ps1",
+      "ManagedByStepId": "Mcp",
+      "Platform": "cross-platform",
+      "TargetPath": "~/.claude/rules/ccq-mcp-code.md",
+      "Renderer": "Render-McpToolChain",
+      "Category": "Development",
+      "Status": "existing"
+    }
+  ]
+}

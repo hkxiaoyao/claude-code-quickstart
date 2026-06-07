@@ -298,6 +298,320 @@ $script:McpServers = [ordered]@{
     }
 }
 
+# ─── MCP 契约初始化（contracts-first，fallback 自包含）────────────────────────
+
+$script:_mcpContractCache = $null
+
+function Get-McpWindowsRoot {
+    <#
+    .SYNOPSIS
+    返回 Windows 平台根目录 installer/windows。
+    #>
+    param()
+
+    if (Get-Variable -Name WindowsRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $windowsRoot = [string]$script:WindowsRoot
+        if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) { return $windowsRoot }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $currentRoot = $PSScriptRoot
+        if ((Split-Path -Leaf $currentRoot) -ieq 'core') {
+            return (Split-Path -Parent $currentRoot)
+        }
+        return $currentRoot
+    }
+
+    return ''
+}
+
+function Get-McpInstallerRoot {
+    <#
+    .SYNOPSIS
+    返回 installer 根目录，用于定位 contracts。
+    #>
+    param()
+
+    if (Get-Variable -Name InstallerRoot -Scope Script -ErrorAction SilentlyContinue) {
+        $installerRoot = [string]$script:InstallerRoot
+        if (-not [string]::IsNullOrWhiteSpace($installerRoot)) { return $installerRoot }
+    }
+
+    $windowsRoot = Get-McpWindowsRoot
+    if (-not [string]::IsNullOrWhiteSpace($windowsRoot)) {
+        return (Split-Path -Parent $windowsRoot)
+    }
+
+    return ''
+}
+
+function Get-McpContractsRoot {
+    <#
+    .SYNOPSIS
+    返回 contracts 根目录；内嵌 artifact 可通过环境变量指定。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CONTRACTS_DIR)) {
+        return $env:CCQ_CONTRACTS_DIR
+    }
+
+    $installerRoot = Get-McpInstallerRoot
+    if ([string]::IsNullOrWhiteSpace($installerRoot)) { return '' }
+    return (Join-Path $installerRoot 'contracts')
+}
+
+function Get-McpContractPath {
+    <#
+    .SYNOPSIS
+    返回 mcp-servers.json 契约路径。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_MCP_CONTRACT)) {
+        return $env:CCQ_MCP_CONTRACT
+    }
+
+    $contractsRoot = Get-McpContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) { return '' }
+    return (Join-Path $contractsRoot 'mcp-servers.json')
+}
+
+function Get-McpContractValue {
+    <#
+    .SYNOPSIS
+    安全读取 IDictionary 字段，避免 StrictMode 下访问缺失键。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Table,
+
+        [Parameter(Mandatory)]
+        [string]$Key,
+
+        [object]$Default = $null
+    )
+
+    if ($Table.Contains($Key) -and $null -ne $Table[$Key]) { return $Table[$Key] }
+    return $Default
+}
+
+function ConvertTo-McpRuntimeObject {
+    <#
+    .SYNOPSIS
+    将 JSON 对象递归转换为 PowerShell 运行时 hashtable / array。
+    #>
+    param([object]$Value)
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        $result = @{}
+        foreach ($key in $Value.Keys) {
+            $result[[string]$key] = ConvertTo-McpRuntimeObject -Value $Value[$key]
+        }
+        return $result
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        return @($Value | ForEach-Object { ConvertTo-McpRuntimeObject -Value $_ })
+    }
+
+    return $Value
+}
+
+function ConvertTo-McpRuntimeDeps {
+    <#
+    .SYNOPSIS
+    转换默认运行时依赖数组。
+    #>
+    param([object]$Deps)
+
+    return @($Deps | ForEach-Object { [hashtable](ConvertTo-McpRuntimeObject -Value $_) })
+}
+
+function ConvertTo-McpServersFromContract {
+    <#
+    .SYNOPSIS
+    将 mcp-servers.json 的 McpServers 转换为运行时 ordered dictionary。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Servers,
+
+        [Parameter(Mandatory)]
+        [object[]]$DefaultRuntimeDeps
+    )
+
+    $result = [ordered]@{}
+    $orderedEntries = @($Servers.GetEnumerator() | Sort-Object { [int](Get-McpContractValue -Table $_.Value -Key 'Priority' -Default 9999) }, Name)
+    foreach ($serverEntry in $orderedEntries) {
+        $server = $serverEntry.Value
+        if (-not ($server -is [System.Collections.IDictionary])) { continue }
+
+        $item = [hashtable](ConvertTo-McpRuntimeObject -Value $server)
+        if ($item.ContainsKey('RuntimeDepsRef')) {
+            if ([string]$item['RuntimeDepsRef'] -eq 'DefaultMcpRuntimeDeps') {
+                $item['RuntimeDeps'] = @($DefaultRuntimeDeps)
+            }
+            $item.Remove('RuntimeDepsRef')
+        }
+        $result[[string]$serverEntry.Key] = $item
+    }
+
+    return $result
+}
+
+function Get-McpContract {
+    <#
+    .SYNOPSIS
+    优先读取 installer/contracts/mcp-servers.json；不可用时返回 $null。
+    #>
+    param()
+
+    if ($null -ne $script:_mcpContractCache) { return $script:_mcpContractCache }
+
+    $contractPath = Get-McpContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $script:_mcpContractCache = Get-Content -Path $contractPath -Encoding UTF8 -Raw | ConvertFrom-Json -AsHashtable
+        return $script:_mcpContractCache
+    } catch {
+        Write-Verbose "读取 MCP 契约失败，改用 McpManager 内联 fallback: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function ConvertTo-McpRuntimeConfig {
+    <#
+    .SYNOPSIS
+    将 mcp-servers.json 契约转换为 McpManager.ps1 运行时配置。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Contract
+    )
+
+    $mcpMeta = Get-McpContractValue -Table $Contract -Key 'McpMeta' -Default @{}
+    $runtimeDeps = @(ConvertTo-McpRuntimeDeps -Deps (Get-McpContractValue -Table $Contract -Key 'DefaultMcpRuntimeDeps' -Default @()))
+    $servers = ConvertTo-McpServersFromContract `
+        -Servers (Get-McpContractValue -Table $Contract -Key 'McpServers' -Default @{}) `
+        -DefaultRuntimeDeps $runtimeDeps
+
+    return @{
+        McpMetaFileName          = [string](Get-McpContractValue -Table $mcpMeta -Key 'FileName' -Default 'mcp-meta.json')
+        McpMetaPath              = [string](Get-McpContractValue -Table $mcpMeta -Key 'Path' -Default '~/.ccq/mcp-meta.json')
+        McpMetaSchemaVersion     = [int](Get-McpContractValue -Table $mcpMeta -Key 'SchemaVersion' -Default 1)
+        McpMetaStatuses          = @(Get-McpContractValue -Table $mcpMeta -Key 'Statuses' -Default @() | ForEach-Object { [string]$_ })
+        McpMetaServerEntryFields = @(Get-McpContractValue -Table $mcpMeta -Key 'ServerEntryFields' -Default @() | ForEach-Object { [string]$_ })
+        CredentialTypes          = @(Get-McpContractValue -Table $Contract -Key 'CredentialTypes' -Default @() | ForEach-Object { [string]$_ })
+        DefaultMcpRuntimeDeps    = $runtimeDeps
+        McpServers               = $servers
+        McpRulesCategories       = [hashtable](ConvertTo-McpRuntimeObject -Value (Get-McpContractValue -Table $Contract -Key 'McpRulesCategories' -Default @{}))
+    }
+}
+
+function Get-InlineMcpRuntimeConfig {
+    <#
+    .SYNOPSIS
+    返回 release artifact 或 contracts 不可用时使用的内联 fallback 配置。
+    #>
+    param()
+
+    return @{
+        McpMetaFileName          = $script:McpMetaFileName
+        McpMetaPath              = '~/.ccq/mcp-meta.json'
+        McpMetaSchemaVersion     = $script:McpMetaSchemaVersion
+        McpMetaStatuses          = @('Custom', 'Active', 'Disabled', 'Missing', 'Unknown')
+        McpMetaServerEntryFields = @('disabled', 'credentials', 'config', 'permissions', 'definitionHash', 'updatedAt')
+        CredentialTypes          = @('none', 'single-key', 'url-embedded', 'multi-field', 'args-multi', 'args-token', 'env-file')
+        DefaultMcpRuntimeDeps    = @($script:DefaultMcpRuntimeDeps)
+        McpServers               = $script:McpServers
+        McpRulesCategories       = $script:McpRulesCategories
+    }
+}
+
+function ConvertTo-McpComparableObject {
+    <#
+    .SYNOPSIS
+    递归生成稳定比较对象。
+    #>
+    param([object]$Value)
+
+    if ($Value -is [System.Collections.IDictionary]) {
+        $ordered = [ordered]@{}
+        foreach ($key in @($Value.Keys | Sort-Object)) {
+            $ordered[[string]$key] = ConvertTo-McpComparableObject -Value $Value[$key]
+        }
+        return $ordered
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        return @($Value | ForEach-Object { ConvertTo-McpComparableObject -Value $_ })
+    }
+
+    return $Value
+}
+
+function ConvertTo-McpComparableJson {
+    <#
+    .SYNOPSIS
+    生成用于比较 MCP contract 与内联 fallback 的稳定 JSON。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$McpConfig
+    )
+
+    return (ConvertTo-McpComparableObject -Value $McpConfig | ConvertTo-Json -Depth 30 -Compress)
+}
+
+function Assert-McpFallbackConsistency {
+    <#
+    .SYNOPSIS
+    确保 mcp-servers.json 与 McpManager.ps1 内联 fallback 保持一致。
+    #>
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ContractConfig
+    )
+
+    $contractJson = ConvertTo-McpComparableJson -McpConfig $ContractConfig
+    $fallbackJson = ConvertTo-McpComparableJson -McpConfig (Get-InlineMcpRuntimeConfig)
+    if ($contractJson -ne $fallbackJson) {
+        throw 'installer/contracts/mcp-servers.json 与 McpManager.ps1 内联 fallback 不一致，请同步更新二者。'
+    }
+}
+
+function Initialize-McpRuntimeConfig {
+    <#
+    .SYNOPSIS
+    初始化 MCP 运行时常量；源码模式优先读取 mcp-servers.json。
+    #>
+    param()
+
+    $contract = Get-McpContract
+    if ($null -ne $contract) {
+        $config = ConvertTo-McpRuntimeConfig -Contract $contract
+        Assert-McpFallbackConsistency -ContractConfig $config
+    } else {
+        $config = Get-InlineMcpRuntimeConfig
+    }
+
+    $script:McpMetaFileName = [string]$config['McpMetaFileName']
+    $script:McpMetaPath = [string]$config['McpMetaPath']
+    $script:McpMetaSchemaVersion = [int]$config['McpMetaSchemaVersion']
+    $script:McpMetaStatuses = @($config['McpMetaStatuses'])
+    $script:McpMetaServerEntryFields = @($config['McpMetaServerEntryFields'])
+    $script:McpCredentialTypes = @($config['CredentialTypes'])
+    $script:DefaultMcpRuntimeDeps = @($config['DefaultMcpRuntimeDeps'])
+    $script:McpServers = $config['McpServers']
+    $script:McpRulesCategories = $config['McpRulesCategories']
+}
+
+Initialize-McpRuntimeConfig
+
 # ─── MCP Rules 渲染函数 ─────────────────────────────────────────────────────
 
 function Get-McpRulesDir {

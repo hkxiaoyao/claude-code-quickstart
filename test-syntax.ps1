@@ -7,7 +7,15 @@ param(
 
 Write-Host "🔍 开始检查 PowerShell 脚本语法..." -ForegroundColor Cyan
 
-$scriptFiles = Get-ChildItem $Path -Recurse -Filter "*.ps1"
+# 收集所有需要检查的文件
+$scriptFiles = @()
+$scriptFiles += Get-ChildItem "$Path/windows" -Recurse -Filter "*.ps1" -ErrorAction SilentlyContinue
+$scriptFiles += Get-ChildItem "$Path/contracts" -Recurse -Filter "*.ps1" -ErrorAction SilentlyContinue
+$buildScript = Get-Item "$Path/build.ps1" -ErrorAction SilentlyContinue
+if ($buildScript) {
+    $scriptFiles += $buildScript
+}
+
 $totalFiles = $scriptFiles.Count
 $passedFiles = 0
 $failedFiles = 0
@@ -18,8 +26,13 @@ foreach ($file in $scriptFiles) {
     Write-Host "检查: $($file.Name)" -NoNewline
 
     try {
-        # 使用 PSParser 检查语法
-        $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $file.FullName -Raw), [ref]$null)
+        $tokens = $null
+        $parseErrors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$parseErrors)
+        if (@($parseErrors).Count -gt 0) {
+            $messages = @($parseErrors | ForEach-Object { "Line $($_.Extent.StartLineNumber): $($_.Message)" })
+            throw ($messages -join "; ")
+        }
         Write-Host " ✓" -ForegroundColor Green
         $passedFiles++
     }
