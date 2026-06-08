@@ -264,6 +264,23 @@ ccq_provider_env_value_exists() {
   [ -n "${value}" ]
 }
 
+ccq_provider_base_url_matches() {
+  local settings_base="${1:-}"
+  local profile_base="${2:-}"
+  node -e '
+const normalize = (value) => String(value || "").trim().replace(/\/+$/, "");
+const settingsBase = normalize(process.argv[1]);
+const profileBase = normalize(process.argv[2]);
+process.exit(settingsBase && profileBase && (settingsBase === profileBase || settingsBase.startsWith(`${profileBase}/`)) ? 0 : 1);
+' "${settings_base}" "${profile_base}" 2>/dev/null
+}
+
+ccq_provider_auth_token_matches() {
+  local settings_token="${1:-}"
+  local profile_token="${2:-}"
+  [ -n "${settings_token}" ] && [ -n "${profile_token}" ] && [ "${settings_token}" = "${profile_token}" ]
+}
+
 Test-ApiKeyInstalled() {
   local settings_path
   settings_path="$(ccq_provider_settings_path)"
@@ -357,6 +374,12 @@ ccq_provider_active_base_url() {
   ccq_json_get "${settings_path}" "env.ANTHROPIC_BASE_URL" 2>/dev/null || true
 }
 
+ccq_provider_active_auth_token() {
+  local settings_path
+  settings_path="$(ccq_provider_settings_path)"
+  ccq_json_get "${settings_path}" "env.ANTHROPIC_AUTH_TOKEN" 2>/dev/null || true
+}
+
 ccq_provider_profile_field() {
   local profile_path="${1:-}"
   local field="${2:-provider}"
@@ -369,14 +392,46 @@ const meta = profile._meta || {};
 if (field === "key") process.stdout.write(meta.key || "");
 else if (field === "provider") process.stdout.write(meta.provider || "");
 else if (field === "baseUrl") process.stdout.write(meta.baseUrl || profile.env?.ANTHROPIC_BASE_URL || "");
+else if (field === "authToken") process.stdout.write(profile.env?.ANTHROPIC_AUTH_TOKEN || "");
 else process.stdout.write("");
 ' "${profile_path}" "${field}"
 }
 
-ccq_provider_show_status() {
-  local profiles_dir file key name base_url active_base active_tag
+ccq_provider_resolve_active_key() {
+  local profiles_dir active_base active_token file key base_url profile_token
+  local first_base_key="" token_match_key="" has_profile_token=0
   profiles_dir="$(ccq_provider_profiles_dir)"
   active_base="$(ccq_provider_active_base_url)"
+  active_token="$(ccq_provider_active_auth_token)"
+  [ -d "${profiles_dir}" ] && [ -n "${active_base}" ] || return 0
+
+  for file in "${profiles_dir}"/*.json; do
+    [ -f "${file}" ] || continue
+    base_url="$(ccq_provider_profile_field "${file}" baseUrl)"
+    ccq_provider_base_url_matches "${active_base}" "${base_url}" || continue
+    key="$(basename "${file}" .json)"
+    [ -z "${first_base_key}" ] && first_base_key="${key}"
+    profile_token="$(ccq_provider_profile_field "${file}" authToken)"
+    if [ -n "${profile_token}" ]; then
+      has_profile_token=1
+      if ccq_provider_auth_token_matches "${active_token}" "${profile_token}"; then
+        token_match_key="${key}"
+        break
+      fi
+    fi
+  done
+
+  if [ -n "${token_match_key}" ]; then
+    printf '%s' "${token_match_key}"
+  elif [ -z "${active_token}" ] || [ "${has_profile_token}" = "0" ]; then
+    printf '%s' "${first_base_key}"
+  fi
+}
+
+ccq_provider_show_status() {
+  local profiles_dir file key name base_url active_key active_tag
+  profiles_dir="$(ccq_provider_profiles_dir)"
+  active_key="$(ccq_provider_resolve_active_key)"
   ccq_ui_primary "供应商状态："
   if [ ! -d "${profiles_dir}" ]; then
     ccq_ui_warning "  尚未发现 provider profile 目录"
@@ -390,7 +445,7 @@ ccq_provider_show_status() {
     name="$(ccq_provider_profile_field "${file}" provider)"
     base_url="$(ccq_provider_profile_field "${file}" baseUrl)"
     active_tag=""
-    [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ] && active_tag=" [active]"
+    [ -n "${active_key}" ] && [ "${key}" = "${active_key}" ] && active_tag=" [active]"
     ccq_ui_info "  - ${key}: ${name:-未知供应商}${active_tag} / Base URL: $(ccq_mask_secret_value "${base_url}")"
   done
   [ "${found}" = "1" ] || ccq_ui_warning "  尚未配置任何供应商"
@@ -407,13 +462,12 @@ ccq_provider_switch_key() {
 
 ccq_provider_remove_key() {
   local key="${1:-}"
-  local profile_path base_url active_base
+  local profile_path active_key
   [ -n "${key}" ] || return 1
   profile_path="$(ccq_provider_profile_path "${key}")"
   [ -f "${profile_path}" ] || return 1
-  base_url="$(ccq_provider_profile_field "${profile_path}" baseUrl)"
-  active_base="$(ccq_provider_active_base_url)"
-  if [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ]; then
+  active_key="$(ccq_provider_resolve_active_key)"
+  if [ -n "${active_key}" ] && [ "${key}" = "${active_key}" ]; then
     CCQ_PROVIDER_ERROR="不能删除当前活跃供应商"
     return 1
   fi
@@ -422,7 +476,7 @@ ccq_provider_remove_key() {
 
 ccq_provider_edit_key() {
   local key="${1:-}"
-  local profile_path choice new_value updated_json active_base base_url
+  local profile_path choice new_value updated_json was_active
   [ -n "${key}" ] || return 1
   profile_path="$(ccq_provider_profile_path "${key}")"
   [ -f "${profile_path}" ] || return 1
@@ -439,6 +493,11 @@ ccq_provider_edit_key() {
   esac
   [ -n "${new_value}" ] || { CCQ_PROVIDER_ERROR="新值不能为空"; return 1; }
 
+  was_active=0
+  if [ "${key}" = "$(ccq_provider_resolve_active_key)" ]; then
+    was_active=1
+  fi
+
   updated_json="$(CHOICE="${choice}" NEW_VALUE="${new_value}" node -e '
 const fs = require("fs");
 const profile = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -454,9 +513,7 @@ process.stdout.write(JSON.stringify(profile, null, 2) + "\n");
   new_value=""
   ccq_json_write_atomic "${profile_path}" "${updated_json}" || return 1
 
-  base_url="$(ccq_provider_profile_field "${profile_path}" baseUrl)"
-  active_base="$(ccq_provider_active_base_url)"
-  if [ -n "${base_url}" ] && [ "${base_url}" = "${active_base}" ]; then
+  if [ "${was_active}" = "1" ]; then
     ccq_provider_switch_profile "${profile_path}" || return 1
   fi
 }

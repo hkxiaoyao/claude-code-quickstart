@@ -643,6 +643,80 @@ function Get-MaskedApiKey {
     return $Key.Substring(0, 4) + "..." + $Key.Substring($Key.Length - 2)
 }
 
+function Normalize-ProviderBaseUrl {
+    <#
+    .SYNOPSIS
+    规范化 Base URL，用于供应商身份匹配。
+    #>
+    param([string]$BaseUrl)
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) { return "" }
+    return $BaseUrl.Trim().TrimEnd([char[]]'/')
+}
+
+function Test-ProviderBaseUrlMatch {
+    <#
+    .SYNOPSIS
+    判断 settings 中的 Base URL 是否匹配 Profile Base URL。
+    #>
+    param(
+        [string]$SettingsBaseUrl,
+        [string]$ProfileBaseUrl
+    )
+
+    $settingsNormalized = Normalize-ProviderBaseUrl -BaseUrl $SettingsBaseUrl
+    $profileNormalized = Normalize-ProviderBaseUrl -BaseUrl $ProfileBaseUrl
+    if ([string]::IsNullOrWhiteSpace($settingsNormalized) -or [string]::IsNullOrWhiteSpace($profileNormalized)) {
+        return $false
+    }
+
+    return ($settingsNormalized -eq $profileNormalized -or
+        $settingsNormalized.StartsWith("$profileNormalized/", [System.StringComparison]::OrdinalIgnoreCase))
+}
+
+function Test-ProviderAuthTokenMatch {
+    <#
+    .SYNOPSIS
+    判断 settings 与 Profile 是否使用同一个 API Token。
+    #>
+    param(
+        [string]$SettingsAuthToken,
+        [string]$ProfileAuthToken
+    )
+
+    return (-not [string]::IsNullOrWhiteSpace($SettingsAuthToken) -and
+        -not [string]::IsNullOrWhiteSpace($ProfileAuthToken) -and
+        $SettingsAuthToken -ceq $ProfileAuthToken)
+}
+
+function Resolve-ActiveProviderProfile {
+    <#
+    .SYNOPSIS
+    从 Profile 列表中解析当前活跃供应商，优先使用 Base URL + Token 精确身份匹配。
+    #>
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [array]$Profiles,
+        [string]$BaseUrl,
+        [string]$AuthToken
+    )
+
+    if ($Profiles.Count -eq 0 -or [string]::IsNullOrWhiteSpace($BaseUrl)) { return $null }
+
+    $baseMatches = @($Profiles | Where-Object { Test-ProviderBaseUrlMatch -SettingsBaseUrl $BaseUrl -ProfileBaseUrl $_.BaseUrl })
+    if ($baseMatches.Count -eq 0) { return $null }
+
+    $tokenMatches = @($baseMatches | Where-Object { Test-ProviderAuthTokenMatch -SettingsAuthToken $AuthToken -ProfileAuthToken $_.AuthToken })
+    if ($tokenMatches.Count -gt 0) { return $tokenMatches[0] }
+
+    # 兼容旧 Profile 或手工半配置：只有缺少可比较 Token 时才退回历史 Base URL 匹配行为。
+    $profilesWithToken = @($baseMatches | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.AuthToken) })
+    if ([string]::IsNullOrWhiteSpace($AuthToken) -or $profilesWithToken.Count -eq 0) {
+        return $baseMatches[0]
+    }
+
+    return $null
+}
+
 function Test-ProviderKey {
     <#
     .SYNOPSIS
@@ -823,9 +897,10 @@ function Sync-ProviderFromSettings {
                 $profile = Get-Content $pf.FullName -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable -ErrorAction Stop
                 if ($profile -and $profile.ContainsKey("env") -and $profile["env"]) {
                     $pfBaseUrl = if ($profile["env"].ContainsKey("ANTHROPIC_BASE_URL")) { $profile["env"]["ANTHROPIC_BASE_URL"] } else { "" }
-                    if (-not [string]::IsNullOrWhiteSpace($pfBaseUrl) -and -not [string]::IsNullOrWhiteSpace($baseUrl) -and
-                        $baseUrl -like "$pfBaseUrl*") {
-                        # 已有匹配 Profile → 无需同步
+                    $pfAuthToken = if ($profile["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) { $profile["env"]["ANTHROPIC_AUTH_TOKEN"] } else { "" }
+                    if ((Test-ProviderBaseUrlMatch -SettingsBaseUrl $baseUrl -ProfileBaseUrl $pfBaseUrl) -and
+                        (Test-ProviderAuthTokenMatch -SettingsAuthToken $authToken -ProfileAuthToken $pfAuthToken)) {
+                        # 已有精确匹配 Profile → 无需同步
                         return
                     }
                 }
@@ -839,9 +914,7 @@ function Sync-ProviderFromSettings {
     foreach ($k in $script:BuiltinProviders.Keys) {
         if ($k -eq "custom") { continue }
         $p = $script:BuiltinProviders[$k]
-        if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and
-            -not [string]::IsNullOrWhiteSpace($baseUrl) -and
-            $baseUrl -like "$($p.BaseUrl)*") {
+        if (Test-ProviderBaseUrlMatch -SettingsBaseUrl $baseUrl -ProfileBaseUrl $p.BaseUrl) {
             $migrateKey = $k
             $providerName = $p.Name
             break
@@ -854,6 +927,12 @@ function Sync-ProviderFromSettings {
         if (-not (Test-ProviderKey -Key $migrateKey)) {
             $migrateKey = "custom-unknown"
         }
+    }
+
+    # 同 Base URL 但 Token 不同的配置应保留为独立 Profile，避免自动同步覆盖旧配置。
+    $candidateProfilePath = Join-Path $profilesDir "$migrateKey.json"
+    if (Test-Path $candidateProfilePath) {
+        $migrateKey = Get-NextAvailableKey -BaseKey $migrateKey
     }
 
     $newProfile = @{
@@ -963,22 +1042,27 @@ function Get-ActiveProvider {
 
     $settings = Read-SettingsJson
     $baseUrl = ""
-    if ($settings.ContainsKey("env") -and $settings["env"] -and $settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
-        $baseUrl = $settings["env"]["ANTHROPIC_BASE_URL"]
+    $authToken = ""
+    if ($settings.ContainsKey("env") -and $settings["env"]) {
+        if ($settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
+            $baseUrl = [string]$settings["env"]["ANTHROPIC_BASE_URL"]
+        }
+        if ($settings["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) {
+            $authToken = [string]$settings["env"]["ANTHROPIC_AUTH_TOKEN"]
+        }
     }
 
     if ([string]::IsNullOrWhiteSpace($baseUrl)) { return $null }
 
     # HC-13: @() 包裹
     $profiles = @(Get-ProviderProfiles)
-    foreach ($p in $profiles) {
-        if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and $baseUrl -like "$($p.BaseUrl)*") {
-            return @{
-                Key         = $p.Key
-                Name        = $p.Name
-                BaseUrl     = $p.BaseUrl
-                ProfilePath = $p.ProfilePath
-            }
+    $activeProfile = Resolve-ActiveProviderProfile -Profiles $profiles -BaseUrl $baseUrl -AuthToken $authToken
+    if ($activeProfile) {
+        return @{
+            Key         = $activeProfile.Key
+            Name        = $activeProfile.Name
+            BaseUrl     = $activeProfile.BaseUrl
+            ProfilePath = $activeProfile.ProfilePath
         }
     }
 
@@ -1002,16 +1086,18 @@ function Get-ProviderDisplayData {
     $settings = Read-SettingsJson
     $activeKey = ""
     $baseUrl = ""
-    if ($settings.ContainsKey("env") -and $settings["env"] -and $settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
-        $baseUrl = [string]$settings["env"]["ANTHROPIC_BASE_URL"]
-    }
-    if (-not [string]::IsNullOrWhiteSpace($baseUrl)) {
-        foreach ($p in $profiles) {
-            if (-not [string]::IsNullOrWhiteSpace($p.BaseUrl) -and $baseUrl -like "$($p.BaseUrl)*") {
-                $activeKey = [string]$p.Key
-                break
-            }
+    $authToken = ""
+    if ($settings.ContainsKey("env") -and $settings["env"]) {
+        if ($settings["env"].ContainsKey("ANTHROPIC_BASE_URL")) {
+            $baseUrl = [string]$settings["env"]["ANTHROPIC_BASE_URL"]
         }
+        if ($settings["env"].ContainsKey("ANTHROPIC_AUTH_TOKEN")) {
+            $authToken = [string]$settings["env"]["ANTHROPIC_AUTH_TOKEN"]
+        }
+    }
+    $activeProfile = Resolve-ActiveProviderProfile -Profiles $profiles -BaseUrl $baseUrl -AuthToken $authToken
+    if ($activeProfile) {
+        $activeKey = [string]$activeProfile.Key
     }
 
     # HC-13: @() 包裹
