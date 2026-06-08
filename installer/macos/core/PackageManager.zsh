@@ -36,14 +36,17 @@ ccq_brew_available() {
 }
 
 ccq_homebrew_install_command() {
-  printf '%s\n' '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+  printf '%s\n' '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty'
 }
 
 ccq_install_homebrew() {
   if ccq_brew_available; then
     return 0
   fi
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  if [ ! -r /dev/tty ]; then
+    return 1
+  fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/tty
 }
 
 ccq_brew_prefix() {
