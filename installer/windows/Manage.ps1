@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Manage-ClaudeEnv.ps1 - CCQ（统一管理入口）
+# Manage.ps1 - CCQ（统一管理入口）
 # 功能: 生命周期管理 — 更新已安装组件 + 供应商管理 + MCP 管理
 
 param(
@@ -23,7 +23,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ─── 中文编码修复（必须在 PS 版本检查前执行，不能移入 core/ 模块）─────────────
-# 注意：此块与 Install-ClaudeEnv.ps1 中的相同代码共用 _CcqKernel32Cp 类名。
+# 注意：此块与 Install.ps1 中的相同代码共用 _CcqKernel32Cp 类名。
 #       因为必须在 dot-source core/ 之前运行，无法提取为共享模块。
 try {
     if (-not ([System.Management.Automation.PSTypeName]'_CcqKernel32Cp').Type) {
@@ -45,7 +45,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     Write-Host ""
-    Write-Host "  [ERROR] Manage-ClaudeEnv.ps1 需要 PowerShell 7.0 或更高版本" -ForegroundColor Red
+    Write-Host "  [ERROR] Manage.ps1 需要 PowerShell 7.0 或更高版本" -ForegroundColor Red
     Write-Host "  当前版本: PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Red
     Write-Host ""
     Write-Host "  解决方案：" -ForegroundColor Yellow
@@ -96,7 +96,7 @@ Set-CcqOutputMode -Mode ([CcqOutputMode]$OutputMode)
 $script:StepRegistry = Get-StepRegistry
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 更新管理（迁移自 Update-ClaudeEnv.ps1）
+# 更新管理（迁移自旧 Update 入口）
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ─── 内容指纹管理（跳过模板未变更的步骤）─────────────────────────────────
@@ -471,7 +471,7 @@ function Invoke-UpdateAction {
         $hasUpdates = @($updateStatus | Where-Object { $_.HasUpdate -eq $true }).Count -gt 0
         if ($hasUpdates) {
             Write-UiDim "提示: 运行 " -NoNewline
-            Write-UiPrimary "pwsh -File installer/windows/Manage-ClaudeEnv.ps1 -Action Update" -NoNewline
+            Write-UiPrimary "pwsh -File installer/windows/Manage.ps1 -Action Update" -NoNewline
             Write-UiDim " 选择并更新组件"
             Write-Host ""
         }

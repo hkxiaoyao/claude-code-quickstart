@@ -2,6 +2,36 @@
   "SchemaVersion": 1,
   "Source": "installer/contracts/build.json",
   "DefaultOutputDirectory": "dist",
+  "BuildEntrypoints": {
+    "Windows": {
+      "Script": "installer/build.ps1",
+      "AllowedPlatforms": [
+        "Windows"
+      ],
+      "Artifacts": [
+        "bootstrap.ps1",
+        "install.ps1",
+        "manage.ps1"
+      ]
+    },
+    "MacOS": {
+      "Script": "installer/build.sh",
+      "AllowedPlatforms": [
+        "macos"
+      ],
+      "Artifacts": [
+        "install.sh",
+        "manage.sh"
+      ]
+    },
+    "ReleaseArtifacts": [
+      "bootstrap.ps1",
+      "install.ps1",
+      "manage.ps1",
+      "install.sh",
+      "manage.sh"
+    ]
+  },
   "Windows": {
     "StepContract": "contracts/steps.json",
     "CanonicalStepPrefix": "windows/",
@@ -10,7 +40,7 @@
         "Role": "Bootstrap",
         "OutputFile": "bootstrap.ps1",
         "RequiresHeader": "#Requires -Version 5.1",
-        "EntryFile": "windows/Bootstrap-ClaudeEnv.ps1",
+        "EntryFile": "windows/Bootstrap.ps1",
         "HoistParamFrom": "",
         "OutputEncoding": "UTF8",
         "CoreFiles": [
@@ -24,8 +54,8 @@
         "Role": "Install",
         "OutputFile": "install.ps1",
         "RequiresHeader": "#Requires -Version 7.0",
-        "EntryFile": "windows/Install-ClaudeEnv.ps1",
-        "HoistParamFrom": "windows/Install-ClaudeEnv.ps1",
+        "EntryFile": "windows/Install.ps1",
+        "HoistParamFrom": "windows/Install.ps1",
         "OutputEncoding": "UTF8",
         "CoreFiles": [
           "windows/core/Ui.ps1",
@@ -44,8 +74,8 @@
         "Role": "Manage",
         "OutputFile": "manage.ps1",
         "RequiresHeader": "#Requires -Version 7.0",
-        "EntryFile": "windows/Manage-ClaudeEnv.ps1",
-        "HoistParamFrom": "windows/Manage-ClaudeEnv.ps1",
+        "EntryFile": "windows/Manage.ps1",
+        "HoistParamFrom": "windows/Manage.ps1",
         "OutputEncoding": "UTF8",
         "CoreFiles": [
           "windows/core/Ui.ps1",
@@ -79,14 +109,14 @@
       {
         "Role": "Install",
         "OutputFile": "install.sh",
-        "EntryFile": "macos/Install-ClaudeEnv.zsh",
+        "EntryFile": "macos/Install.zsh",
         "IncludeSteps": true,
         "Wrapper": "bash-to-zsh"
       },
       {
         "Role": "Manage",
         "OutputFile": "manage.sh",
-        "EntryFile": "macos/Manage-ClaudeEnv.zsh",
+        "EntryFile": "macos/Manage.zsh",
         "IncludeSteps": true,
         "Wrapper": "bash-to-zsh"
       }

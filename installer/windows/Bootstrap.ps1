@@ -1,4 +1,4 @@
-﻿# Bootstrap-ClaudeEnv.ps1 - CCQ 引导脚本
+﻿# Bootstrap.ps1 - CCQ 引导脚本
 # 作者: 哈雷酱 (本小姐的引导脚本杰作！)
 # 功能: PS5 兼容的引导脚本，安装前置条件并引导用户运行主安装脚本
 
@@ -379,7 +379,7 @@ function Show-CompletionMessage {
     Write-Host ""
     if ($scriptRoot) {
         # 本地文件模式：直接指向同目录的安装脚本
-        Write-UiSuccess "  pwsh -File `"$scriptRoot\Install-ClaudeEnv.ps1`""
+        Write-UiSuccess "  pwsh -File `"$scriptRoot\Install.ps1`""
     } else {
         # iex 管道模式：PS7 原生支持 UTF-8，irm|iex 无需特殊处理
         Write-UiSuccess "  irm 'https://github.com/MrNine-666/claude-code-quickstart/releases/latest/download/install.ps1' | iex"

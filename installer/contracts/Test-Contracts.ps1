@@ -364,6 +364,158 @@ function Test-TemplatesContract {
     }
 }
 
+function Get-MapValue {
+    param(
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Item,
+        [Parameter(Mandatory)][string]$Key,
+        [AllowNull()][object]$DefaultValue = $null
+    )
+
+    $hasKey = if ($Item -is [hashtable]) { $Item.ContainsKey($Key) } else { $Item.Contains($Key) }
+    if ($hasKey -and $null -ne $Item[$Key]) {
+        return $Item[$Key]
+    }
+    return $DefaultValue
+}
+
+function ConvertTo-NormalizedSkillsEntry {
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Entry)
+
+    return [ordered]@{
+        Id              = [string](Get-MapValue -Item $Entry -Key 'Id' -DefaultValue '')
+        Name            = [string](Get-MapValue -Item $Entry -Key 'Name' -DefaultValue '')
+        Source          = [string](Get-MapValue -Item $Entry -Key 'Source' -DefaultValue '')
+        SkillName       = [string](Get-MapValue -Item $Entry -Key 'SkillName' -DefaultValue '')
+        StaticSkillName = [string](Get-MapValue -Item $Entry -Key 'StaticSkillName' -DefaultValue '')
+        SkipDiscovery   = [bool](Get-MapValue -Item $Entry -Key 'SkipDiscovery' -DefaultValue $false)
+        Description     = [string](Get-MapValue -Item $Entry -Key 'Description' -DefaultValue '')
+        Default         = [bool](Get-MapValue -Item $Entry -Key 'Default' -DefaultValue $false)
+        Order           = [int](Get-MapValue -Item $Entry -Key 'Order' -DefaultValue 9999)
+    }
+}
+
+function ConvertTo-NormalizedSkillsCatalogue {
+    param([Parameter(Mandatory)][array]$Catalogue)
+
+    return @($Catalogue | ForEach-Object { ConvertTo-NormalizedSkillsEntry -Entry $_ } | Sort-Object { [int]$_['Order'] })
+}
+
+function ConvertFrom-MacOSSkillsFallback {
+    $skillsPath = Join-Path $script:InstallerRoot 'macos/steps/Skills.zsh'
+    Assert-PathExists 'macos.skills' $skillsPath
+    if (-not (Test-Path $skillsPath -PathType Leaf)) { return @() }
+
+    $content = Get-Content -Path $skillsPath -Raw -Encoding UTF8
+    $match = [regex]::Match($content, "(?ms)ccq_skills_catalogue_fallback\(\)\s*\{.*?cat <<'EOF'\r?\n(?<Body>.*?)\r?\nEOF")
+    if (-not $match.Success) {
+        Add-Issue 'macos.skills fallback catalogue 未找到 ccq_skills_catalogue_fallback here-doc'
+        return @()
+    }
+
+    $items = @()
+    foreach ($line in @($match.Groups['Body'].Value -split "\r?\n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = @($line -split "`t")
+        if ($parts.Count -lt 9) {
+            Add-Issue "macos.skills fallback 行字段不足: $line"
+            continue
+        }
+        $items += [ordered]@{
+            Id              = [string]$parts[0]
+            Name            = [string]$parts[1]
+            Source          = [string]$parts[2]
+            SkillName       = [string]$parts[3]
+            Description     = [string]$parts[4]
+            Default         = ([string]$parts[5] -eq 'true')
+            StaticSkillName = [string]$parts[6]
+            SkipDiscovery   = ([string]$parts[7] -eq 'true')
+            Order           = [int]$parts[8]
+        }
+    }
+    return @($items)
+}
+
+function Test-SkillsContract {
+    param([Parameter(Mandatory)][hashtable]$Contract)
+
+    Assert-Equal 'skills.schema-version' 1 $Contract['SchemaVersion']
+    $catalogue = @(ConvertTo-NormalizedSkillsCatalogue -Catalogue @($Contract['Catalogue']))
+    if ($catalogue.Count -eq 0) {
+        Add-Issue 'skills.catalogue 不能为空'
+        return
+    }
+
+    $seenIds = @{}
+    $seenOrders = @{}
+    foreach ($entry in $catalogue) {
+        $id = [string]$entry['Id']
+        if ([string]::IsNullOrWhiteSpace($id) -or $id -notmatch '^[a-z0-9-]+$') {
+            Add-Issue "skills.$id Id 不合法"
+        }
+        if ($seenIds.ContainsKey($id)) {
+            Add-Issue "skills.$id Id 重复"
+        }
+        $seenIds[$id] = $true
+
+        $order = [string]$entry['Order']
+        if ($seenOrders.ContainsKey($order)) {
+            Add-Issue "skills.$id Order 重复: $order"
+        }
+        $seenOrders[$order] = $true
+
+        foreach ($field in @('Name', 'Source', 'Description')) {
+            if ([string]::IsNullOrWhiteSpace([string]$entry[$field])) {
+                Add-Issue "skills.$id $field 不能为空"
+            }
+        }
+        if ([bool]$entry['SkipDiscovery'] -and [string]::IsNullOrWhiteSpace([string]$entry['StaticSkillName']) -and [string]::IsNullOrWhiteSpace([string]$entry['SkillName'])) {
+            Add-Issue "skills.$id SkipDiscovery=true 时必须提供 StaticSkillName 或 SkillName"
+        }
+    }
+
+    $windowsFallback = @(ConvertTo-NormalizedSkillsCatalogue -Catalogue @($script:SkillsCatalogueFallback))
+    Assert-Equal 'skills.windows-fallback' $catalogue $windowsFallback
+
+    $macOSFallback = @(ConvertTo-NormalizedSkillsCatalogue -Catalogue @(ConvertFrom-MacOSSkillsFallback))
+    Assert-Equal 'skills.macos-fallback' $catalogue $macOSFallback
+}
+
+function Test-UiContract {
+    param([Parameter(Mandatory)][hashtable]$Contract)
+
+    Assert-Equal 'ui.schema-version' 1 $Contract['SchemaVersion']
+    $menus = $Contract['Menus']
+    if (-not $menus.ContainsKey('AdvancedSelect')) {
+        Add-Issue 'ui.Menus 缺少 AdvancedSelect'
+        return
+    }
+
+    $advanced = $menus['AdvancedSelect']
+    Assert-Equal 'ui.advanced.installed-badge' '【已安装】' $advanced['InstalledBadgeInSelectMenu']
+    Assert-Equal 'ui.advanced.uninstalled-badge' '【未安装】' $advanced['UninstalledBadgeInSelectMenu']
+    Assert-Equal 'ui.advanced.forbidden-badges' @('[PASS]', '[    ]') @($advanced['ForbiddenLegacyBadges'])
+
+    if (-not $menus.ContainsKey('Skills')) {
+        Add-Issue 'ui.Menus 缺少 Skills'
+    } else {
+        $copyOptions = @($menus['Skills']['CopyModeOptions'])
+        Assert-Equal 'ui.skills.copy-options.count' 2 $copyOptions.Count
+    }
+
+    foreach ($relativePath in @('windows/Install.ps1', 'macos/Install.zsh')) {
+        $path = Join-Path $script:InstallerRoot $relativePath
+        Assert-PathExists "ui.$relativePath" $path
+        if (-not (Test-Path $path -PathType Leaf)) { continue }
+        $content = Get-Content -Path $path -Raw -Encoding UTF8
+        if ($content -notmatch '【已安装】' -or $content -notmatch '【未安装】') {
+            Add-Issue "ui.$relativePath Advanced Select 未使用中文状态徽标"
+        }
+        if ($content -match '\[\s{4}\]' -or $content -match '\[PASS\]') {
+            Add-Issue "ui.$relativePath Advanced Select 仍包含旧式选择菜单徽标"
+        }
+    }
+}
+
 function Test-BuildManifestContract {
     param([Parameter(Mandatory)][hashtable]$Contract)
 
@@ -377,7 +529,16 @@ function Test-BuildManifestContract {
 
     Assert-Equal 'build.windows.outputs' @('bootstrap.ps1', 'install.ps1', 'manage.ps1') $windowsOutputs
     Assert-Equal 'build.macos.outputs' @('install.sh', 'manage.sh') $macOSOutputs
-    Assert-Equal 'build.all.outputs' @('bootstrap.ps1', 'install.ps1', 'manage.ps1', 'install.sh', 'manage.sh') $allOutputs
+    Assert-Equal 'build.release.outputs' @('bootstrap.ps1', 'install.ps1', 'manage.ps1', 'install.sh', 'manage.sh') $allOutputs
+
+    $entrypoints = $Contract['BuildEntrypoints']
+    Assert-Equal 'build.entrypoints.windows.script' 'installer/build.ps1' $entrypoints['Windows']['Script']
+    Assert-Equal 'build.entrypoints.windows.allowed' @('Windows') @($entrypoints['Windows']['AllowedPlatforms'])
+    Assert-Equal 'build.entrypoints.windows.artifacts' @('bootstrap.ps1', 'install.ps1', 'manage.ps1') @($entrypoints['Windows']['Artifacts'])
+    Assert-Equal 'build.entrypoints.macos.script' 'installer/build.sh' $entrypoints['MacOS']['Script']
+    Assert-Equal 'build.entrypoints.macos.allowed' @('macos') @($entrypoints['MacOS']['AllowedPlatforms'])
+    Assert-Equal 'build.entrypoints.macos.artifacts' @('install.sh', 'manage.sh') @($entrypoints['MacOS']['Artifacts'])
+    Assert-Equal 'build.entrypoints.release-artifacts' $allOutputs @($entrypoints['ReleaseArtifacts'])
 
     foreach ($output in $allOutputs) {
         if ($output -in @('ccq.ps1', 'ccq.sh') -or $output -match '^ccq-' -or $output -match '\.built\.') {
@@ -424,6 +585,16 @@ function Test-BuildManifestContract {
     if ($buildSh -notmatch "readJson\('contracts/build\.json'\)") {
         Add-Issue 'installer/build.sh 未读取共享构建清单 contracts/build.json'
     }
+
+    if ($buildPs1 -match "ValidateSet\('All'|ValidateSet\('MacOS'|Get-BuildArtifactConfig\s+-Platform\s+MacOS|Build-ZshSingleFileScript") {
+        Add-Issue 'installer/build.ps1 仍包含 All/MacOS 构建路径'
+    }
+    if ($buildSh -match 'buildPowerShellArtifact|validatePowerShellArtifact|selectedPlatform === ''all''|selectedPlatform === ''windows''') {
+        Add-Issue 'installer/build.sh 仍包含 Windows/all 构建路径'
+    }
+    if ($buildSh -notmatch 'CCQ_SKILLS_CONTRACT' -or $buildSh -notmatch 'CCQ_UI_CONTRACT') {
+        Add-Issue 'installer/build.sh 未嵌入新增 skills/ui contracts'
+    }
 }
 
 function Test-CanonicalSourceLayout {
@@ -432,9 +603,9 @@ function Test-CanonicalSourceLayout {
     Assert-PathExists 'Windows steps root' $script:StepsRoot -PathType Container
 
     foreach ($legacyPath in @(
-        'Bootstrap-ClaudeEnv.ps1',
-        'Install-ClaudeEnv.ps1',
-        'Manage-ClaudeEnv.ps1',
+        'Bootstrap.ps1',
+        'Install.ps1',
+        'Manage.ps1',
         'core',
         'steps',
         'build/Build-SingleFile.ps1'
@@ -462,6 +633,7 @@ function Test-CanonicalSourceLayout {
 . (Join-Path $script:CoreRoot 'McpManager.ps1')
 . (Join-Path $script:CoreRoot 'Provider.ps1')
 . (Join-Path $script:StepsRoot 'ClaudeConfig.ps1')
+. (Join-Path $script:StepsRoot 'Skills.ps1')
 
 function Main {
     if (-not (Test-Path $script:InstallerRoot -PathType Container)) {
@@ -475,6 +647,8 @@ function Main {
     Test-ClaudeConfigContract -Contract (Read-ContractJson 'claude-config.json')
     Test-TemplatesContract -Contract (Read-ContractJson 'templates/index.json')
     Test-BuildManifestContract -Contract (Read-ContractJson 'build.json')
+    Test-SkillsContract -Contract (Read-ContractJson 'skills.json')
+    Test-UiContract -Contract (Read-ContractJson 'ui.json')
 
     if ($script:Issues.Count -gt 0) {
         Write-Host "[FAIL] contracts 一致性检查失败 ($($script:Issues.Count) 项)" -ForegroundColor Red

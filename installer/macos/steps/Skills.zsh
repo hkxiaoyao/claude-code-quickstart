@@ -14,20 +14,89 @@ ccq_source_npm_common() {
 }
 ccq_source_npm_common
 
-: "${CCQ_SKILLS_COPY:=0}"
+ccq_skills_contract_path() {
+  if [ -n "${CCQ_SKILLS_CONTRACT:-}" ] && [ -f "${CCQ_SKILLS_CONTRACT}" ]; then
+    printf '%s\n' "${CCQ_SKILLS_CONTRACT}"
+    return 0
+  fi
+  local source_path="${CCQ_INSTALLER_ROOT:-$(cd "${0:A:h}/../.." && pwd)}/contracts/skills.json"
+  [ -f "${source_path}" ] && { printf '%s\n' "${source_path}"; return 0; }
+  return 1
+}
+
+ccq_ui_contract_path() {
+  if [ -n "${CCQ_UI_CONTRACT:-}" ] && [ -f "${CCQ_UI_CONTRACT}" ]; then
+    printf '%s\n' "${CCQ_UI_CONTRACT}"
+    return 0
+  fi
+  local source_path="${CCQ_INSTALLER_ROOT:-$(cd "${0:A:h}/../.." && pwd)}/contracts/ui.json"
+  [ -f "${source_path}" ] && { printf '%s\n' "${source_path}"; return 0; }
+  return 1
+}
+
+ccq_skills_catalogue_fallback() {
+  cat <<'EOF'
+find-skills	find-skills	vercel-labs/skills	find-skills	Skills 发现辅助技能	true		false	10
+anthropics-skills	官方 Skills	anthropics/skills		Anthropic 官方 Skills 集合	false		false	20
+vercel-agent-skills	Vercel Agent Skills	vercel-labs/agent-skills		Vercel Agent Skills 集合	false		false	30
+vue-skills	Vue Skills	vuejs-ai/skills		Vue 开发 Skills 集合	false		false	40
+ui-ux-pro-max	UI UX Pro Max	nextlevelbuilder/ui-ux-pro-max-skill		UI/UX 设计与前端体验技能	false		false	50
+shadcn-ui-skills	shadcn/ui Skills	shadcn/ui		shadcn/ui 组件开发 Skills 集合	false		false	60
+wot-ui-skills	Wot UI Skills	wot-ui/open-wot		Wot UI 开发 Skills 集合	false		false	70
+ant-design-skills	Ant Design Skills	ant-design/ant-design-cli		Ant Design 开发 Skills 集合	false		false	80
+ant-design-x-skills	Ant Design X Skills	https://github.com/ant-design/x/tree/main/packages/x-skill		Ant Design X Skills 集合	false		false	90
+fastapi-skills	FastAPI Skills	https://github.com/fastapi/fastapi	fastapi	FastAPI 开发 Skills	false		false	100
+langchain-skills	LangChain Skills	langchain-ai/langchain-skills		LangChain 开发 Skills 集合	false		false	110
+ppt-master	PPT Master	hugohe3/ppt-master		PPT 生成与演示文稿技能	false	ppt-master	true	120
+EOF
+}
 
 ccq_skills_catalogue() {
-  cat <<'EOF'
-find-skills	find-skills	vercel-labs/skills	find-skills	Skills 发现辅助技能	true
-anthropics-skills	官方 Skills	anthropics/skills		Anthropic 官方 Skills 集合	false
-vercel-agent-skills	Vercel Agent Skills	vercel-labs/agent-skills		Vercel Agent Skills 集合	false
-vue-skills	Vue Skills	vuejs-ai/skills		Vue 开发 Skills 集合	false
-ui-ux-pro-max	UI UX Pro Max	nextlevelbuilder/ui-ux-pro-max-skill		UI/UX 设计与前端体验技能	false
-shadcn-ui-skills	shadcn/ui Skills	shadcn/ui		shadcn/ui 组件开发 Skills 集合	false
-fastapi-skills	FastAPI Skills	https://github.com/fastapi/fastapi	fastapi	FastAPI 开发 Skills	false
-langchain-skills	LangChain Skills	langchain-ai/langchain-skills		LangChain 开发 Skills 集合	false
-ppt-master	PPT Master	hugohe3/ppt-master	ppt-master	PPT 生成与演示文稿技能	false	ppt-master
-EOF
+  local contract_path
+  contract_path="$(ccq_skills_contract_path 2>/dev/null || true)"
+  if [ -n "${contract_path}" ] && command -v node >/dev/null 2>&1; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const rows = [...(contract.Catalogue || [])].sort((a, b) => Number(a.Order || 9999) - Number(b.Order || 9999));
+for (const item of rows) {
+  console.log([
+    item.Id || "",
+    item.Name || "",
+    item.Source || "",
+    item.SkillName || "",
+    item.Description || "",
+    item.Default === true ? "true" : "false",
+    item.StaticSkillName || "",
+    item.SkipDiscovery === true ? "true" : "false",
+    String(item.Order || 9999)
+  ].join("\t"));
+}
+' "${contract_path}" && return 0
+  fi
+  ccq_skills_catalogue_fallback
+}
+
+ccq_ui_contract_value() {
+  local expression="${1:-}"
+  local fallback="${2:-}"
+  local contract_path
+  contract_path="$(ccq_ui_contract_path 2>/dev/null || true)"
+  if [ -n "${contract_path}" ] && command -v node >/dev/null 2>&1; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const path = process.argv[2].split(".").filter(Boolean);
+let value = contract;
+for (const key of path) {
+  if (value == null || !Object.prototype.hasOwnProperty.call(value, key)) process.exit(1);
+  value = value[key];
+}
+if (Array.isArray(value)) process.stdout.write(value.join("\n"));
+else process.stdout.write(String(value));
+' "${contract_path}" "${expression}" && return 0
+  fi
+  printf '%s' "${fallback}"
 }
 
 ccq_skills_tty() { [ -r /dev/tty ] && [ -w /dev/tty ]; }
@@ -72,8 +141,8 @@ for (const item of items) if (item && item.name) console.log(item.name);
 }
 
 ccq_skills_known_static_names() {
-  local line id name source skill desc default static_name
-  while IFS=$'\t' read -r id name source skill desc default static_name; do
+  local line id name source skill desc default static_name skip_discovery order
+  while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
     if [ -n "${static_name}" ]; then
       printf '%s\n' "${static_name}"
     elif [ -n "${skill}" ]; then
@@ -114,12 +183,12 @@ for (const name of names) console.log(name);
 
 ccq_skills_select_source() {
   ccq_skills_tty || return 1
-  local lines line id name source skill desc default static_name options=() records=() choice i=1
+  local lines line id name source skill desc default static_name skip_discovery order options=() records=() choice i=1
   lines="$(ccq_skills_catalogue)"
-  while IFS=$'\t' read -r id name source skill desc default static_name; do
+  while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
     [ -n "${id}" ] || continue
     options+=("${name} - ${desc}")
-    records+=("${id}	${name}	${source}	${skill}	${desc}	${default}	${static_name}")
+    records+=("${id}	${name}	${source}	${skill}	${desc}	${default}	${static_name}	${skip_discovery}	${order}")
   done <<EOF
 ${lines}
 EOF
@@ -148,7 +217,13 @@ EOF
 ccq_skills_select_children() {
   local source="${1:-}"
   local skill="${2:-}"
+  local skip_discovery="${3:-false}"
+  local static_name="${4:-}"
   local names choice item selected=()
+  if [ "${skip_discovery}" = "true" ]; then
+    [ -n "${skill}" ] && printf '%s\n' "${skill}"
+    return 0
+  fi
   names="$(ccq_skills_source_list "${source}" "${skill}")"
   [ -n "${names}" ] || return 0
   local options=(${names})
@@ -179,12 +254,42 @@ ccq_skills_select_children() {
   printf '%s\n' "${selected[@]}"
 }
 
+ccq_skills_resolve_copy_mode() {
+  ccq_skills_tty || { printf '0\n'; return 0; }
+  local title option_text choice options=()
+  title="$(ccq_ui_contract_value Menus.Skills.CopyModeTitle '是否启用 Skills copy 模式？')"
+  option_text="$(ccq_ui_contract_value Menus.Skills.CopyModeOptions '')"
+  if [ -n "${option_text}" ]; then
+    while IFS= read -r line; do
+      [ -n "${line}" ] && options+=("${line}")
+    done <<EOF
+${option_text}
+EOF
+  fi
+  if [ "${#options[@]}" -lt 2 ]; then
+    options=("不启用 copy 模式（默认）" "启用 copy 模式（追加 --copy，适合 symlink 权限受限）")
+  fi
+  printf '%s\n' "${title}" >/dev/tty
+  printf '  1) %s\n' "${options[1]}" >/dev/tty
+  printf '  2) %s\n' "${options[2]}" >/dev/tty
+  while true; do
+    printf '请输入编号 [1-2]，或 q 取消: ' >/dev/tty
+    IFS= read -r choice </dev/tty || { printf '0\n'; return 0; }
+    case "${choice}" in
+      q|Q|1) printf '0\n'; return 0 ;;
+      2) printf '1\n'; return 0 ;;
+      *) printf '%s\n' "请输入有效编号" >/dev/tty ;;
+    esac
+  done
+}
+
 ccq_skills_install_one() {
   local source="${1:-}"
   local skill="${2:-}"
+  local copy_mode="${3:-0}"
   local args=(--yes skills add "${source}" --yes --agent claude-code -g)
   [ -n "${skill}" ] && args+=(--skill "${skill}")
-  [ "${CCQ_SKILLS_COPY}" = "1" ] && args+=(--copy)
+  [ "${copy_mode}" = "1" ] && args+=(--copy)
   ccq_run_command --timeout 300 --retries 1 -- npx "${args[@]}"
 }
 
@@ -207,24 +312,25 @@ Install-Skills() {
     ccq_skills_install_result false "" "Claude Code 不可用，请先完成 ClaudeCode 步骤"
     return 1
   fi
-  local record id name source skill desc default static_name selected_names installed=() failures=() child
+  local record id name source skill desc default static_name skip_discovery order selected_names installed=() failures=() child copy_mode
+  copy_mode="$(ccq_skills_resolve_copy_mode)"
   record="$(ccq_skills_select_source)" || { ccq_skills_install_result false "" "用户取消 Skills source 选择"; return 1; }
-  IFS=$'\t' read -r id name source skill desc default static_name <<EOF
+  IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order <<EOF
 ${record}
 EOF
-  selected_names="$(ccq_skills_select_children "${source}" "${skill}" || true)"
+  selected_names="$(ccq_skills_select_children "${source}" "${skill}" "${skip_discovery}" "${static_name}" || true)"
   if [ -z "${selected_names}" ] && [ -n "${skill}" ]; then
     selected_names="${skill}"
   fi
   if [ -z "${selected_names}" ]; then
-    if ccq_skills_install_one "${source}" "" >/dev/null 2>&1; then
+    if ccq_skills_install_one "${source}" "" "${copy_mode}" >/dev/null 2>&1; then
       installed+=("${id}")
     else
       failures+=("${id}")
     fi
   else
     for child in ${selected_names}; do
-      if ccq_skills_install_one "${source}" "${child}" >/dev/null 2>&1; then
+      if ccq_skills_install_one "${source}" "${child}" "${copy_mode}" >/dev/null 2>&1; then
         installed+=("${child}")
       else
         failures+=("${child}")

@@ -289,11 +289,19 @@ function Get-InlineProviderRuntimeConfig {
                 }
             }
             'bailian' = @{
-                Name               = '阿里云百炼'
-                Description        = '阿里云百炼平台，需用户自行配置模型'
-                BaseUrl            = 'https://coding.dashscope.aliyuncs.com/apps/anthropic'
-                PlatformUrl        = 'https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail'
-                RequireModelConfig = $true
+                Name        = '阿里云百炼'
+                Description = '阿里云百炼平台，默认使用 Qwen3.7 Plus'
+                BaseUrl     = 'https://coding.dashscope.aliyuncs.com/apps/anthropic'
+                PlatformUrl = 'https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail'
+                ModelEnv    = @{
+                    'ANTHROPIC_DEFAULT_HAIKU_MODEL'  = 'qwen3.7-plus'
+                    'ANTHROPIC_DEFAULT_OPUS_MODEL'   = 'qwen3.7-plus'
+                    'ANTHROPIC_DEFAULT_SONNET_MODEL' = 'qwen3.7-plus'
+                }
+                ExtraEnv    = @{
+                    'ANTHROPIC_MODEL'            = 'qwen3.7-plus'
+                    'CLAUDE_CODE_SUBAGENT_MODEL' = 'qwen3.7-plus'
+                }
             }
             'custom' = @{
                 Name        = '自定义供应商'
@@ -1122,7 +1130,7 @@ function Add-Provider {
         "MiniMax        - MiniMax API，默认 MiniMax-M3$($configuredTags['minimax'])"
         "Kimi Code      - Kimi 会员专属 API，需 sk-kimi- Key$($configuredTags['moonshot'])"
         "DeepSeek       - DeepSeek Anthropic API，支持 V4 Pro/Flash$($configuredTags['deepseek'])"
-        "阿里云百炼      - 阿里云百炼平台，需配置模型$($configuredTags['bailian'])"
+        "阿里云百炼      - 阿里云百炼平台，默认 qwen3.7-plus$($configuredTags['bailian'])"
         "自定义供应商    - 手动配置 Base URL 和 API Key"
     )
     $providerKeys = @("zhipu", "minimax", "moonshot", "deepseek", "bailian", "custom")
@@ -1324,7 +1332,7 @@ function Add-Provider {
         if ($template.ContainsKey("ModelEnv") -and $template.ModelEnv) {
             Set-ProviderManagedModelEnv -Profile $providerProfile -ModelEnv $template.ModelEnv
         } elseif ($template.ContainsKey("RequireModelConfig") -and $template.RequireModelConfig) {
-            # 需要用户自行配置模型的内置供应商（如阿里云百炼）
+            # 需要用户自行配置模型的内置供应商
             Write-Host ""
             Write-UiPrimary "此供应商需要配置模型名称"
             Write-UiDim "  将写入 settings.env 的 3 个模型键；留空表示不设置该键"

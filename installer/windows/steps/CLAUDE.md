@@ -139,7 +139,7 @@ ApiKey 步骤已精简为**薄包装层**，核心供应商逻辑委托给 `core
 
 ### SkipIfInstalled
 
-`SkipIfInstalled = $true`（注册表已更新）。首次配置后自动跳过，用户通过 `Manage-ClaudeEnv.ps1 -Action Provider` 管理供应商。
+`SkipIfInstalled = $true`（注册表已更新）。首次配置后自动跳过，用户通过 `Manage.ps1 -Action Provider` 管理供应商。
 
 ### Install-ApiKey 流程
 
@@ -164,7 +164,7 @@ Install-ApiKey($state)
 | `minimax` | MiniMax | 3 个模型环境键和 `ANTHROPIC_MODEL` 均写入 `MiniMax-M3`，额外写入 `API_TIMEOUT_MS=3000000` |
 | `moonshot` | Kimi Code | 3 个模型环境键、`ANTHROPIC_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 均写入 `kimi-for-coding`，额外写入 `ENABLE_TOOL_SEARCH=false` |
 | `deepseek` | DeepSeek | Haiku/Subagent=`deepseek-v4-flash`，Opus/Sonnet/主模型=`deepseek-v4-pro[1m]`，额外写入 `CLAUDE_CODE_EFFORT_LEVEL=max` |
-| `bailian` | 阿里云百炼 | 用户自行配置（RequireModelConfig） |
+| `bailian` | 阿里云百炼 | 3 个模型环境键、`ANTHROPIC_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL` 均写入 `qwen3.7-plus` |
 | `custom` | 自定义供应商 | 无（用户按需配置） |
 
 ### 写入格式（HC-12）
@@ -200,7 +200,7 @@ Install-ApiKey($state)
 
 ### 供应商后续管理
 
-安装完成后，供应商的增删改查和切换统一通过 `installer/windows/Manage-ClaudeEnv.ps1 -Action Provider` 管理（详见 [windows/core/CLAUDE.md](../core/CLAUDE.md) Provider.ps1 章节）。
+安装完成后，供应商的增删改查和切换统一通过 `installer/windows/Manage.ps1 -Action Provider` 管理（详见 [windows/core/CLAUDE.md](../core/CLAUDE.md) Provider.ps1 章节）。
 
 > **禁止**写入 `anthropicApiKey`、`openaiApiKey` 等顶层字段。
 > **禁止**写入 Anthropic / OpenAI / Azure 供应商。
@@ -390,19 +390,19 @@ npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --insta
 
 **功能**：仅通过 `Manage → Skills 管理` 入口安装、更新或卸载 Claude Code 全局 Skills。安装流程（Basic / Advanced）不再包含 Skills，统一 Update 管理也不注册 Skills；Skills 管理菜单内部仍通过受控 catalogue 调用 `npx --yes skills add ... --yes --agent claude-code -g`，并通过 `Update-Skills` 调用 `npx --yes skills update [skill...] -g -y`。
 
-**catalogue 来源**：固化 `tech-notes/docs/ai/skills.md` 当前 12 个条目，运行时不依赖外部 Markdown 或本地 notes 路径。
+**catalogue 来源**：优先读取 `installer/contracts/skills.json` 作为 Windows/macOS 共享业务源；内联 fallback 只用于 release artifact 或 contracts 不可用场景，并由 `installer/contracts/Test-Contracts.ps1` 与 contract 校验一致。
 
 **安装策略**：
 - 所有命令通过 `Invoke-ExternalCommand -Command "npx" -Arguments <string[]>` 执行，禁止 shell 字符串拼接
 - 固定追加 `--agent claude-code` 与 `-g`
 - `find-skills` / `fastapi` 等指定 skill 条目追加 `--skill <name>`
 - source 选择为单选；动态发现到多个子 Skills 时进入子 Skills 多选，并逐个追加 `--skill <name>` 安装
-- 在 Manage → Skills 安装流程中交互选择 copy 模式时追加 `--copy`
+- 在 Manage → Skills 安装流程中交互选择 copy 模式时追加 `--copy`；copy 模式只来自交互选择或局部布尔值，不读取环境变量
 - 单项失败不阻止后续已选择子 Skills 继续执行，最终摘要列出失败项和实际 Skill name
 
 **检测、更新与卸载**：
 - `Test-SkillsInstalled` 通过 `npx --yes skills list -g -a claude-code --json` 实时检测，不扫描目录、不写持久化状态文件
-- catalogue 保存 source、展示名称、简介、默认选择和可选 `SkipDiscovery`；状态表展示 Description 作为简介，不再展示类别
+- catalogue 保存 source、展示名称、简介、排序、默认选择和可选 `SkipDiscovery`；状态表展示 Description 作为简介，不再展示类别
 - 实际 Skill name 默认通过 `npx --yes skills add <source> --list -g --agent claude-code` 动态发现并缓存到本次进程内；`SkipDiscovery` 条目改用 `StaticSkillName` 静态检测
 - `ppt-master` 没有子 Skills，且远端 `--list` 明显较慢，因此检测阶段跳过远端 discovery，直接用 `StaticSkillName = ppt-master` 与本地 `skills list --json` 对比
 - 进入状态表、安装选择菜单、卸载菜单或验证阶段前，先批量预取需要动态 discovery 的 catalogue 结果；默认最多 2 个 `--list` 查询并发，安装/卸载命令仍保持串行

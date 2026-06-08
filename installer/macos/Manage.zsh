@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Manage-ClaudeEnv.zsh - macOS 管理入口
+# Manage.zsh - macOS 管理入口
 # 功能: Update、Provider、MCP、Skills 四类管理入口骨架
 
 if [ -z "${ZSH_VERSION:-}" ]; then
@@ -12,7 +12,7 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     export CCQ_STREAMED_SCRIPT_PATH="${ccq_streamed_script}"
     exec /bin/zsh "${ccq_streamed_script}" "$@"
   fi
-  printf '%s\n' 'Manage-ClaudeEnv.zsh 需要 zsh 执行；云端 built 入口会自动切换到 /bin/zsh。' >&2
+  printf '%s\n' 'Manage.zsh 需要 zsh 执行；云端 built 入口会自动切换到 /bin/zsh。' >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ CCQ_PARAM_OUTPUT_MODE="normal"
 
 ccq_manage_usage() {
   cat <<'EOF'
-Usage: Manage-ClaudeEnv.zsh [OPTIONS]
+Usage: Manage.zsh [OPTIONS]
 
 Options:
   -Action, --action <Update|Provider|Mcp|Skills>  指定管理动作

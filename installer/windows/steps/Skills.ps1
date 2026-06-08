@@ -16,9 +16,48 @@ $script:SkillsIgnoredNames = @(
 )
 $script:SkillsSourceDiscoveryCache = @{}
 $script:LastSkillsInstallData = @{}
+function Get-SkillsContractPath {
+    <#
+    .SYNOPSIS
+    返回 Skills contract 路径；source 模式优先读取 installer/contracts/skills.json，built 模式回退内联 catalogue。
+    #>
+    param()
 
-$script:SkillsCatalogue = @(
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_SKILLS_CONTRACT) -and (Test-Path $env:CCQ_SKILLS_CONTRACT -PathType Leaf)) {
+        return $env:CCQ_SKILLS_CONTRACT
+    }
+
+    $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\skills.json'
+    if (Test-Path $sourcePath -PathType Leaf) {
+        return $sourcePath
+    }
+
+    return $null
+}
+
+function ConvertTo-SkillsCatalogueEntry {
+    <#
+    .SYNOPSIS
+    将 contract / fallback 条目规范化为运行时 hashtable。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.Collections.IDictionary]$Entry
+    )
+
+    $result = @{}
+    foreach ($key in @('Id', 'Name', 'Source', 'SkillName', 'StaticSkillName', 'Description')) {
+        $result[$key] = if ($Entry.ContainsKey($key) -and $null -ne $Entry[$key]) { [string]$Entry[$key] } else { '' }
+    }
+    $result['SkipDiscovery'] = ($Entry.ContainsKey('SkipDiscovery') -and [bool]$Entry['SkipDiscovery'])
+    $result['Default'] = ($Entry.ContainsKey('Default') -and [bool]$Entry['Default'])
+    $result['Order'] = if ($Entry.ContainsKey('Order') -and $null -ne $Entry['Order']) { [int]$Entry['Order'] } else { 9999 }
+    return $result
+}
+
+$script:SkillsCatalogueFallback = @(
     @{
+        Order       = 10
         Id          = "find-skills"
         Name        = "find-skills"
         Source      = "vercel-labs/skills"
@@ -27,6 +66,7 @@ $script:SkillsCatalogue = @(
         Default     = $true
     },
     @{
+        Order       = 20
         Id          = "anthropics-skills"
         Name        = "官方 Skills"
         Source      = "anthropics/skills"
@@ -35,6 +75,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 30
         Id          = "vercel-agent-skills"
         Name        = "Vercel Agent Skills"
         Source      = "vercel-labs/agent-skills"
@@ -43,6 +84,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 40
         Id          = "vue-skills"
         Name        = "Vue Skills"
         Source      = "vuejs-ai/skills"
@@ -51,6 +93,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 50
         Id          = "ui-ux-pro-max"
         Name        = "UI UX Pro Max"
         Source      = "nextlevelbuilder/ui-ux-pro-max-skill"
@@ -59,6 +102,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 60
         Id          = "shadcn-ui-skills"
         Name        = "shadcn/ui Skills"
         Source      = "shadcn/ui"
@@ -67,6 +111,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 70
         Id          = "wot-ui-skills"
         Name        = "Wot UI Skills"
         Source      = "wot-ui/open-wot"
@@ -75,6 +120,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 80
         Id          = "ant-design-skills"
         Name        = "Ant Design Skills"
         Source      = "ant-design/ant-design-cli"
@@ -83,6 +129,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 90
         Id          = "ant-design-x-skills"
         Name        = "Ant Design X Skills"
         Source      = "https://github.com/ant-design/x/tree/main/packages/x-skill"
@@ -91,6 +138,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 100
         Id          = "fastapi-skills"
         Name        = "FastAPI Skills"
         Source      = "https://github.com/fastapi/fastapi"
@@ -99,6 +147,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 110
         Id          = "langchain-skills"
         Name        = "LangChain Skills"
         Source      = "langchain-ai/langchain-skills"
@@ -107,6 +156,7 @@ $script:SkillsCatalogue = @(
         Default     = $false
     },
     @{
+        Order       = 120
         Id          = "ppt-master"
         Name        = "PPT Master"
         Source          = "hugohe3/ppt-master"
@@ -129,8 +179,16 @@ function Get-SkillsCatalogue {
     #>
     param()
 
-    $catalogue = @($script:SkillsCatalogue)
-    $requiredFields = @("Id", "Name", "Source", "SkillName", "Description", "Default")
+    $contractPath = Get-SkillsContractPath
+    if ($contractPath) {
+        $contract = Get-Content -Path $contractPath -Encoding UTF8 -Raw | ConvertFrom-Json -AsHashtable
+        $catalogue = @($contract['Catalogue'] | ForEach-Object { ConvertTo-SkillsCatalogueEntry -Entry $_ })
+    } else {
+        $catalogue = @($script:SkillsCatalogueFallback | ForEach-Object { ConvertTo-SkillsCatalogueEntry -Entry $_ })
+    }
+
+    $catalogue = @($catalogue | Sort-Object { [int]$_['Order'] })
+    $requiredFields = @("Id", "Name", "Source", "SkillName", "Description", "Default", "Order")
     $seenIds = @{}
 
     foreach ($entry in $catalogue) {
@@ -1303,7 +1361,7 @@ function Show-SkillsSelectMenu {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [int]$_["Order"] } }, @{ Expression = { [string]$_["Name"] } })
 
     Write-UiPrimary "正在检测 Skills 状态..."
     $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)
@@ -1346,6 +1404,47 @@ function Show-SkillsSelectMenu {
     return @(Select-SkillEntryChildren -Entry $selectedEntry -Status $selectedStatus)
 }
 
+function Get-UiContractPath {
+    <#
+    .SYNOPSIS
+    返回 UI contract 路径；不可用时由调用方使用内联默认文案。
+    #>
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_UI_CONTRACT) -and (Test-Path $env:CCQ_UI_CONTRACT -PathType Leaf)) {
+        return $env:CCQ_UI_CONTRACT
+    }
+
+    $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\ui.json'
+    if (Test-Path $sourcePath -PathType Leaf) {
+        return $sourcePath
+    }
+
+    return $null
+}
+
+function Get-UiContractSection {
+    <#
+    .SYNOPSIS
+    读取 UI contract 指定菜单段。
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SectionName
+    )
+
+    $contractPath = Get-UiContractPath
+    if (-not $contractPath) {
+        return $null
+    }
+
+    $contract = Get-Content -Path $contractPath -Encoding UTF8 -Raw | ConvertFrom-Json -AsHashtable
+    if (-not $contract.ContainsKey('Menus') -or -not $contract['Menus'].ContainsKey($SectionName)) {
+        return $null
+    }
+    return $contract['Menus'][$SectionName]
+}
+
 function Resolve-SkillsCopyMode {
     <#
     .SYNOPSIS
@@ -1353,12 +1452,20 @@ function Resolve-SkillsCopyMode {
     #>
     param()
 
+    $copyConfig = Get-UiContractSection -SectionName 'Skills'
+    $title = if ($copyConfig -and $copyConfig.ContainsKey('CopyModeTitle')) { [string]$copyConfig['CopyModeTitle'] } else { '是否启用 Skills copy 模式？' }
+    $options = if ($copyConfig -and $copyConfig.ContainsKey('CopyModeOptions')) {
+        @($copyConfig['CopyModeOptions'] | ForEach-Object { [string]$_ })
+    } else {
+        @(
+            '不启用 copy 模式（默认）',
+            '启用 copy 模式（追加 --copy，适合 symlink 权限受限）'
+        )
+    }
+
     $choice = Show-SingleSelectMenu `
-        -Title "是否启用 Skills copy 模式？" `
-        -Options @(
-            "不启用 copy 模式（默认）",
-            "启用 copy 模式（追加 --copy，适合 symlink 权限受限）"
-        ) `
+        -Title $title `
+        -Options $options `
         -DefaultIndex 0
 
     return ($choice -eq 1)
@@ -1941,7 +2048,7 @@ function Show-SkillsStatusTable {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [int]$_["Order"] } }, @{ Expression = { [string]$_["Name"] } })
 
     Write-Host ""
     Write-UiPrimary "正在检测 Skills 状态..."
@@ -2015,7 +2122,7 @@ function Show-SkillsUninstallMenu {
 
     $catalogue = @(Get-SkillsCatalogue)
     $installedRecords = @(Get-InstalledSkillRecords)
-    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [string]$_["Name"] } })
+    $orderedEntries = @($catalogue | Sort-Object @{ Expression = { [int]$_["Order"] } }, @{ Expression = { [string]$_["Name"] } })
 
     Write-UiPrimary "正在检测可卸载 Skills..."
     $statusItems = @(Resolve-SkillsCatalogueStatuses -Entries $orderedEntries -InstalledRecords $installedRecords -ShowProgress)

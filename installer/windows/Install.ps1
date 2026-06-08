@@ -1,5 +1,5 @@
 #Requires -Version 7.0
-# Install-ClaudeEnv.ps1 - CCQ（安装入口）
+# Install.ps1 - CCQ（安装入口）
 # 功能: 首次安装入口（Onboarding），两级分组安装（基础环境 / 进阶扩展）
 
 param(
@@ -17,7 +17,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ─── 中文编码修复（必须在 PS 版本检查前执行，不能移入 core/ 模块）─────────────
-# 注意：此块与 Manage-ClaudeEnv.ps1 中的相同代码共用 _CcqKernel32Cp 类名。
+# 注意：此块与 Manage.ps1 中的相同代码共用 _CcqKernel32Cp 类名。
 #       因为必须在 dot-source core/ 之前运行，无法提取为共享模块。
 try {
     if (-not ([System.Management.Automation.PSTypeName]'_CcqKernel32Cp').Type) {
@@ -39,7 +39,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 if ($PSVersionTable.PSVersion.Major -lt 7) {
     Write-Host ""
-    Write-Host "  [ERROR] Install-ClaudeEnv.ps1 需要 PowerShell 7.0 或更高版本" -ForegroundColor Red
+    Write-Host "  [ERROR] Install.ps1 需要 PowerShell 7.0 或更高版本" -ForegroundColor Red
     Write-Host "  当前版本: PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Red
     Write-Host ""
     Write-Host "  解决方案：" -ForegroundColor Yellow
@@ -677,8 +677,8 @@ function Show-AdvancedSelectMenu {
         # 静默获取安装状态（委托 Invoke-SilentStepTest）
         $isInstalled = Invoke-SilentStepTest -TestFunction $stepConfig.TestFunction
 
-        $tag = if ($isInstalled) { "[PASS]" } else { "[    ]" }
-        $displayText = "$tag $($stepNum). $($stepConfig.StepName) - $($stepConfig.Description)"
+        $statusBadge = if ($isInstalled) { "【已安装】" } else { "【未安装】" }
+        $displayText = "$($stepNum). $($stepConfig.StepName)$statusBadge - $($stepConfig.Description)"
 
         $options += $displayText
         $stepIdMap += $stepId

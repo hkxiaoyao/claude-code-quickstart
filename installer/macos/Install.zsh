@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Install-ClaudeEnv.zsh - macOS 安装入口
+# Install.zsh - macOS 安装入口
 # 功能: 前置检测、分组安装、执行计划确认和 ccq 快捷函数注册
 
 if [ -z "${ZSH_VERSION:-}" ]; then
@@ -12,7 +12,7 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     export CCQ_STREAMED_SCRIPT_PATH="${ccq_streamed_script}"
     exec /bin/zsh "${ccq_streamed_script}" "$@"
   fi
-  printf '%s\n' 'Install-ClaudeEnv.zsh 需要 zsh 执行；云端 built 入口会自动切换到 /bin/zsh。' >&2
+  printf '%s\n' 'Install.zsh 需要 zsh 执行；云端 built 入口会自动切换到 /bin/zsh。' >&2
   exit 1
 fi
 
@@ -37,7 +37,7 @@ CCQ_SHORTCUT_REGISTERED=0
 
 ccq_usage() {
   cat <<'EOF'
-Usage: Install-ClaudeEnv.zsh [OPTIONS]
+Usage: Install.zsh [OPTIONS]
 
 Options:
   -ListSteps, --list-steps        列出已注册步骤后退出
@@ -375,14 +375,14 @@ ccq_show_advanced_select_menu() {
     description="$(ccq_get_step_field "${step_id}" Description 2>/dev/null || true)"
     test_function="$(ccq_get_step_field "${step_id}" TestFunction 2>/dev/null || true)"
     optional="$(ccq_get_step_field "${step_id}" IsOptional 2>/dev/null || printf 'false')"
-    tag="[    ]"
     if ccq_silent_step_installed "${test_function}"; then
-      tag="[PASS]"
+      tag="【已安装】"
       installed=1
     else
+      tag="【未安装】"
       installed=0
     fi
-    options+=("${tag} ${step_name} - ${description}")
+    options+=("${step_name}${tag} - ${description}")
     map+=("${step_id}")
     if [ "${installed}" = "0" ] && ! ccq_bool_true "${optional}"; then
       defaults+=("${#map[@]}")

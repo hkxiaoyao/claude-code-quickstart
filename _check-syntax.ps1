@@ -6,8 +6,8 @@ $files = @(
     "installer/windows/steps/Mcp.ps1"
     "installer/windows/core/McpManager.ps1"
     "installer/windows/core/Provider.ps1"
-    "installer/windows/Manage-ClaudeEnv.ps1"
-    "installer/windows/Install-ClaudeEnv.ps1"
+    "installer/windows/Manage.ps1"
+    "installer/windows/Install.ps1"
     "installer/build.ps1"
 )
 $hasError = $false

@@ -12,27 +12,29 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build and Verify
+  build-windows:
+    name: Build Windows artifacts
     runs-on: windows-latest
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建单文件脚本
+      - name: 构建 Windows 单文件脚本
         shell: pwsh
         run: |
           Write-Host "PowerShell 版本: $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
-          & ".\installer\build.ps1" -Platform All
+          & ".\installer\build.ps1"
 
-      - name: 验证构建产物
+      - name: 验证 Windows 构建产物
         shell: pwsh
         run: |
           $expected = @(
             ".\dist\bootstrap.ps1",
             ".\dist\install.ps1",
-            ".\dist\manage.ps1",
+            ".\dist\manage.ps1"
+          )
+          $forbidden = @(
             ".\dist\install.sh",
             ".\dist\manage.sh"
           )
@@ -43,16 +45,95 @@ jobs:
             }
             Write-Host "[PASS] $path $([math]::Round((Get-Item $path).Length / 1KB, 1)) KB" -ForegroundColor Green
           }
+          foreach ($path in $forbidden) {
+            if (Test-Path $path -PathType Leaf) {
+              throw "Windows job 不应生成 macOS 产物: $path"
+            }
+          }
 
-      - name: 上传构建产物（Artifacts）
+      - name: 上传 Windows 构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: built-scripts-${{ github.sha }}
-          path: dist/*
+          name: built-windows-${{ github.sha }}
+          path: |
+            dist/bootstrap.ps1
+            dist/install.ps1
+            dist/manage.ps1
           retention-days: 7
 
+  build-macos:
+    name: Build macOS artifacts
+    runs-on: macos-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 构建 macOS 单文件脚本
+        run: |
+          sh installer/build.sh
+
+      - name: 验证 macOS 构建产物
+        run: |
+          set -eu
+          for path in dist/install.sh dist/manage.sh; do
+            test -f "${path}" || { echo "构建产物不存在: ${path}" >&2; exit 1; }
+            printf '[PASS] %s %s KB\n' "${path}" "$(du -k "${path}" | cut -f1)"
+          done
+          for path in dist/bootstrap.ps1 dist/install.ps1 dist/manage.ps1; do
+            if [ -f "${path}" ]; then
+              echo "macOS job 不应生成 Windows 产物: ${path}" >&2
+              exit 1
+            fi
+          done
+          zsh -n dist/install.sh
+          zsh -n dist/manage.sh
+
+      - name: 上传 macOS 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-macos-${{ github.sha }}
+          path: |
+            dist/install.sh
+            dist/manage.sh
+          retention-days: 7
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-macos
+
+    steps:
+      - name: 下载 Windows 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: built-windows-${{ github.sha }}
+          path: dist
+
+      - name: 下载 macOS 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: built-macos-${{ github.sha }}
+          path: dist
+
+      - name: 验证 Release artifact 集合
+        run: |
+          set -eu
+          expected="bootstrap.ps1 install.ps1 manage.ps1 install.sh manage.sh"
+          for file in ${expected}; do
+            test -f "dist/${file}" || { echo "Release 缺少 artifact: ${file}" >&2; exit 1; }
+          done
+          count="$(find dist -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [ "${count}" != "5" ]; then
+            echo "Release artifact 数量异常: ${count}" >&2
+            find dist -maxdepth 1 -type f -print >&2
+            exit 1
+          fi
+
       - name: 创建或更新 GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*

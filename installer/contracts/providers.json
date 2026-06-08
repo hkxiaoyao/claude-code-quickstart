@@ -106,10 +106,18 @@
     },
     "bailian": {
       "Name": "阿里云百炼",
-      "Description": "阿里云百炼平台，需用户自行配置模型",
+      "Description": "阿里云百炼平台，默认使用 Qwen3.7 Plus",
       "BaseUrl": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
       "PlatformUrl": "https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan#/efm/coding-plan-detail",
-      "RequireModelConfig": true
+      "ModelEnv": {
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "qwen3.7-plus",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "qwen3.7-plus",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.7-plus"
+      },
+      "ExtraEnv": {
+        "ANTHROPIC_MODEL": "qwen3.7-plus",
+        "CLAUDE_CODE_SUBAGENT_MODEL": "qwen3.7-plus"
+      }
     },
     "custom": {
       "Name": "自定义供应商",

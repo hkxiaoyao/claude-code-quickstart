@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 1,
+  "Source": "installer/contracts/ui.json",
+  "Menus": {
+    "TopLevelInstall": {
+      "Basic": "基础环境（Node.js / Git / Claude Code / 供应商配置）",
+      "Advanced": "进阶扩展（配置 / MCP / Workflow / 可选 CLI）"
+    },
+    "AdvancedInstallMode": {
+      "OneClick": "一键安装进阶必选组件",
+      "Select": "选择安装进阶组件"
+    },
+    "AdvancedSelect": {
+      "Title": "进阶扩展 - 选择要安装的组件：",
+      "InstalledBadgeInSelectMenu": "【已安装】",
+      "UninstalledBadgeInSelectMenu": "【未安装】",
+      "ForbiddenLegacyBadges": [
+        "[PASS]",
+        "[    ]"
+      ]
+    },
+    "Skills": {
+      "ManageTitle": "Skills 管理",
+      "SelectSourceTitle": "Skills - 选择要安装的 Skills",
+      "CopyModeTitle": "是否启用 Skills copy 模式？",
+      "CopyModeOptions": [
+        "不启用 copy 模式（默认）",
+        "启用 copy 模式（追加 --copy，适合 symlink 权限受限）"
+      ]
+    }
+  }
+}

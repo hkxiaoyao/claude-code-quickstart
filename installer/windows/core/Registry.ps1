@@ -1,6 +1,6 @@
 # Registry.ps1 - 共享步骤注册表模块
 # 功能: 统一管理步骤元数据、分组定义、依赖关系
-#        消除 Install-ClaudeEnv.ps1 与 Manage-ClaudeEnv.ps1 之间的重复定义
+#        消除 Install.ps1 与 Manage.ps1 之间的重复定义
 
 #Requires -Version 7.0
 
