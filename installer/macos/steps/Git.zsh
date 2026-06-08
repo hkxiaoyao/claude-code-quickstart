@@ -101,22 +101,24 @@ Test-GitInstalled() {
 }
 
 Install-Git() {
-  if ! ccq_brew_available; then
-    printf 'Success=false\n'
-    printf 'Status=ManualRequired\n'
-    printf 'ErrorMessage=Homebrew 不可用，请先安装 Homebrew 后重试\n'
-    return 1
-  fi
-
-  if ! ccq_brew_install_formula git >/dev/null 2>&1; then
-    ccq_git_install_result false "$(ccq_git_version)" "brew install git 失败"
-    return 1
-  fi
-
-  ccq_refresh_path
   if ! ccq_git_version_ok; then
-    ccq_git_install_result false "$(ccq_git_version)" "Git 安装后仍不可用"
-    return 1
+    if ! ccq_brew_available; then
+      printf 'Success=false\n'
+      printf 'Status=ManualRequired\n'
+      printf 'ErrorMessage=Homebrew 不可用，请先安装 Homebrew 后重试\n'
+      return 1
+    fi
+
+    if ! ccq_brew_install_formula git >/dev/null 2>&1; then
+      ccq_git_install_result false "$(ccq_git_version)" "brew install git 失败"
+      return 1
+    fi
+
+    ccq_refresh_path
+    if ! ccq_git_version_ok; then
+      ccq_git_install_result false "$(ccq_git_version)" "Git 安装后仍不可用"
+      return 1
+    fi
   fi
 
   if ! ccq_git_apply_config; then

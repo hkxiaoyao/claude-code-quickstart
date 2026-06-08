@@ -64,7 +64,7 @@ function Install-Git {
     try {
         Write-UiPrimary "📦 开始安装和配置 Git..." -Level Detail
 
-        # 1. 安装 Git
+        # 1. 检查 Git；仅在缺失或版本过低时安装/更新
         Write-UiPrimary "🔧 检查并安装 Git..." -Level Detail
 
         if (Test-CommandAvailable -Command "git") {
@@ -80,6 +80,7 @@ function Install-Git {
                     Write-UiWarning "⚠ Git 版本过低，尝试更新..." -Level Detail
                     $needsUpdate = $true
                 } else {
+                    Write-UiInfo "ℹ Git 版本满足要求，仅检查配置" -Level Detail
                     $needsUpdate = $false
                 }
             } catch {
