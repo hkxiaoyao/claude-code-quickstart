@@ -140,6 +140,19 @@ ccq_load_step_modules() {
   done
 }
 
+ccq_confirm_homebrew_install() {
+  if [ ! -r /dev/tty ]; then
+    ccq_ui_warning "非交互环境无法确认安装 Homebrew，请手动安装后重试"
+    return 1
+  fi
+
+  ccq_ui_info "将执行 Homebrew 官方安装命令："
+  ccq_ui_dim "$(ccq_homebrew_install_command)"
+  local choice
+  choice="$(ccq_prompt_single "是否现在安装 Homebrew？" 1 "是，安装 Homebrew" "否，稍后手动安装")" || return 1
+  [ "${choice}" = "0" ]
+}
+
 ccq_preflight() {
   if ! ccq_assert_macos_supported 12; then
     ccq_ui_danger "${CCQ_LAST_PLATFORM_ERROR:-macOS 版本检查失败}"
@@ -156,9 +169,23 @@ ccq_preflight() {
   fi
 
   if ! ccq_brew_available; then
-    ccq_ui_danger "Homebrew 未安装，无法继续 macOS 自动化安装"
-    ccq_homebrew_install_hint
-    return 1
+    ccq_ui_warning "Homebrew 未安装，macOS 自动化安装需要 Homebrew"
+    if ! ccq_confirm_homebrew_install; then
+      ccq_homebrew_install_hint
+      return 1
+    fi
+
+    ccq_ui_primary "正在执行 Homebrew 官方安装脚本..."
+    if ! ccq_install_homebrew; then
+      ccq_ui_danger "Homebrew 安装失败，请按提示手动处理后重新运行 CCQ"
+      ccq_homebrew_install_hint
+      return 1
+    fi
+
+    if ! ccq_brew_available; then
+      ccq_ui_danger "Homebrew 安装后仍不可用，请重新打开终端后重试"
+      return 1
+    fi
   fi
 
   ccq_initialize_brew_shellenv "$(ccq_zprofile_path)" >/dev/null 2>&1 || \

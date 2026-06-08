@@ -1,6 +1,6 @@
 #!/usr/bin/env zsh
 # PackageManager.zsh - macOS Homebrew 包管理器封装
-# 功能: Homebrew 检测、prefix 识别、shellenv 初始化、formula/cask 安装与升级包装
+# 功能: Homebrew 检测、官方安装、prefix 识别、shellenv 初始化、formula/cask 安装与升级包装
 
 if [ -n "${CCQ_PACKAGE_MANAGER_ZSH_LOADED:-}" ]; then
   return 0 2>/dev/null || exit 0
@@ -33,6 +33,17 @@ ccq_brew_command() {
 
 ccq_brew_available() {
   ccq_brew_command >/dev/null 2>&1
+}
+
+ccq_homebrew_install_command() {
+  printf '%s\n' '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+}
+
+ccq_install_homebrew() {
+  if ccq_brew_available; then
+    return 0
+  fi
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 }
 
 ccq_brew_prefix() {
@@ -114,7 +125,7 @@ ccq_brew_upgrade_package() {
 
 ccq_homebrew_install_hint() {
   cat <<'EOF'
-Homebrew 未安装。请按 Homebrew 官方方式安装：
+Homebrew 未安装。可按 Homebrew 官方方式安装：
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 安装完成后重新运行 CCQ。
 EOF
