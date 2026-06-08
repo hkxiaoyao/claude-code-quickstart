@@ -247,73 +247,14 @@ ccq_prompt_single() {
   local title="${1:-请选择}"
   local default_index="${2:-0}"
   shift 2 || true
-  local options=("$@")
-  local count="${#options[@]}"
-  local choice
-  [ "${count}" -gt 0 ] || return 1
-
-  if [ ! -r /dev/tty ]; then
-    printf '%s\n' "${default_index}"
-    return 0
-  fi
-
-  while true; do
-    printf '\n%s\n' "${title}" > /dev/tty
-    local i=1
-    for option in "${options[@]}"; do
-      printf '  %s) %s\n' "${i}" "${option}" > /dev/tty
-      i=$((i + 1))
-    done
-    printf '请输入编号 [1-%s]，或 q 取消: ' "${count}" > /dev/tty
-    IFS= read -r choice < /dev/tty || return 1
-    case "${choice}" in
-      q|Q) return 1 ;;
-      ''|*[!0-9]*) printf '请输入有效编号\n' > /dev/tty ;;
-      *)
-        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; then
-          printf '%s\n' $((choice - 1))
-          return 0
-        fi
-        printf '编号超出范围\n' > /dev/tty
-        ;;
-    esac
-  done
+  ccq_show_single_select_menu "${title}" "${default_index}" "$@"
 }
 
 ccq_prompt_multi() {
   local title="${1:-请选择}"
-  shift || true
-  local options=("$@")
-  local count="${#options[@]}"
-  local choice item selected=()
-  [ "${count}" -gt 0 ] || return 1
-  [ -r /dev/tty ] || return 1
-
-  printf '\n%s\n' "${title}" > /dev/tty
-  local i=1
-  for option in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${option}" > /dev/tty
-    i=$((i + 1))
-  done
-  printf '请输入编号，多个用空格分隔，或 q 取消: ' > /dev/tty
-  IFS= read -r choice < /dev/tty || return 1
-  case "${choice}" in
-    q|Q|'') return 1 ;;
-  esac
-
-  for item in ${choice}; do
-    case "${item}" in
-      ''|*[!0-9]*) ;;
-      *)
-        if [ "${item}" -ge 1 ] && [ "${item}" -le "${count}" ]; then
-          selected+=("$((item - 1))")
-        fi
-        ;;
-    esac
-  done
-
-  [ "${#selected[@]}" -gt 0 ] || return 1
-  printf '%s\n' "${selected[@]}"
+  local default_indices="${2:-}"
+  shift 2 || true
+  ccq_show_multi_select_menu "${title}" "${default_indices}" "$@"
 }
 
 ccq_silent_step_installed() {
@@ -412,11 +353,11 @@ ccq_show_advanced_select_menu() {
     options+=("${step_name}${tag} - ${description}")
     map+=("${step_id}")
     if [ "${installed}" = "0" ] && ! ccq_bool_true "${optional}"; then
-      defaults+=("${#map[@]}")
+      defaults+=("$(( ${#map[@]} - 1 ))")
     fi
   done
 
-  selected_indices="$(ccq_prompt_multi "进阶扩展 - 选择要安装的组件：" "${options[@]}")" || return 1
+  selected_indices="$(ccq_prompt_multi "进阶扩展 - 选择要安装的组件：" "${defaults[*]}" "${options[@]}")" || return 1
   for selected_index in ${selected_indices}; do
     printf '%s\n' "${map[$((selected_index + 1))]}"
   done
@@ -489,11 +430,17 @@ ccq_register_ccq_shortcut() {
 
 ccq_show_final_summary() {
   local executed=("$@")
-  local success=0 skipped=0 failed=0 unsupported=0 manual=0 step_id status step_name
-  ccq_ui_primary "安装摘要："
+  local success=0 skipped=0 failed=0 unsupported=0 manual=0 step_id status step_name version data status_text
+  local rows=()
+
+  printf '\n'
   for step_id in "${executed[@]}"; do
     status="$(ccq_state_get_status "${step_id}" 2>/dev/null || printf 'Skipped')"
     step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
+    data="$(ccq_state_get_data "${step_id}" 2>/dev/null || true)"
+    version="$(ccq_result_field_from_text "${data}" "Version" 2>/dev/null || true)"
+    [ -n "${version}" ] || version='-'
+
     case "${status}" in
       Success) success=$((success + 1)) ;;
       Skipped) skipped=$((skipped + 1)) ;;
@@ -501,19 +448,38 @@ ccq_show_final_summary() {
       Unsupported) unsupported=$((unsupported + 1)) ;;
       ManualRequired) manual=$((manual + 1)) ;;
     esac
-    ccq_show_step_progress "${step_name}" "${status}" ""
+
+    status_text="$(ccq_summary_status_text "${status}")"
+    rows+=("${step_name}	${status_text}	${version}")
   done
+
+  if [ "${#rows[@]}" -gt 0 ]; then
+    ccq_show_install_summary "${rows[@]}"
+  fi
+
+  printf '\n'
   ccq_ui_primary "安装统计："
   ccq_ui_success "  成功: ${success}"
   [ "${skipped}" -gt 0 ] && ccq_ui_warning "  跳过: ${skipped}"
-  [ "${unsupported}" -gt 0 ] && ccq_ui_warning "  不支持: ${unsupported}"
-  [ "${manual}" -gt 0 ] && ccq_ui_warning "  需手动处理: ${manual}"
   [ "${failed}" -gt 0 ] && ccq_ui_danger "  失败: ${failed}"
+  if [ $((unsupported + manual)) -gt 0 ]; then
+    ccq_ui_warning "  需手动处理: $((unsupported + manual))"
+  fi
 
   if [ "${failed}" -eq 0 ]; then
     ccq_register_ccq_shortcut >/dev/null 2>&1 || true
-    ccq_ui_info "快速开始: ccq（安装面板/管理面板），claude（启动 Claude Code）" "developer"
+    printf '\n'
+    ccq_ui_primary "快速开始：" "developer"
+    ccq_ui_info "  ccq             - CCQ 面板入口（安装面板/管理面板）" "developer"
+    ccq_ui_info "  claude          - 启动 Claude Code" "developer"
+    ccq_ui_info "  claude --help   - 查看帮助信息" "developer"
+  else
+    printf '\n'
+    ccq_ui_warning "安装完成，但有 ${failed} 个步骤失败"
+    ccq_ui_info "重新运行安装器可重试失败步骤" "developer"
   fi
+
+  printf '\n'
 }
 
 ccq_invoke_grouped_install() {
@@ -561,6 +527,14 @@ ccq_advanced_required_step_ids() {
   done
 }
 
+ccq_pause_for_main_menu() {
+  local _ccq_pause_key
+  [ -r /dev/tty ] || return 0
+  printf '\n'
+  ccq_ui_dim "按任意键返回主菜单..."
+  IFS= read -r -s -k 1 _ccq_pause_key < /dev/tty || true
+}
+
 ccq_main() {
   ccq_parse_args "$@"
   ccq_load_core
@@ -571,8 +545,8 @@ ccq_main() {
     return 0
   fi
 
-  ccq_show_banner "Claude Code Quickstart macOS"
-  ccq_ui_info "支持 macOS 12+ / zsh / Homebrew 的 Claude Code 环境安装" "developer"
+  ccq_show_banner "Claude Code Quickstart"
+  ccq_ui_info "支持一键搭建 Claude Code 的开发环境及进阶功能" "developer"
 
   ccq_preflight || return 1
 
@@ -626,11 +600,15 @@ ccq_main() {
     case "${top_choice}" in
       0)
         ccq_invoke_grouped_install $(ccq_get_group_step_ids Basic)
+        ccq_pause_for_main_menu
         ;;
       1)
         adv_choice="$(ccq_select_advanced_action)" || continue
         case "${adv_choice}" in
-          0) ccq_invoke_grouped_install $(ccq_advanced_required_step_ids) ;;
+          0)
+            ccq_invoke_grouped_install $(ccq_advanced_required_step_ids)
+            ccq_pause_for_main_menu
+            ;;
           1)
             selected_ids="$(ccq_show_advanced_select_menu || true)"
             if [ -n "${selected_ids}" ]; then
@@ -638,6 +616,7 @@ ccq_main() {
             else
               ccq_ui_warning "未选择任何步骤"
             fi
+            ccq_pause_for_main_menu
             ;;
         esac
         ;;

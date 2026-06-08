@@ -183,35 +183,22 @@ for (const name of names) console.log(name);
 
 ccq_skills_select_source() {
   ccq_skills_tty || return 1
-  local lines line id name source skill desc default static_name skip_discovery order options=() records=() choice i=1
+  local lines id name source skill desc default static_name skip_discovery order options=() records=() choice default_index=0 index=0
   lines="$(ccq_skills_catalogue)"
   while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
     [ -n "${id}" ] || continue
     options+=("${name} - ${desc}")
     records+=("${id}	${name}	${source}	${skill}	${desc}	${default}	${static_name}	${skip_discovery}	${order}")
+    if [ "${default}" = "true" ]; then
+      default_index="${index}"
+    fi
+    index=$((index + 1))
   done <<EOF
 ${lines}
 EOF
-  printf '%s\n' "请选择 Skills source" >/dev/tty
-  for line in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${line}" >/dev/tty
-    i=$((i + 1))
-  done
-  while true; do
-    printf '请输入编号 [1-%s]，或 q 取消: ' "${#options[@]}" >/dev/tty
-    IFS= read -r choice </dev/tty || return 1
-    case "${choice}" in
-      q|Q) return 1 ;;
-      ''|*[!0-9]*) printf '%s\n' "请输入有效编号" >/dev/tty ;;
-      *)
-        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${#options[@]}" ]; then
-          printf '%s\n' "${records[$choice]}"
-          return 0
-        fi
-        printf '%s\n' "编号超出范围" >/dev/tty
-        ;;
-    esac
-  done
+  [ "${#options[@]}" -gt 0 ] || return 1
+  choice="$(ccq_show_single_select_menu "Skills - 选择要安装的 Skills" "${default_index}" "${options[@]}")" || return 1
+  printf '%s\n' "${records[$((choice + 1))]}"
 }
 
 ccq_skills_select_children() {
@@ -219,7 +206,7 @@ ccq_skills_select_children() {
   local skill="${2:-}"
   local skip_discovery="${3:-false}"
   local static_name="${4:-}"
-  local names choice item selected=()
+  local names item selected_indices selected_index defaults=() i=0
   if [ "${skip_discovery}" = "true" ]; then
     [ -n "${skill}" ] && printf '%s\n' "${skill}"
     return 0
@@ -229,29 +216,16 @@ ccq_skills_select_children() {
   local options=(${names})
   [ "${#options[@]}" -gt 1 ] || { printf '%s\n' "${options[@]}"; return 0; }
   ccq_skills_tty || { printf '%s\n' "${options[@]}"; return 0; }
-  printf '%s\n' "请选择要安装的子 Skills（多个用空格分隔，回车默认全选）" >/dev/tty
-  local i=1
-  for item in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${item}" >/dev/tty
+
+  while [ "${i}" -lt "${#options[@]}" ]; do
+    defaults+=("${i}")
     i=$((i + 1))
   done
-  printf '请输入编号，或 q 取消: ' >/dev/tty
-  IFS= read -r choice </dev/tty || return 1
-  case "${choice}" in
-    q|Q) return 1 ;;
-    '') printf '%s\n' "${options[@]}"; return 0 ;;
-  esac
-  for item in ${choice}; do
-    case "${item}" in
-      ''|*[!0-9]*) ;;
-      *)
-        if [ "${item}" -ge 1 ] && [ "${item}" -le "${#options[@]}" ]; then
-          selected+=("${options[$item]}")
-        fi
-        ;;
-    esac
+  selected_indices="$(ccq_show_multi_select_menu "Skills - 选择要安装的子 Skills" "${defaults[*]}" "${options[@]}")" || return 1
+  [ -n "${selected_indices}" ] || return 1
+  for selected_index in ${selected_indices}; do
+    printf '%s\n' "${options[$((selected_index + 1))]}"
   done
-  printf '%s\n' "${selected[@]}"
 }
 
 ccq_skills_resolve_copy_mode() {
@@ -269,18 +243,12 @@ EOF
   if [ "${#options[@]}" -lt 2 ]; then
     options=("不启用 copy 模式（默认）" "启用 copy 模式（追加 --copy，适合 symlink 权限受限）")
   fi
-  printf '%s\n' "${title}" >/dev/tty
-  printf '  1) %s\n' "${options[1]}" >/dev/tty
-  printf '  2) %s\n' "${options[2]}" >/dev/tty
-  while true; do
-    printf '请输入编号 [1-2]，或 q 取消: ' >/dev/tty
-    IFS= read -r choice </dev/tty || { printf '0\n'; return 0; }
-    case "${choice}" in
-      q|Q|1) printf '0\n'; return 0 ;;
-      2) printf '1\n'; return 0 ;;
-      *) printf '%s\n' "请输入有效编号" >/dev/tty ;;
-    esac
-  done
+  choice="$(ccq_show_single_select_menu "${title}" 0 "${options[@]}")" || { printf '0\n'; return 0; }
+  if [ "${choice}" = "1" ]; then
+    printf '1\n'
+  else
+    printf '0\n'
+  fi
 }
 
 ccq_skills_install_one() {
@@ -318,7 +286,10 @@ Install-Skills() {
   IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order <<EOF
 ${record}
 EOF
-  selected_names="$(ccq_skills_select_children "${source}" "${skill}" "${skip_discovery}" "${static_name}" || true)"
+  if ! selected_names="$(ccq_skills_select_children "${source}" "${skill}" "${skip_discovery}" "${static_name}")"; then
+    ccq_skills_install_result false "" "用户取消子 Skills 选择"
+    return 1
+  fi
   if [ -z "${selected_names}" ] && [ -n "${skill}" ]; then
     selected_names="${skill}"
   fi
@@ -374,7 +345,7 @@ ccq_skills_remove_result() {
 }
 
 ccq_skills_select_installed_names() {
-  local names name options=() choice item selected=()
+  local names name options=() selected_indices selected_index
   names="$(ccq_skills_installed_names)"
   [ -n "${names}" ] || return 1
   for name in ${names}; do
@@ -387,29 +358,11 @@ ccq_skills_select_installed_names() {
   fi
 
   ccq_skills_tty || { printf '%s\n' "${options[@]}"; return 0; }
-  printf '%s\n' "请选择要卸载的 Skills（多个用空格分隔，回车取消）" >/dev/tty
-  local i=1
-  for item in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${item}" >/dev/tty
-    i=$((i + 1))
+  selected_indices="$(ccq_show_multi_select_menu "Skills - 选择要卸载的 Skills" "" "${options[@]}")" || return 1
+  [ -n "${selected_indices}" ] || return 1
+  for selected_index in ${selected_indices}; do
+    printf '%s\n' "${options[$((selected_index + 1))]}"
   done
-  printf '请输入编号，或 q 取消: ' >/dev/tty
-  IFS= read -r choice </dev/tty || return 1
-  case "${choice}" in
-    q|Q|'') return 1 ;;
-  esac
-  for item in ${choice}; do
-    case "${item}" in
-      ''|*[!0-9]*) ;;
-      *)
-        if [ "${item}" -ge 1 ] && [ "${item}" -le "${#options[@]}" ]; then
-          selected+=("${options[$item]}")
-        fi
-        ;;
-    esac
-  done
-  [ "${#selected[@]}" -gt 0 ] || return 1
-  printf '%s\n' "${selected[@]}"
 }
 
 Uninstall-Skills() {
@@ -429,12 +382,8 @@ Uninstall-Skills() {
   done
 
   if ccq_skills_tty; then
-    printf '确认卸载这些 Skills：%s ? [y/N] ' "$(ccq_join_by_comma "${names_arg[@]}")" >/dev/tty
-    IFS= read -r confirm </dev/tty || confirm=""
-    case "${confirm}" in
-      y|Y|yes|YES) ;;
-      *) ccq_skills_remove_result true "" ""; return 0 ;;
-    esac
+    confirm="$(ccq_show_single_select_menu "确认卸载这些 Skills：$(ccq_join_by_comma "${names_arg[@]}") ?" 1 "是，卸载" "否，取消")" || confirm="1"
+    [ "${confirm}" = "0" ] || { ccq_skills_remove_result true "" ""; return 0; }
   fi
 
   if ccq_run_command --timeout 300 --retries 1 -- npx --yes skills remove "${names_arg[@]}" -g -a claude-code --yes >/dev/null 2>&1; then
@@ -466,14 +415,16 @@ ccq_skills_manage_menu() {
   while true; do
     ccq_skills_show_status
     ccq_skills_tty || return 0
-    printf '\nSkills 管理：1) 安装 2) 更新 3) 卸载 q) 返回: ' >/dev/tty
-    IFS= read -r choice </dev/tty || return 1
+    choice="$(ccq_show_single_select_menu "Skills 管理" 0 \
+      "安装 Skills（从 catalogue 选择 source / 子 Skills）" \
+      "更新 Skills（官方 skills update）" \
+      "卸载 Skills" \
+      "返回")" || return 0
     case "${choice}" in
-      q|Q) return 0 ;;
-      1) Install-Skills >/dev/null || ccq_ui_warning "Skills 安装失败" ;;
-      2) Update-Skills >/dev/null || ccq_ui_warning "Skills 更新失败" ;;
-      3) Uninstall-Skills >/dev/null || ccq_ui_warning "Skills 卸载失败" ;;
-      *) ccq_ui_warning "未知选项" ;;
+      0) Install-Skills >/dev/null || ccq_ui_warning "Skills 安装失败" ;;
+      1) Update-Skills >/dev/null || ccq_ui_warning "Skills 更新失败" ;;
+      2) Uninstall-Skills >/dev/null || ccq_ui_warning "Skills 卸载失败" ;;
+      3) return 0 ;;
     esac
   done
 }

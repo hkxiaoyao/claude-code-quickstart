@@ -133,104 +133,14 @@ ccq_manage_prompt_single() {
   local title="${1:-请选择}"
   local default_index="${2:-0}"
   shift 2 || true
-  local options=("$@")
-  local count="${#options[@]}"
-  local choice
-  [ "${count}" -gt 0 ] || return 1
-
-  if [ ! -r /dev/tty ]; then
-    printf '%s\n' "${default_index}"
-    return 0
-  fi
-
-  while true; do
-    printf '\n%s\n' "${title}" > /dev/tty
-    local i=1
-    for option in "${options[@]}"; do
-      printf '  %s) %s\n' "${i}" "${option}" > /dev/tty
-      i=$((i + 1))
-    done
-    printf '请输入编号 [1-%s]，或 q 取消: ' "${count}" > /dev/tty
-    IFS= read -r choice < /dev/tty || return 1
-    case "${choice}" in
-      q|Q) return 1 ;;
-      ''|*[!0-9]*) printf '请输入有效编号\n' > /dev/tty ;;
-      *)
-        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${count}" ]; then
-          printf '%s\n' $((choice - 1))
-          return 0
-        fi
-        printf '编号超出范围\n' > /dev/tty
-        ;;
-    esac
-  done
+  ccq_show_single_select_menu "${title}" "${default_index}" "$@"
 }
 
 ccq_manage_prompt_multi() {
   local title="${1:-请选择}"
   local default_indices="${2:-}"
   shift 2 || true
-  local options=("$@")
-  local count="${#options[@]}"
-  local choice item selected=()
-  [ "${count}" -gt 0 ] || return 1
-
-  if [ ! -r /dev/tty ]; then
-    return 1
-  fi
-
-  while true; do
-    selected=()
-    printf '\n%s\n' "${title}" > /dev/tty
-    local i=1 marker
-    for item in "${options[@]}"; do
-      marker=" "
-      case " ${default_indices} " in
-        *" $((i - 1)) "*) marker="*" ;;
-      esac
-      printf '  %s) [%s] %s\n' "${i}" "${marker}" "${item}" > /dev/tty
-      i=$((i + 1))
-    done
-    printf '请输入编号（多个用空格/逗号分隔），a 全选，回车使用默认，q 取消: ' > /dev/tty
-    IFS= read -r choice < /dev/tty || return 1
-    choice="${choice//,/ }"
-    case "${choice}" in
-      q|Q) return 1 ;;
-      a|A)
-        i=0
-        while [ "${i}" -lt "${count}" ]; do
-          selected+=("${i}")
-          i=$((i + 1))
-        done
-        printf '%s\n' "${selected[@]}"
-        return 0
-        ;;
-      '')
-        [ -n "${default_indices}" ] || return 1
-        for item in ${default_indices}; do
-          selected+=("${item}")
-        done
-        printf '%s\n' "${selected[@]}"
-        return 0
-        ;;
-    esac
-
-    for item in ${choice}; do
-      case "${item}" in
-        ''|*[!0-9]*) ;;
-        *)
-          if [ "${item}" -ge 1 ] && [ "${item}" -le "${count}" ]; then
-            selected+=("$((item - 1))")
-          fi
-          ;;
-      esac
-    done
-    if [ "${#selected[@]}" -gt 0 ]; then
-      printf '%s\n' "${selected[@]}"
-      return 0
-    fi
-    printf '请输入有效编号\n' > /dev/tty
-  done
+  ccq_show_multi_select_menu "${title}" "${default_indices}" "$@"
 }
 
 ccq_manage_mask_status_value() {
@@ -425,31 +335,48 @@ ccq_manage_reset_update_summary() {
 }
 
 ccq_manage_show_update_summary() {
-  ccq_ui_primary ""
-  ccq_ui_primary "更新结果摘要："
-  ccq_ui_success "  已更新: ${#CCQ_MANAGE_UPDATE_UPDATED[@]}"
   local item
-  for item in "${CCQ_MANAGE_UPDATE_UPDATED[@]}"; do
-    ccq_ui_info "    ${item}"
-  done
+  printf '\n'
+  ccq_ui_primary "══════════════════════════════════════════"
+  ccq_ui_primary "  更新结果摘要"
+  ccq_ui_primary "══════════════════════════════════════════"
+
+  printf '\n'
+  if [ "${#CCQ_MANAGE_UPDATE_UPDATED[@]}" -gt 0 ]; then
+    ccq_ui_success "  已更新 (${#CCQ_MANAGE_UPDATE_UPDATED[@]}):"
+    for item in "${CCQ_MANAGE_UPDATE_UPDATED[@]}"; do
+      ccq_ui_info "    ${item}"
+    done
+  else
+    ccq_ui_success "  已更新 (0)"
+  fi
+
   if [ "${#CCQ_MANAGE_UPDATE_UPTODATE[@]}" -gt 0 ]; then
-    ccq_ui_dim "  已是最新: ${#CCQ_MANAGE_UPDATE_UPTODATE[@]}"
+    printf '\n'
+    ccq_ui_dim "  已是最新 (${#CCQ_MANAGE_UPDATE_UPTODATE[@]}):"
     for item in "${CCQ_MANAGE_UPDATE_UPTODATE[@]}"; do
-      ccq_ui_dim "    ${item}"
+      ccq_ui_dim "    ${item}  (内容无变更)"
     done
   fi
-  if [ "${#CCQ_MANAGE_UPDATE_SKIPPED[@]}" -gt 0 ]; then
-    ccq_ui_warning "  已跳过: ${#CCQ_MANAGE_UPDATE_SKIPPED[@]}"
-    for item in "${CCQ_MANAGE_UPDATE_SKIPPED[@]}"; do
-      ccq_ui_warning "    ${item}"
-    done
-  fi
+
   if [ "${#CCQ_MANAGE_UPDATE_FAILED[@]}" -gt 0 ]; then
-    ccq_ui_danger "  失败: ${#CCQ_MANAGE_UPDATE_FAILED[@]}"
+    printf '\n'
+    ccq_ui_danger "  失败 (${#CCQ_MANAGE_UPDATE_FAILED[@]}):"
     for item in "${CCQ_MANAGE_UPDATE_FAILED[@]}"; do
       ccq_ui_danger "    ${item}"
     done
   fi
+
+  if [ "${#CCQ_MANAGE_UPDATE_SKIPPED[@]}" -gt 0 ]; then
+    printf '\n'
+    ccq_ui_warning "  已跳过 (${#CCQ_MANAGE_UPDATE_SKIPPED[@]}):"
+    for item in "${CCQ_MANAGE_UPDATE_SKIPPED[@]}"; do
+      ccq_ui_warning "    ${item}"
+    done
+  fi
+
+  printf '\n'
+  ccq_ui_primary "══════════════════════════════════════════"
 }
 
 ccq_manage_run_update_step() {
@@ -607,10 +534,10 @@ ccq_manage_skills_action() {
 
 ccq_manage_select_action() {
   ccq_manage_prompt_single "CCQ 环境管理" 0 \
-    "更新管理 - 检查可更新组件" \
-    "供应商管理 - 状态查看 / CRUD / 切换" \
-    "MCP 管理 - 状态查看 / 启用禁用 / 删除" \
-    "Skills 管理 - 状态查看 / 安装更新卸载"
+    "更新管理   - 检测并更新已安装组件" \
+    "供应商管理  - 管理 AI 供应商配置" \
+    "MCP 管理   - 管理 MCP Server 配置" \
+    "Skills 管理 - 安装/更新/卸载 Skills"
 }
 
 ccq_manage_dispatch_action() {
@@ -624,12 +551,21 @@ ccq_manage_dispatch_action() {
   esac
 }
 
+ccq_manage_pause_for_main_menu() {
+  local _ccq_pause_key
+  [ -r /dev/tty ] || return 0
+  printf '\n'
+  ccq_ui_dim "按任意键返回主菜单..."
+  IFS= read -r -s -k 1 _ccq_pause_key < /dev/tty || true
+}
+
 ccq_manage_main() {
   ccq_manage_parse_args "$@"
   ccq_manage_load_core
   ccq_manage_load_step_modules
 
-  ccq_show_banner "CCQ macOS Manage"
+  ccq_show_banner "CCQ 环境管理"
+  ccq_ui_info "管理已安装组件的更新、供应商、MCP 和 Skills 配置" "developer"
 
   if [ -n "${CCQ_PARAM_ACTION}" ]; then
     ccq_manage_dispatch_action "${CCQ_PARAM_ACTION}"
@@ -645,7 +581,10 @@ ccq_manage_main() {
   while true; do
     choice="$(ccq_manage_select_action)" || { ccq_ui_primary "退出 CCQ 管理面板" "developer"; break; }
     case "${choice}" in
-      0) ccq_manage_update_action ;;
+      0)
+        ccq_manage_update_action
+        ccq_manage_pause_for_main_menu
+        ;;
       1) ccq_manage_provider_action ;;
       2) ccq_manage_mcp_action ;;
       3) ccq_manage_skills_action ;;

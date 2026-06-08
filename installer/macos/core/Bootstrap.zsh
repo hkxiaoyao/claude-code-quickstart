@@ -59,6 +59,20 @@ ccq_state_get_status() {
   printf '%s\n' "${CCQ_STATE_STEP_STATUSES[$idx]}"
 }
 
+ccq_state_get_message() {
+  local idx
+  idx="$(ccq_state_index_of "${1:-}" 2>/dev/null || true)"
+  [ -n "${idx}" ] || return 1
+  printf '%s\n' "${CCQ_STATE_STEP_MESSAGES[$idx]}"
+}
+
+ccq_state_get_data() {
+  local idx
+  idx="$(ccq_state_index_of "${1:-}" 2>/dev/null || true)"
+  [ -n "${idx}" ] || return 1
+  printf '%s\n' "${CCQ_STATE_STEP_DATA[$idx]}"
+}
+
 ccq_normalize_success() {
   local value="${1:-}"
   case "${value}" in
@@ -171,7 +185,7 @@ ccq_invoke_step_lifecycle() {
       ManualRequired) ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_MANUAL_REQUIRED}" "${install_result}" ;;
       *) ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_FAILED}" "${install_result}" ;;
     esac
-    command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "$(ccq_state_get_status "${step_id}")" "安装未完成"
+    command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "$(ccq_state_get_status "${step_id}")" "${install_result}"
     return 1
   fi
 
@@ -180,7 +194,7 @@ ccq_invoke_step_lifecycle() {
     verify_result="$(${verify_function} 2>&1)"
     if ! ccq_result_is_success "${verify_result}"; then
       ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_FAILED}" "${verify_result}"
-      command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "Failed" "验证失败"
+      command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "Failed" "${verify_result}"
       return 1
     fi
   fi
