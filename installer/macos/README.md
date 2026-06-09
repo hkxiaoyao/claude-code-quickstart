@@ -29,9 +29,9 @@ curl -fsSL "https://github.com/MrNine-666/claude-code-quickstart/releases/latest
 - 包管理器：Homebrew。
 - Node.js：通过 nvm 官方脚本安装 LTS。
 - Profile 写入：
-  - Homebrew shellenv 写入 `~/.zprofile`。
+  - Homebrew 仅在 CCQ 执行官方安装成功后，按官方推荐追加 `eval "$(<brew路径> shellenv)"` 到 `~/.zprofile`。
   - `ccq` 快捷函数写入 `~/.zshrc`。
-  - CCQ 自身写入必须使用 `# >>> Claude Code Quickstart >>>` 托管块；nvm 初始化由 nvm 官方安装脚本自行写入，不注入 CCQ 托管块。
+  - CCQ 自身写入优先使用 `# >>> Claude Code Quickstart >>>` 托管块；Homebrew 与 nvm 初始化遵循各自官方安装方式，不注入 CCQ 托管块。
 - 配置 schema 与 Windows 共享：`~/.claude/settings.json`、`~/.claude.json`、`~/.claude/providers/`、`~/.ccq/mcp-meta.json`。
 - 禁止调用 Windows 专属机制：winget、注册表、MSI/EXE、Windows Terminal、Windows `$PROFILE`。
 - 可选工具无自动路径或失败时返回 `ManualRequired` / `Unsupported`，不得计入 Success。

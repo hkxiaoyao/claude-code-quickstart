@@ -72,23 +72,28 @@ ccq_brew_shellenv() {
   "${brew_bin}" shellenv
 }
 
-ccq_initialize_brew_shellenv() {
+ccq_homebrew_shellenv_line() {
+  local brew_bin="${1:-}"
+  [ -n "${brew_bin}" ] || brew_bin="$(ccq_brew_command 2>/dev/null || true)"
+  [ -n "${brew_bin}" ] || return 1
+  printf 'eval "$(%s shellenv)"\n' "${brew_bin}"
+}
+
+ccq_apply_homebrew_post_install_steps() {
   local profile_path="${1:-${HOME}/.zprofile}"
-  local shellenv_content
-  if ! shellenv_content="$(ccq_brew_shellenv 2>/dev/null)"; then
-    return 1
+  local brew_bin shellenv_line
+  brew_bin="$(ccq_brew_command 2>/dev/null || true)"
+  [ -n "${brew_bin}" ] || return 1
+  shellenv_line="$(ccq_homebrew_shellenv_line "${brew_bin}")" || return 1
+
+  if [ ! -f "${profile_path}" ] || ! grep -F -- "${shellenv_line}" "${profile_path}" >/dev/null 2>&1; then
+    {
+      printf '\n'
+      printf '%s\n' "${shellenv_line}"
+    } >>"${profile_path}"
   fi
 
-  # `brew shellenv` 是幂等的；当前环境已初始化时会成功返回空输出。
-  [ -z "${shellenv_content}" ] && return 0
-
-  if command -v ccq_set_profile_subsection >/dev/null 2>&1; then
-    ccq_set_profile_subsection "${profile_path}" "HOMEBREW" "${shellenv_content}"
-  else
-    printf '\n# >>> Claude Code Quickstart >>>\n# --- CCQ HOMEBREW ---\n%s\n# --- CCQ HOMEBREW END ---\n# <<< Claude Code Quickstart <<<\n' "${shellenv_content}" >>"${profile_path}"
-  fi
-
-  eval "${shellenv_content}"
+  eval "$("${brew_bin}" shellenv)"
 }
 
 ccq_brew_install_formula() {

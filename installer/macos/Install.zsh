@@ -191,11 +191,12 @@ ccq_preflight() {
       ccq_ui_danger "Homebrew 安装后仍不可用，请重新打开终端后重试"
       return 1
     fi
+
+    ccq_apply_homebrew_post_install_steps "$(ccq_zprofile_path)" >/dev/null 2>&1 || \
+      ccq_ui_warning "Homebrew 官方后续初始化失败；后续命令可能需要重新打开终端" "developer"
   fi
 
-  ccq_initialize_brew_shellenv "$(ccq_zprofile_path)" >/dev/null 2>&1 || \
-    ccq_ui_warning "Homebrew shellenv 初始化失败；后续命令可能需要重新打开终端" "developer"
-
+  ccq_refresh_path
 }
 
 ccq_bool_true() {

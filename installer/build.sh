@@ -238,7 +238,8 @@ function filterZshSource(relativePath) {
       if (/^\s*fi\s*$/.test(line)) skipStreamedTrapBlock = false;
       continue;
     }
-    if (/^\s*(source|\.)\s+/.test(line)) continue;
+    const trimmed = line.trim();
+    if (trimmed === 'source "${file_path}"' || trimmed === 'source "${full_path}"') continue;
     if (/^\s*ccq_main "\$@"\s*$/.test(line)) continue;
     if (/^\s*ccq_manage_main "\$@"\s*$/.test(line)) continue;
     lines.push(line);
@@ -285,7 +286,12 @@ function validateMacOSArtifact(outputPath) {
   if (!content.includes('CCQ_CONTRACT_STEPS_JSON')) fail(`${path.basename(outputPath)} 未嵌入 steps contract`);
   if (!content.includes('CCQ_CONTRACT_SKILLS_JSON')) fail(`${path.basename(outputPath)} 未嵌入 skills contract`);
   if (!content.includes('CCQ_CONTRACT_UI_JSON')) fail(`${path.basename(outputPath)} 未嵌入 ui contract`);
-  if (/^\s*(source|\.)\s+/m.test(content)) fail(`${path.basename(outputPath)} 仍包含 source 行`);
+  const forbiddenSourceLines = content.split(/\r?\n/).filter((line) => {
+    const trimmed = line.trim();
+    return trimmed === 'source "${file_path}"' || trimmed === 'source "${full_path}"'
+      || trimmed === '. "${file_path}"' || trimmed === '. "${full_path}"';
+  });
+  if (forbiddenSourceLines.length > 0) fail(`${path.basename(outputPath)} 仍包含入口模块加载 source 行`);
 
   const zsh = childProcess.spawnSync('zsh', ['-n', outputPath], { encoding: 'utf8' });
   if (zsh.error && zsh.error.code === 'ENOENT') {

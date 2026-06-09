@@ -75,9 +75,9 @@ ccq_claude_md_template() {
 
 ### 环境特定（macOS / zsh / Homebrew）
 - 默认 Shell 为 zsh；用户级初始化优先写入 `~/.zshrc` 和 `~/.zprofile`
-- Homebrew 初始化使用 `brew shellenv`，Apple Silicon 默认 `/opt/homebrew`，Intel 默认 `/usr/local`
+- Homebrew 仅在 CCQ 执行官方安装成功后，按官方推荐追加 `eval "$(<brew路径> shellenv)"` 到 `~/.zprofile`
 - 路径使用正斜杠 `/`，PATH 分隔符为 `:`
-- Shell 命令中路径必须加双引号；CCQ 自身涉及 profile 写入时必须使用 CCQ 托管标记块
+- Shell 命令中路径必须加双引号；CCQ 自身涉及 profile 写入时优先使用 CCQ 托管标记块
 - Node.js 由 nvm 官方脚本管理；nvm 安装后必要时执行 `source ~/.zshrc` 或重新打开终端
 
 ### Windows 兼容提醒

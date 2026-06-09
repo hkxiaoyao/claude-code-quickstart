@@ -142,9 +142,14 @@ ccq_get_command_version() {
 
 ccq_refresh_path() {
   # macOS 当前 shell 通常无需全量刷新；补充常见 Homebrew、nvm 与 npm 前缀。
-  local brew_prefix=""
-  if ccq_command_exists brew; then
-    brew_prefix="$(brew --prefix 2>/dev/null || true)"
+  local brew_bin="" brew_prefix=""
+  if command -v ccq_brew_command >/dev/null 2>&1; then
+    brew_bin="$(ccq_brew_command 2>/dev/null || true)"
+  elif ccq_command_exists brew; then
+    brew_bin="$(command -v brew 2>/dev/null || true)"
+  fi
+  if [ -n "${brew_bin}" ]; then
+    brew_prefix="$("${brew_bin}" --prefix 2>/dev/null || dirname "$(dirname "${brew_bin}")")"
     if [ -n "${brew_prefix}" ]; then
       case ":${PATH}:" in
         *":${brew_prefix}/bin:"*) ;;
