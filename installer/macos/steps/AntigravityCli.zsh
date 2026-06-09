@@ -80,7 +80,7 @@ ccq_antigravity_run_installer() {
   fi
 
   local installer_path
-  installer_path="$(mktemp "${TMPDIR:-/tmp}/ccq-antigravity-install.XXXXXX.sh")" || return 1
+  installer_path="$(mktemp "${TMPDIR:-/tmp}/ccq-antigravity-install.XXXXXX")" || return 1
   if ! curl -fsSL "${CCQ_ANTIGRAVITY_INSTALL_URL}" -o "${installer_path}"; then
     rm -f "${installer_path}"
     CCQ_ANTIGRAVITY_ERROR="下载 Antigravity CLI 官方安装脚本失败"

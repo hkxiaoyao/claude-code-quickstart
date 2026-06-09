@@ -181,7 +181,7 @@ function appendMacOSWrapper(lines) {
   lines.push('    if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then');
   lines.push('      exec /bin/zsh "${BASH_SOURCE[0]}" "$@"');
   lines.push('    fi');
-  lines.push('    ccq_streamed_script="$(mktemp "${TMPDIR:-/tmp}/ccq-built.XXXXXX.zsh")" || exit 1');
+  lines.push('    ccq_streamed_script="$(mktemp "${TMPDIR:-/tmp}/ccq-built.XXXXXX")" || exit 1');
   lines.push('    cat > "${ccq_streamed_script}"');
   lines.push('    export CCQ_STREAMED_SCRIPT_PATH="${ccq_streamed_script}"');
   lines.push('    exec /bin/zsh "${ccq_streamed_script}" "$@"');

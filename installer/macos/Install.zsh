@@ -7,7 +7,7 @@ if [ -z "${ZSH_VERSION:-}" ]; then
     exec /bin/zsh "${BASH_SOURCE[0]}" "$@"
   fi
   if [ -x "/bin/zsh" ]; then
-    ccq_streamed_script="$(mktemp "${TMPDIR:-/tmp}/ccq-install.XXXXXX.zsh")" || exit 1
+    ccq_streamed_script="$(mktemp "${TMPDIR:-/tmp}/ccq-install.XXXXXX")" || exit 1
     cat > "${ccq_streamed_script}"
     export CCQ_STREAMED_SCRIPT_PATH="${ccq_streamed_script}"
     exec /bin/zsh "${ccq_streamed_script}" "$@"

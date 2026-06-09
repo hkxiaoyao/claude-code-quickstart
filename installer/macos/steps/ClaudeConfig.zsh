@@ -73,7 +73,7 @@ ccq_claude_config_apply() {
   local mode="${1:-install}"
   local settings_path out_file items_file updated_json updated_items
   settings_path="$(ccq_claude_settings_path)"
-  out_file="$(mktemp "${TMPDIR:-/tmp}/ccq-claude-config.XXXXXX.json")" || return 1
+  out_file="$(mktemp "${TMPDIR:-/tmp}/ccq-claude-config.XXXXXX")" || return 1
   items_file="$(mktemp "${TMPDIR:-/tmp}/ccq-claude-config-items.XXXXXX")" || { rm -f "${out_file}"; return 1; }
 
   ccq_claude_config_contract_ready || { rm -f "${out_file}" "${items_file}"; return 1; }

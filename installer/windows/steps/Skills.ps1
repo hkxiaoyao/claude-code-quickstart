@@ -27,9 +27,11 @@ function Get-SkillsContractPath {
         return $env:CCQ_SKILLS_CONTRACT
     }
 
-    $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\skills.json'
-    if (Test-Path $sourcePath -PathType Leaf) {
-        return $sourcePath
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\skills.json'
+        if (Test-Path $sourcePath -PathType Leaf) {
+            return $sourcePath
+        }
     }
 
     return $null
@@ -1415,9 +1417,11 @@ function Get-UiContractPath {
         return $env:CCQ_UI_CONTRACT
     }
 
-    $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\ui.json'
-    if (Test-Path $sourcePath -PathType Leaf) {
-        return $sourcePath
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $sourcePath = Join-Path $PSScriptRoot '..\..\contracts\ui.json'
+        if (Test-Path $sourcePath -PathType Leaf) {
+            return $sourcePath
+        }
     }
 
     return $null
