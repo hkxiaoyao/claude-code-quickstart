@@ -172,6 +172,7 @@ function contractEmbeds() {
 
 function appendMacOSWrapper(lines) {
   lines.push('#!/usr/bin/env bash');
+  lines.push('set +x 2>/dev/null || true');
   lines.push('# ═══════════════════════════════════════════════════════════════════════════════');
   lines.push('# 本文件由 build.sh 自动生成，请勿手动编辑');
   lines.push(`# 生成时间: ${new Date().toISOString()}`);

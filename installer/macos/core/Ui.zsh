@@ -626,6 +626,10 @@ ccq_summary_status_text() {
 }
 
 ccq_show_install_summary() {
+  # 防御式关闭 xtrace，避免外部调试开关污染摘要表格输出。
+  set +x 2>/dev/null || true
+  unsetopt XTRACE 2>/dev/null || true
+
   local rows=("$@")
   local row name row_status version
   local name_width status_width version_width

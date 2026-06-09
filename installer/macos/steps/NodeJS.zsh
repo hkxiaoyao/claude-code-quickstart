@@ -106,18 +106,20 @@ ccq_nodejs_install_nvm() {
     return 1
   }
 
-  if ! PROFILE=/dev/null NVM_DIR="$(ccq_nodejs_nvm_dir)" bash -c "set -o pipefail; curl -fsSL '${CCQ_NVM_INSTALL_URL}' | bash" >"${output_file}" 2>&1; then
+  if ! PROFILE=/dev/null METHOD=script NVM_DIR="$(ccq_nodejs_nvm_dir)" bash -c "set -o pipefail; curl -fsSL '${CCQ_NVM_INSTALL_URL}' | bash" >"${output_file}" 2>&1; then
     error_hint="$(ccq_nodejs_extract_nvm_error "${output_file}")"
     rm -f "${output_file}"
     CCQ_NODEJS_ERROR="nvm 官方安装脚本执行失败：${error_hint}"
     return 1
   fi
-  rm -f "${output_file}"
 
   if ! ccq_nodejs_load_nvm; then
-    CCQ_NODEJS_ERROR="nvm 安装后未能加载 ${NVM_DIR}/nvm.sh"
+    error_hint="$(ccq_nodejs_extract_nvm_error "${output_file}")"
+    rm -f "${output_file}"
+    CCQ_NODEJS_ERROR="nvm 安装后未能加载 ${NVM_DIR}/nvm.sh：${error_hint}"
     return 1
   fi
+  rm -f "${output_file}"
 }
 
 ccq_nodejs_versions_ok() {
