@@ -27,6 +27,7 @@ setopt SH_WORD_SPLIT
 # 避免继承上游 zsh xtrace，防止内部变量赋值污染安装输出。
 set +x 2>/dev/null || true
 unsetopt XTRACE 2>/dev/null || true
+setopt NO_XTRACE 2>/dev/null || true
 
 CCQ_MACOS_ROOT="$(cd "$(dirname "${0:A}")" && pwd)"
 CCQ_INSTALLER_ROOT="$(cd "${CCQ_MACOS_ROOT}/.." && pwd)"
@@ -330,7 +331,7 @@ ccq_confirm_execution_plan() {
     return 1
   fi
 
-  choice="$(ccq_prompt_single "确认执行以上计划？" 1 "是，开始执行" "否，取消")" || return 1
+  choice="$(ccq_prompt_single "确认执行以上计划？" 0 "是，开始执行" "否，取消")" || return 1
   [ "${choice}" = "0" ]
 }
 
@@ -500,7 +501,15 @@ ccq_invoke_grouped_install() {
 
   ccq_confirm_execution_plan "${#selected[@]}" "${selected[@]}" "${ordered[@]}" || { ccq_ui_warning "安装已取消"; return 0; }
 
+  local total="${#ordered[@]}" step_index=0 step_name step_description
   for step_id in "${ordered[@]}"; do
+    step_index=$((step_index + 1))
+    step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
+    step_description="$(ccq_get_step_field "${step_id}" Description 2>/dev/null || true)"
+    printf '\n'
+    ccq_ui_primary "步骤 ${step_index} / ${total}: ${step_name}"
+    ccq_ui_info "🔄 执行步骤: ${step_name} (安装)"
+    [ -n "${step_description}" ] && ccq_ui_dim "     ${step_description}" "developer"
     ccq_invoke_step_lifecycle "${step_id}" || true
   done
 

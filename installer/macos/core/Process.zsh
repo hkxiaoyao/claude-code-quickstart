@@ -175,7 +175,7 @@ ccq_refresh_path() {
     export NVM_DIR="${nvm_dir}"
     . "${nvm_dir}/nvm.sh" >/dev/null 2>&1 || true
     if ccq_command_exists nvm; then
-      nvm use default --silent >/dev/null 2>&1 || true
+      nvm use --silent default >/dev/null 2>&1 || nvm use --silent 'lts/*' >/dev/null 2>&1 || true
     fi
   fi
 

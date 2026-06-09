@@ -629,10 +629,11 @@ ccq_show_install_summary() {
   # 防御式关闭 xtrace，避免外部调试开关污染摘要表格输出。
   set +x 2>/dev/null || true
   unsetopt XTRACE 2>/dev/null || true
+  setopt NO_XTRACE 2>/dev/null || true
 
   local rows=("$@")
   local row name row_status version
-  local name_width status_width version_width
+  local name_width status_width version_width current_name current_status current_version
   local header_name="组件" header_status="状态" header_version="版本"
   local top mid bottom
 
@@ -648,7 +649,6 @@ ccq_show_install_summary() {
   for row in "${rows[@]}"; do
     IFS=$'\t' read -r name row_status version <<< "${row}"
     [ -n "${version}" ] || version='-'
-    local current_name current_status current_version
     current_name="$(ccq_string_display_width "${name}")"
     current_status="$(ccq_string_display_width "${row_status}")"
     current_version="$(ccq_string_display_width "${version}")"
