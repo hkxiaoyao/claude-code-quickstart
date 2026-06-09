@@ -75,10 +75,12 @@ ccq_brew_shellenv() {
 ccq_initialize_brew_shellenv() {
   local profile_path="${1:-${HOME}/.zprofile}"
   local shellenv_content
-  shellenv_content="$(ccq_brew_shellenv 2>/dev/null || true)"
-  if [ -z "${shellenv_content}" ]; then
+  if ! shellenv_content="$(ccq_brew_shellenv 2>/dev/null)"; then
     return 1
   fi
+
+  # `brew shellenv` 是幂等的；当前环境已初始化时会成功返回空输出。
+  [ -z "${shellenv_content}" ] && return 0
 
   if command -v ccq_set_profile_subsection >/dev/null 2>&1; then
     ccq_set_profile_subsection "${profile_path}" "HOMEBREW" "${shellenv_content}"

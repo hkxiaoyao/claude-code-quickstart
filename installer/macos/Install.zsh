@@ -191,9 +191,6 @@ ccq_preflight() {
   ccq_initialize_brew_shellenv "$(ccq_zprofile_path)" >/dev/null 2>&1 || \
     ccq_ui_warning "Homebrew shellenv 初始化失败；后续命令可能需要重新打开终端" "developer"
 
-  if ! command -v node >/dev/null 2>&1; then
-    ccq_ui_warning "Node.js 当前不可用；首次 Basic 安装将由 NodeJS 步骤负责安装" "developer"
-  fi
 }
 
 ccq_bool_true() {
