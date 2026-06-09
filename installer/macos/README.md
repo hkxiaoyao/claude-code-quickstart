@@ -27,11 +27,11 @@ curl -fsSL "https://github.com/MrNine-666/claude-code-quickstart/releases/latest
 
 - 最低系统版本：macOS 12+。
 - 包管理器：Homebrew。
-- Node.js：通过 nvm 安装 LTS。
+- Node.js：通过 nvm 官方脚本安装 LTS。
 - Profile 写入：
   - Homebrew shellenv 写入 `~/.zprofile`。
-  - nvm 初始化与 `ccq` 快捷函数写入 `~/.zshrc`。
-  - 所有写入必须使用 `# >>> Claude Code Quickstart >>>` 托管块。
+  - `ccq` 快捷函数写入 `~/.zshrc`。
+  - CCQ 自身写入必须使用 `# >>> Claude Code Quickstart >>>` 托管块；nvm 初始化由 nvm 官方安装脚本自行写入，不注入 CCQ 托管块。
 - 配置 schema 与 Windows 共享：`~/.claude/settings.json`、`~/.claude.json`、`~/.claude/providers/`、`~/.ccq/mcp-meta.json`。
 - 禁止调用 Windows 专属机制：winget、注册表、MSI/EXE、Windows Terminal、Windows `$PROFILE`。
 - 可选工具无自动路径或失败时返回 `ManualRequired` / `Unsupported`，不得计入 Success。

@@ -48,7 +48,7 @@ ccq_registry_init_bootstrap_snapshot() {
   CCQ_BOOTSTRAP_STEP_NAME[CodexCli]="Codex CLI"
   CCQ_BOOTSTRAP_STEP_NAME[AntigravityCli]="Antigravity CLI"
 
-  CCQ_BOOTSTRAP_STEP_DESCRIPTION[NodeJS]="通过 nvm 安装 Node.js LTS 并验证 node/npm"
+  CCQ_BOOTSTRAP_STEP_DESCRIPTION[NodeJS]="通过 nvm 官方脚本安装 Node.js LTS 并验证 node/npm"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[Git]="通过 Homebrew 安装 Git 并应用推荐配置"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[ClaudeCode]="通过 npm 全局安装 Claude Code CLI"
   CCQ_BOOTSTRAP_STEP_DESCRIPTION[ApiKey]="配置第三方 AI 供应商连接到 ~/.claude/settings.json"

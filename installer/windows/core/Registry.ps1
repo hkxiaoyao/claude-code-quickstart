@@ -303,7 +303,7 @@ function Get-InlineStepRegistry {
         @{
             StepId          = "NodeJS"
             StepName        = "Node.js"
-            Description     = "安装 Node.js ，支持 nvm-windows / Node.js 二选一，并保留 fnm 检测与迁移能力"
+            Description     = "安装 Node.js，Windows 支持 nvm-windows / Node.js 二选一，macOS 通过 nvm 官方脚本安装，并保留 fnm 检测与迁移能力"
             StepFile        = "windows/steps/NodeJS.ps1"
             SubModules      = @(
                 "windows/steps/NodeJS-Detect.ps1"

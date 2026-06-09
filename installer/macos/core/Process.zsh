@@ -141,7 +141,7 @@ ccq_get_command_version() {
 }
 
 ccq_refresh_path() {
-  # macOS 当前 shell 通常无需全量刷新；补充常见 Homebrew 与 npm 前缀。
+  # macOS 当前 shell 通常无需全量刷新；补充常见 Homebrew、nvm 与 npm 前缀。
   local brew_prefix=""
   if ccq_command_exists brew; then
     brew_prefix="$(brew --prefix 2>/dev/null || true)"
@@ -161,6 +161,23 @@ ccq_refresh_path() {
     *":${HOME}/.local/bin:"*) ;;
     *) PATH="${HOME}/.local/bin:${PATH}" ;;
   esac
+
+  local nvm_dir="${NVM_DIR:-}"
+  if [ -z "${nvm_dir}" ]; then
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+      nvm_dir="${XDG_CONFIG_HOME%/}/nvm"
+    else
+      nvm_dir="${HOME}/.nvm"
+    fi
+  fi
+  nvm_dir="${nvm_dir%/}"
+  if [ -s "${nvm_dir}/nvm.sh" ]; then
+    export NVM_DIR="${nvm_dir}"
+    . "${nvm_dir}/nvm.sh" >/dev/null 2>&1 || true
+    if ccq_command_exists nvm; then
+      nvm use default --silent >/dev/null 2>&1 || true
+    fi
+  fi
 
   if ccq_command_exists npm; then
     local npm_prefix
