@@ -56,6 +56,36 @@ ccq_nodejs_load_nvm() {
   command -v nvm >/dev/null 2>&1
 }
 
+ccq_nodejs_extract_nvm_error() {
+  local output_file="${1:-}"
+  local line last_line=""
+  if [ -z "${output_file}" ] || [ ! -f "${output_file}" ]; then
+    printf '%s' 'nvm 官方安装脚本执行失败'
+    return 0
+  fi
+
+  while IFS= read -r line; do
+    [ -n "${line}" ] || continue
+    last_line="${line}"
+    case "${line}" in
+      *"Xcode Command Line Developer Tools"*|*"xcode-select --install"*)
+        printf '%s' '缺少 Xcode Command Line Tools，请执行 xcode-select --install 后重试'
+        return 0
+        ;;
+      *"Failed to clone"*|*"Failed to fetch"*|*"Failed to download"*|*"Could not resolve host"*|*"SSL"*|*"Connection"*"failed"*)
+        printf '%s' "${line}"
+        return 0
+        ;;
+      *"Permission denied"*|*"has the same name as installation directory"*|*"directory does not exist"*)
+        printf '%s' "${line}"
+        return 0
+        ;;
+    esac
+  done < "${output_file}"
+
+  [ -n "${last_line}" ] && printf '%s' "${last_line}" || printf '%s' '未获取到 nvm 安装输出'
+}
+
 ccq_nodejs_install_nvm() {
   if ccq_nodejs_load_nvm; then
     return 0
@@ -65,12 +95,29 @@ ccq_nodejs_install_nvm() {
     return 1
   fi
 
-  mkdir -p "$(ccq_nodejs_nvm_dir)"
-  if ! PROFILE=/dev/null NVM_DIR="$(ccq_nodejs_nvm_dir)" bash -c "curl -o- '${CCQ_NVM_INSTALL_URL}' | bash" >/dev/null 2>&1; then
-    CCQ_NODEJS_ERROR="nvm 官方安装脚本执行失败"
+  if ! mkdir -p "$(ccq_nodejs_nvm_dir)"; then
+    CCQ_NODEJS_ERROR="无法创建 nvm 目录: $(ccq_nodejs_nvm_dir)"
     return 1
   fi
-  ccq_nodejs_load_nvm
+
+  local output_file error_hint
+  output_file="$(mktemp "${TMPDIR:-/tmp}/ccq-nvm-install.XXXXXX")" || {
+    CCQ_NODEJS_ERROR="无法创建 nvm 安装日志临时文件"
+    return 1
+  }
+
+  if ! PROFILE=/dev/null NVM_DIR="$(ccq_nodejs_nvm_dir)" bash -c "set -o pipefail; curl -fsSL '${CCQ_NVM_INSTALL_URL}' | bash" >"${output_file}" 2>&1; then
+    error_hint="$(ccq_nodejs_extract_nvm_error "${output_file}")"
+    rm -f "${output_file}"
+    CCQ_NODEJS_ERROR="nvm 官方安装脚本执行失败：${error_hint}"
+    return 1
+  fi
+  rm -f "${output_file}"
+
+  if ! ccq_nodejs_load_nvm; then
+    CCQ_NODEJS_ERROR="nvm 安装后未能加载 ${NVM_DIR}/nvm.sh"
+    return 1
+  fi
 }
 
 ccq_nodejs_versions_ok() {

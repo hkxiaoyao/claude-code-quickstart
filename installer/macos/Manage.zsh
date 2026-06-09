@@ -24,6 +24,10 @@ setopt NO_NOMATCH
 setopt PIPE_FAIL
 setopt SH_WORD_SPLIT
 
+# 避免继承上游 zsh xtrace，防止内部变量赋值污染管理输出。
+set +x 2>/dev/null || true
+unsetopt XTRACE 2>/dev/null || true
+
 CCQ_MACOS_ROOT="$(cd "$(dirname "${0:A}")" && pwd)"
 CCQ_INSTALLER_ROOT="$(cd "${CCQ_MACOS_ROOT}/.." && pwd)"
 export CCQ_MACOS_ROOT CCQ_INSTALLER_ROOT
