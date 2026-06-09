@@ -29,14 +29,53 @@ ccq_join_args_for_display() {
   printf '%s' "${text}"
 }
 
+ccq_process_stream_enabled() {
+  local suppress_output="${1:-0}"
+  [ "${suppress_output}" != "1" ] || return 1
+  command -v ccq_output_is_developer >/dev/null 2>&1 || return 1
+  ccq_output_is_developer || return 1
+  command -v ccq_tty_available >/dev/null 2>&1 || return 1
+  ccq_tty_available
+}
+
+ccq_process_tty_block() {
+  local text="${1:-}"
+  [ -n "${text}" ] || return 0
+  printf '%s\n' "${text}" > /dev/tty 2>/dev/null || true
+}
+
+ccq_run_native_command() {
+  if ccq_process_stream_enabled 0; then
+    "$@" > >(tee /dev/tty >/dev/null) 2> >(tee /dev/tty >/dev/null)
+  else
+    "$@" >/dev/null 2>&1
+  fi
+}
+
 ccq_run_command_once() {
   local timeout_seconds="${1:-${CCQ_DEFAULT_TIMEOUT_SECONDS}}"
   local suppress_output="${2:-0}"
   shift 2 || true
 
-  local output_file error_file exit_code
+  local output_file error_file heartbeat_file exit_code stream_output=0 heartbeat_pid=""
   output_file="$(mktemp -t ccq_cmd_out.XXXXXX)" || return 1
   error_file="$(mktemp -t ccq_cmd_err.XXXXXX)" || { rm -f "${output_file}"; return 1; }
+  heartbeat_file="$(mktemp -t ccq_cmd_heartbeat.XXXXXX)" || { rm -f "${output_file}" "${error_file}"; return 1; }
+
+  if ccq_process_stream_enabled "${suppress_output}"; then
+    stream_output=1
+    (
+      sleep 2 || exit 0
+      printf '1' > "${heartbeat_file}" 2>/dev/null || true
+      elapsed=2
+      while true; do
+        printf '\r  等待中... (%s 秒)' "${elapsed}" > /dev/tty 2>/dev/null || true
+        sleep 1 || exit 0
+        elapsed=$((elapsed + 1))
+      done
+    ) &
+    heartbeat_pid="$!"
+  fi
 
   if ccq_command_exists timeout; then
     timeout "${timeout_seconds}" "$@" >"${output_file}" 2>"${error_file}"
@@ -46,12 +85,26 @@ ccq_run_command_once() {
     exit_code=$?
   fi
 
+  if [ -n "${heartbeat_pid}" ]; then
+    kill "${heartbeat_pid}" >/dev/null 2>&1 || true
+    wait "${heartbeat_pid}" 2>/dev/null || true
+    if [ -s "${heartbeat_file}" ]; then
+      printf '\n' > /dev/tty 2>/dev/null || true
+    fi
+  fi
+
   CCQ_LAST_EXIT_CODE="${exit_code}"
   CCQ_LAST_OUTPUT="$(cat "${output_file}" 2>/dev/null || true)"
   CCQ_LAST_ERROR="$(cat "${error_file}" 2>/dev/null || true)"
-  rm -f "${output_file}" "${error_file}"
+  if [ "${exit_code}" -eq 124 ] && [ -z "${CCQ_LAST_ERROR}" ]; then
+    CCQ_LAST_ERROR="命令执行超时 (${timeout_seconds} 秒): $(ccq_join_args_for_display "$@")"
+  fi
+  rm -f "${output_file}" "${error_file}" "${heartbeat_file}"
 
-  if [ "${suppress_output}" != "1" ] && [ -n "${CCQ_LAST_OUTPUT}" ]; then
+  if [ "${stream_output}" = "1" ]; then
+    ccq_process_tty_block "${CCQ_LAST_OUTPUT}"
+    ccq_process_tty_block "${CCQ_LAST_ERROR}"
+  elif [ "${suppress_output}" != "1" ] && ! command -v ccq_output_is_developer >/dev/null 2>&1 && [ -n "${CCQ_LAST_OUTPUT}" ]; then
     printf '%s\n' "${CCQ_LAST_OUTPUT}"
   fi
 
@@ -116,8 +169,10 @@ ccq_run_command() {
       return 0
     fi
     if [ "${attempt}" -lt "${max_attempts}" ]; then
-      if command -v ccq_ui_warning >/dev/null 2>&1; then
-        ccq_ui_warning "命令失败，准备重试(${attempt}/${retry_count}): ${display_command}"
+      if command -v ccq_ui_runtime_warning >/dev/null 2>&1; then
+        ccq_ui_runtime_warning "命令失败，准备重试(${attempt}/${retry_count}): ${display_command}"
+      elif command -v ccq_ui_warning >/dev/null 2>&1; then
+        ccq_ui_warning "命令失败，准备重试(${attempt}/${retry_count}): ${display_command}" "developer"
       fi
       sleep $((attempt * 2))
     fi
@@ -209,6 +264,14 @@ ccq_npm_global_install() {
     full_package="${package_name}@${version}"
   fi
   ccq_run_command --timeout 300 --retries 3 -- npm install -g "${full_package}"
+}
+
+ccq_run_command_developer_or_silent() {
+  if command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer; then
+    ccq_run_command "$@"
+  else
+    ccq_run_command --suppress-output "$@" >/dev/null 2>&1
+  fi
 }
 
 ccq_npx() {

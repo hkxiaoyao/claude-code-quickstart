@@ -62,9 +62,9 @@ Install-ClaudeCode() {
     return 1
   fi
 
-  if ! ccq_npm_global_install "${CCQ_CLAUDE_CODE_PACKAGE}" "latest" >/dev/null 2>&1; then
+  if ! ccq_run_command_developer_or_silent --timeout 300 --retries 3 -- npm install -g "${CCQ_CLAUDE_CODE_PACKAGE}@latest"; then
     ccq_run_command --timeout 60 --retries 0 --suppress-output -- npm cache clean --force >/dev/null 2>&1 || true
-    if ! ccq_npm_global_install "${CCQ_CLAUDE_CODE_PACKAGE}" "latest" >/dev/null 2>&1; then
+    if ! ccq_run_command_developer_or_silent --timeout 300 --retries 3 -- npm install -g "${CCQ_CLAUDE_CODE_PACKAGE}@latest"; then
       ccq_claude_code_install_result false "" "npm 全局安装 Claude Code 失败"
       return 1
     fi

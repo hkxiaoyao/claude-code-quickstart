@@ -74,9 +74,9 @@ ccq_npm_tool_install_latest() {
   [ -n "${package_name}" ] || { CCQ_NPM_TOOL_ERROR="npm 包名不能为空"; return 1; }
   ccq_npm_tool_require_npm || return 1
 
-  if ! ccq_npm_global_install "${package_name}" "latest" >/dev/null 2>&1; then
+  if ! ccq_run_command_developer_or_silent --timeout 300 --retries 3 -- npm install -g "${package_name}@latest"; then
     ccq_run_command --timeout 60 --retries 0 --suppress-output -- npm cache clean --force >/dev/null 2>&1 || true
-    if ! ccq_npm_global_install "${package_name}" "latest" >/dev/null 2>&1; then
+    if ! ccq_run_command_developer_or_silent --timeout 300 --retries 3 -- npm install -g "${package_name}@latest"; then
       CCQ_NPM_TOOL_ERROR="npm 全局安装失败: ${package_name}"
       return 1
     fi

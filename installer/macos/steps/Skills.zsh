@@ -294,14 +294,14 @@ EOF
     selected_names="${skill}"
   fi
   if [ -z "${selected_names}" ]; then
-    if ccq_skills_install_one "${source}" "" "${copy_mode}" >/dev/null 2>&1; then
+    if ccq_skills_install_one "${source}" "" "${copy_mode}"; then
       installed+=("${id}")
     else
       failures+=("${id}")
     fi
   else
     for child in ${selected_names}; do
-      if ccq_skills_install_one "${source}" "${child}" "${copy_mode}" >/dev/null 2>&1; then
+      if ccq_skills_install_one "${source}" "${child}" "${copy_mode}"; then
         installed+=("${child}")
       else
         failures+=("${child}")
@@ -330,7 +330,7 @@ Update-Skills() {
     ccq_step_update_result false "" "" "${CCQ_NPM_TOOL_ERROR:-npx 不可用}"
     return 1
   fi
-  if ccq_run_command --timeout 300 --retries 1 -- npx --yes skills update -g -y >/dev/null 2>&1; then
+  if ccq_run_command_developer_or_silent --timeout 300 --retries 1 -- npx --yes skills update -g -y; then
     ccq_step_update_result true "npx::skills::update" "" ""
     return 0
   fi

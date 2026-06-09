@@ -154,7 +154,7 @@ ccq_confirm_homebrew_install() {
   ccq_ui_info "将执行 Homebrew 官方安装命令："
   ccq_ui_dim "$(ccq_homebrew_install_command)"
   local choice
-  choice="$(ccq_prompt_single "是否现在安装 Homebrew？" 1 "是，安装 Homebrew" "否，稍后手动安装")" || return 1
+  choice="$(ccq_prompt_single "是否现在安装 Homebrew？" 0 "是，安装 Homebrew" "否，稍后手动安装")" || return 1
   [ "${choice}" = "0" ]
 }
 

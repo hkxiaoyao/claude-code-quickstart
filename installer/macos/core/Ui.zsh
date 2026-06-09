@@ -63,6 +63,26 @@ ccq_should_print_level() {
   [ "${level}" = "essential" ]
 }
 
+ccq_output_is_developer() {
+  [ "${CCQ_OUTPUT_MODE}" = "developer" ]
+}
+
+ccq_ui_runtime_write() {
+  local type="${1:-info}"
+  local message="${2:-}"
+  local level="${3:-developer}"
+
+  ccq_should_print_level "${level}" || return 1
+  ccq_tty_available || return 1
+  ccq_tty_write "${type}" "${message}"
+}
+
+ccq_ui_runtime_info() { ccq_ui_runtime_write info "${1:-}" "${2:-developer}"; }
+ccq_ui_runtime_dim() { ccq_ui_runtime_write dim "${1:-}" "${2:-developer}"; }
+ccq_ui_runtime_warning() { ccq_ui_runtime_write warning "${1:-}" "${2:-developer}"; }
+ccq_ui_runtime_success() { ccq_ui_runtime_write success "${1:-}" "${2:-developer}"; }
+ccq_ui_runtime_danger() { ccq_ui_runtime_write danger "${1:-}" "${2:-developer}"; }
+
 ccq_ui_write() {
   local type="${1:-info}"
   local message="${2:-}"

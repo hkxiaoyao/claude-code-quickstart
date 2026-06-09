@@ -90,7 +90,7 @@ Install-CcSwitch() {
     return 1
   fi
 
-  if ! ccq_brew_install_cask "${CCQ_CCSWITCH_CASK}" >/dev/null 2>&1; then
+  if ! ccq_brew_install_cask "${CCQ_CCSWITCH_CASK}"; then
     ccq_ccswitch_manual_hint >&2
     ccq_ccswitch_install_result false "$(ccq_ccswitch_cask_version 2>/dev/null || true)" "brew install --cask cc-switch 失败，请按手动指引处理" "ManualRequired"
     return 1
@@ -128,7 +128,7 @@ Update-CcSwitch() {
   old_version="$(ccq_ccswitch_cask_version 2>/dev/null || true)"
 
   if [ -z "${old_version}" ] && ! ccq_ccswitch_app_exists; then
-    if ! ccq_brew_install_cask "${CCQ_CCSWITCH_CASK}" >/dev/null 2>&1; then
+    if ! ccq_brew_install_cask "${CCQ_CCSWITCH_CASK}"; then
       ccq_ccswitch_manual_hint >&2
       ccq_ccswitch_update_result false "" "" "cc-switch 未安装且自动安装失败" "ManualRequired"
       return 1
@@ -138,7 +138,7 @@ Update-CcSwitch() {
     return 0
   fi
 
-  if ! ccq_brew_upgrade_package "${CCQ_CCSWITCH_CASK}" cask >/dev/null 2>&1; then
+  if ! ccq_brew_upgrade_package "${CCQ_CCSWITCH_CASK}" cask; then
     ccq_ccswitch_update_result false "" "${old_version}" "brew upgrade --cask cc-switch 失败，请按手动指引处理" "ManualRequired"
     return 1
   fi

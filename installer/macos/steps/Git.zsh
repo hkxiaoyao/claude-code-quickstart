@@ -109,7 +109,7 @@ Install-Git() {
       return 1
     fi
 
-    if ! ccq_brew_install_formula git >/dev/null 2>&1; then
+    if ! ccq_brew_install_formula git; then
       ccq_git_install_result false "$(ccq_git_version)" "brew install git 失败"
       return 1
     fi

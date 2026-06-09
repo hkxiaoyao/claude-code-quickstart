@@ -87,7 +87,7 @@ ccq_antigravity_run_installer() {
     return 1
   fi
 
-  if ! bash "${installer_path}"; then
+  if ! ccq_run_native_command bash "${installer_path}"; then
     rm -f "${installer_path}"
     CCQ_ANTIGRAVITY_ERROR="Antigravity CLI 官方安装脚本执行失败"
     return 1
@@ -107,7 +107,7 @@ Test-AntigravityCliInstalled() {
 }
 
 Install-AntigravityCli() {
-  if ! ccq_antigravity_run_installer >/dev/null 2>&1; then
+  if ! ccq_antigravity_run_installer; then
     ccq_antigravity_manual_hint >&2
     ccq_antigravity_install_result false "" "${CCQ_ANTIGRAVITY_ERROR:-Antigravity CLI 安装失败，请按手动指引处理}" "ManualRequired"
     return 1
@@ -140,10 +140,10 @@ Update-AntigravityCli() {
   old_version="$(ccq_antigravity_version 2>/dev/null || true)"
 
   if ccq_command_exists agy; then
-    agy update >/dev/null 2>&1 || true
+    ccq_run_native_command agy update || true
   fi
 
-  if ! ccq_antigravity_run_installer >/dev/null 2>&1; then
+  if ! ccq_antigravity_run_installer; then
     ccq_antigravity_manual_hint >&2
     ccq_antigravity_update_result false "" "${old_version}" "${CCQ_ANTIGRAVITY_ERROR:-Antigravity CLI 更新失败，请按手动指引处理}" "ManualRequired"
     return 1

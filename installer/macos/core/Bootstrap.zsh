@@ -91,6 +91,43 @@ ccq_call_step_function() {
   "${function_name}"
 }
 
+ccq_capture_step_function() {
+  local function_name="${1:-}"
+  local stderr_mode="${2:-capture}"
+  local output_file error_file status
+  [ -n "${function_name}" ] || return 1
+  if ! command -v "${function_name}" >/dev/null 2>&1; then
+    CCQ_CAPTURED_STEP_OUTPUT=""
+    CCQ_LAST_STEP_MESSAGE="函数不存在: ${function_name}"
+    return 127
+  fi
+
+  output_file="$(mktemp "${TMPDIR:-/tmp}/ccq-step.XXXXXX")" || return 1
+  case "${stderr_mode}" in
+    discard)
+      "${function_name}" >"${output_file}" 2>/dev/null
+      status=$?
+      ;;
+    developer)
+      error_file="$(mktemp "${TMPDIR:-/tmp}/ccq-step-err.XXXXXX")" || { rm -f "${output_file}"; return 1; }
+      "${function_name}" >"${output_file}" 2>"${error_file}"
+      status=$?
+      if command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer && command -v ccq_tty_available >/dev/null 2>&1 && ccq_tty_available; then
+        [ -s "${error_file}" ] && cat "${error_file}" > /dev/tty 2>/dev/null || true
+      fi
+      cat "${error_file}" >>"${output_file}" 2>/dev/null || true
+      rm -f "${error_file}"
+      ;;
+    *)
+      "${function_name}" >"${output_file}" 2>&1
+      status=$?
+      ;;
+  esac
+  CCQ_CAPTURED_STEP_OUTPUT="$(cat "${output_file}" 2>/dev/null || true)"
+  rm -f "${output_file}"
+  return "${status}"
+}
+
 ccq_parse_result_field() {
   local result="${1:-}"
   local field="${2:-}"
@@ -129,7 +166,8 @@ ccq_test_step_dependencies() {
 
     dep_test="$(ccq_get_step_field "${dep}" TestFunction 2>/dev/null || true)"
     if [ -n "${dep_test}" ] && command -v "${dep_test}" >/dev/null 2>&1; then
-      dep_result="$(${dep_test} 2>/dev/null || true)"
+      ccq_capture_step_function "${dep_test}" discard || true
+      dep_result="${CCQ_CAPTURED_STEP_OUTPUT}"
       if ccq_result_is_installed "${dep_result}"; then
         continue
       fi
@@ -161,7 +199,9 @@ ccq_invoke_step_lifecycle() {
 
   local test_result=""
   if [ -n "${test_function}" ] && command -v "${test_function}" >/dev/null 2>&1; then
-    test_result="$(${test_function} 2>/dev/null || true)"
+    command -v ccq_ui_runtime_info >/dev/null 2>&1 && ccq_ui_runtime_info "  🔍 测试阶段: ${test_function}"
+    ccq_capture_step_function "${test_function}" discard || true
+    test_result="${CCQ_CAPTURED_STEP_OUTPUT}"
     if ccq_result_is_installed "${test_result}" && ccq_normalize_success "${skip_if_installed}"; then
       ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_SKIPPED}" "组件已安装，跳过安装" "${test_result}"
       command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "Skipped" "组件已安装，跳过安装"
@@ -175,9 +215,12 @@ ccq_invoke_step_lifecycle() {
     return 0
   fi
 
-  local install_result
-  install_result="$(${install_function} 2>&1)"
-  if ! ccq_result_is_success "${install_result}"; then
+  local install_result install_status
+  command -v ccq_ui_runtime_info >/dev/null 2>&1 && ccq_ui_runtime_info "  🔧 安装阶段: ${install_function}"
+  ccq_capture_step_function "${install_function}" developer
+  install_status=$?
+  install_result="${CCQ_CAPTURED_STEP_OUTPUT}"
+  if [ "${install_status}" -ne 0 ] || ! ccq_result_is_success "${install_result}"; then
     local result_status
     result_status="$(ccq_parse_result_field "${install_result}" "Status" 2>/dev/null || true)"
     case "${result_status}" in
@@ -190,9 +233,12 @@ ccq_invoke_step_lifecycle() {
   fi
 
   if [ -n "${verify_function}" ] && command -v "${verify_function}" >/dev/null 2>&1; then
-    local verify_result
-    verify_result="$(${verify_function} 2>&1)"
-    if ! ccq_result_is_success "${verify_result}"; then
+    local verify_result verify_status
+    command -v ccq_ui_runtime_info >/dev/null 2>&1 && ccq_ui_runtime_info "  ✅ 验证阶段: ${verify_function}"
+    ccq_capture_step_function "${verify_function}" developer
+    verify_status=$?
+    verify_result="${CCQ_CAPTURED_STEP_OUTPUT}"
+    if [ "${verify_status}" -ne 0 ] || ! ccq_result_is_success "${verify_result}"; then
       ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_FAILED}" "${verify_result}"
       command -v ccq_show_step_progress >/dev/null 2>&1 && ccq_show_step_progress "${step_name}" "Failed" "${verify_result}"
       return 1

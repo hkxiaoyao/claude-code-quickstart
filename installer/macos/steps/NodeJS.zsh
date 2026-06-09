@@ -133,11 +133,13 @@ ccq_nodejs_install_nvm_official() {
   }
 
   if ! bash -c "set -o pipefail; curl -fsSL '${CCQ_NVM_INSTALL_URL}' | bash" >"${output_file}" 2>&1; then
+    command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer && ccq_process_tty_block "$(cat "${output_file}" 2>/dev/null || true)"
     error_hint="$(ccq_nodejs_extract_nvm_error "${output_file}")"
     rm -f "${output_file}"
     CCQ_NODEJS_ERROR="nvm 官方安装脚本执行失败：${error_hint}"
     return 1
   fi
+  command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer && ccq_process_tty_block "$(cat "${output_file}" 2>/dev/null || true)"
 
   if ! ccq_nodejs_load_nvm; then
     error_hint="${CCQ_NODEJS_LOAD_ERROR:-$(ccq_nodejs_extract_nvm_error "${output_file}")}"
@@ -153,15 +155,15 @@ ccq_nodejs_install_via_nvm() {
     return 1
   fi
 
-  if ! nvm install --lts >/dev/null 2>&1; then
+  if ! ccq_run_native_command nvm install --lts; then
     CCQ_NODEJS_ERROR="Node.js LTS 安装失败"
     return 1
   fi
-  if ! nvm alias default 'lts/*' >/dev/null 2>&1; then
+  if ! ccq_run_native_command nvm alias default 'lts/*'; then
     CCQ_NODEJS_ERROR="nvm default alias 设置失败"
     return 1
   fi
-  if ! nvm use default >/dev/null 2>&1; then
+  if ! ccq_run_native_command nvm use default; then
     CCQ_NODEJS_ERROR="nvm use default 失败"
     return 1
   fi

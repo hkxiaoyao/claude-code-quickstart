@@ -63,7 +63,7 @@ Install-CcgWorkflow() {
   local claude_dir version
   claude_dir="$(ccq_cg_dir)"
   mkdir -p "${claude_dir}"
-  if ! ccq_run_command --timeout 300 --retries 3 -- npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir "${claude_dir}" >/dev/null 2>&1; then
+  if ! ccq_run_command_developer_or_silent --timeout 300 --retries 3 -- npx --yes ccg-workflow@latest init --skip-prompt --skip-mcp --lang zh-CN --install-dir "${claude_dir}"; then
     ccq_step_install_result false "" "CCG Workflow 初始化失败"
     return 1
   fi

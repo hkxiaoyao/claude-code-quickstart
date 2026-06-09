@@ -105,7 +105,7 @@ ccq_brew_install_formula() {
   if "${brew_bin}" list --formula "${formula}" >/dev/null 2>&1; then
     return 0
   fi
-  "${brew_bin}" install "${formula}"
+  ccq_run_native_command "${brew_bin}" install "${formula}"
 }
 
 ccq_brew_install_cask() {
@@ -117,7 +117,7 @@ ccq_brew_install_cask() {
   if "${brew_bin}" list --cask "${cask}" >/dev/null 2>&1; then
     return 0
   fi
-  "${brew_bin}" install --cask "${cask}"
+  ccq_run_native_command "${brew_bin}" install --cask "${cask}"
 }
 
 ccq_brew_upgrade_package() {
@@ -128,8 +128,8 @@ ccq_brew_upgrade_package() {
   brew_bin="$(ccq_brew_command)" || return 1
 
   case "${kind}" in
-    cask) "${brew_bin}" upgrade --cask "${package_name}" ;;
-    formula|*) "${brew_bin}" upgrade "${package_name}" ;;
+    cask) ccq_run_native_command "${brew_bin}" upgrade --cask "${package_name}" ;;
+    formula|*) ccq_run_native_command "${brew_bin}" upgrade "${package_name}" ;;
   esac
 }
 
