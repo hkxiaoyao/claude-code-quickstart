@@ -427,18 +427,18 @@ ccq_register_ccq_shortcut() {
 
 ccq_show_final_summary() {
   local executed=("$@")
-  local success=0 skipped=0 failed=0 unsupported=0 manual=0 step_id status step_name version data status_text
+  local success=0 skipped=0 failed=0 unsupported=0 manual=0 step_id step_status step_name version data status_text
   local rows=()
 
   printf '\n'
   for step_id in "${executed[@]}"; do
-    status="$(ccq_state_get_status "${step_id}" 2>/dev/null || printf 'Skipped')"
+    step_status="$(ccq_state_get_status "${step_id}" 2>/dev/null || printf 'Skipped')"
     step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
     data="$(ccq_state_get_data "${step_id}" 2>/dev/null || true)"
     version="$(ccq_result_field_from_text "${data}" "Version" 2>/dev/null || true)"
     [ -n "${version}" ] || version='-'
 
-    case "${status}" in
+    case "${step_status}" in
       Success) success=$((success + 1)) ;;
       Skipped) skipped=$((skipped + 1)) ;;
       Failed) failed=$((failed + 1)) ;;
@@ -446,7 +446,7 @@ ccq_show_final_summary() {
       ManualRequired) manual=$((manual + 1)) ;;
     esac
 
-    status_text="$(ccq_summary_status_text "${status}")"
+    status_text="$(ccq_summary_status_text "${step_status}")"
     rows+=("${step_name}	${status_text}	${version}")
   done
 

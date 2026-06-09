@@ -35,18 +35,18 @@ ccq_state_index_of() {
 
 ccq_state_set_step() {
   local step_id="${1:-}"
-  local status="${2:-Pending}"
+  local step_status="${2:-Pending}"
   local message="${3:-}"
   local data="${4:-}"
   local idx
   idx="$(ccq_state_index_of "${step_id}" 2>/dev/null || true)"
   if [ -z "${idx}" ]; then
     CCQ_STATE_STEP_IDS+=("${step_id}")
-    CCQ_STATE_STEP_STATUSES+=("${status}")
+    CCQ_STATE_STEP_STATUSES+=("${step_status}")
     CCQ_STATE_STEP_MESSAGES+=("${message}")
     CCQ_STATE_STEP_DATA+=("${data}")
   else
-    CCQ_STATE_STEP_STATUSES[$idx]="${status}"
+    CCQ_STATE_STEP_STATUSES[$idx]="${step_status}"
     CCQ_STATE_STEP_MESSAGES[$idx]="${message}"
     CCQ_STATE_STEP_DATA[$idx]="${data}"
   fi
@@ -178,9 +178,9 @@ ccq_invoke_step_lifecycle() {
   local install_result
   install_result="$(${install_function} 2>&1)"
   if ! ccq_result_is_success "${install_result}"; then
-    local status
-    status="$(ccq_parse_result_field "${install_result}" "Status" 2>/dev/null || true)"
-    case "${status}" in
+    local result_status
+    result_status="$(ccq_parse_result_field "${install_result}" "Status" 2>/dev/null || true)"
+    case "${result_status}" in
       Unsupported) ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_UNSUPPORTED}" "${install_result}" ;;
       ManualRequired) ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_MANUAL_REQUIRED}" "${install_result}" ;;
       *) ccq_state_set_step "${step_id}" "${CCQ_STEP_STATUS_FAILED}" "${install_result}" ;;

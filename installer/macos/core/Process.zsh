@@ -34,19 +34,19 @@ ccq_run_command_once() {
   local suppress_output="${2:-0}"
   shift 2 || true
 
-  local output_file error_file status
+  local output_file error_file exit_code
   output_file="$(mktemp -t ccq_cmd_out.XXXXXX)" || return 1
   error_file="$(mktemp -t ccq_cmd_err.XXXXXX)" || { rm -f "${output_file}"; return 1; }
 
   if ccq_command_exists timeout; then
     timeout "${timeout_seconds}" "$@" >"${output_file}" 2>"${error_file}"
-    status=$?
+    exit_code=$?
   else
     "$@" >"${output_file}" 2>"${error_file}"
-    status=$?
+    exit_code=$?
   fi
 
-  CCQ_LAST_EXIT_CODE="${status}"
+  CCQ_LAST_EXIT_CODE="${exit_code}"
   CCQ_LAST_OUTPUT="$(cat "${output_file}" 2>/dev/null || true)"
   CCQ_LAST_ERROR="$(cat "${error_file}" 2>/dev/null || true)"
   rm -f "${output_file}" "${error_file}"
@@ -55,7 +55,7 @@ ccq_run_command_once() {
     printf '%s\n' "${CCQ_LAST_OUTPUT}"
   fi
 
-  [ "${status}" -eq 0 ]
+  [ "${exit_code}" -eq 0 ]
 }
 
 ccq_run_command() {
@@ -111,8 +111,8 @@ ccq_run_command() {
     else
       ccq_run_command_once "${timeout_seconds}" "${suppress_output}" "$@"
     fi
-    local status=$?
-    if [ "${status}" -eq 0 ]; then
+    local command_status=$?
+    if [ "${command_status}" -eq 0 ]; then
       return 0
     fi
     if [ "${attempt}" -lt "${max_attempts}" ]; then

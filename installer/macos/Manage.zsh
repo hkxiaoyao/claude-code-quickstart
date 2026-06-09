@@ -220,7 +220,7 @@ ccq_manage_update_status_lines() {
 }
 
 ccq_manage_update_status() {
-  local lines line step_id step_name installed version_tag update_function hint status label
+  local lines line step_id step_name installed version_tag update_function hint state_text label
   lines="$(ccq_manage_update_status_lines)"
   ccq_ui_primary "可更新组件状态："
   if [ -z "${lines}" ]; then
@@ -231,13 +231,13 @@ ccq_manage_update_status() {
   while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint; do
     [ -n "${step_id}" ] || continue
     if [ "${installed}" = "true" ]; then
-      status="可更新"
+      state_text="可更新"
       label="$(ccq_status_label Success)"
     else
-      status="未安装"
+      state_text="未安装"
       label="$(ccq_status_label Skipped)"
     fi
-    ccq_ui_info "  ${label} ${step_name} (${step_id}) - ${status} - 当前版本: ${version_tag:-'-'} - 策略: ${hint}"
+    ccq_ui_info "  ${label} ${step_name} (${step_id}) - ${state_text} - 当前版本: ${version_tag:-'-'} - 策略: ${hint}"
   done <<EOF
 ${lines}
 EOF
@@ -381,7 +381,7 @@ ccq_manage_show_update_summary() {
 
 ccq_manage_run_update_step() {
   local step_id="${1:-}"
-  local update_function step_name result success updated_items version error_message status safe_items
+  local update_function step_name result success updated_items version error_message result_status safe_items
   [ -n "${step_id}" ] || return 1
   update_function="$(ccq_get_step_field "${step_id}" UpdateFunction 2>/dev/null || true)"
   step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
@@ -398,7 +398,7 @@ ccq_manage_run_update_step() {
   updated_items="$(ccq_manage_result_field "${result}" UpdatedItems)"
   version="$(ccq_manage_result_field "${result}" Version)"
   error_message="$(ccq_manage_result_field "${result}" ErrorMessage)"
-  status="$(ccq_manage_result_field "${result}" Status)"
+  result_status="$(ccq_manage_result_field "${result}" Status)"
   safe_items="$(ccq_manage_safe_updated_items "${step_id}" "${updated_items}")"
 
   if ccq_normalize_success "${success}"; then
@@ -412,10 +412,10 @@ ccq_manage_run_update_step() {
     return 0
   fi
 
-  case "${status}" in
+  case "${result_status}" in
     ManualRequired|Unsupported)
-      CCQ_MANAGE_UPDATE_SKIPPED+=("${step_name} - ${status}: ${error_message:-需要手动处理}")
-      ccq_show_step_progress "${step_name}" "${status}" "${error_message:-需要手动处理}"
+      CCQ_MANAGE_UPDATE_SKIPPED+=("${step_name} - ${result_status}: ${error_message:-需要手动处理}")
+      ccq_show_step_progress "${step_name}" "${result_status}" "${error_message:-需要手动处理}"
       return 0
       ;;
     *)

@@ -156,11 +156,11 @@ ccq_first_line() {
 
 ccq_get_step_status_message() {
   local step_name="${1:-}"
-  local status="${2:-Info}"
+  local step_status="${2:-Info}"
   local message="${3:-}"
   local detail
 
-  case "${status}" in
+  case "${step_status}" in
     Running|running)
       printf '  ...... %s\n' "${step_name}"
       ;;
@@ -209,12 +209,12 @@ ccq_get_step_status_message() {
 
 ccq_show_step_progress() {
   local step_name="${1:-}"
-  local status="${2:-Info}"
+  local step_status="${2:-Info}"
   local message="${3:-}"
   local display
-  display="$(ccq_get_step_status_message "${step_name}" "${status}" "${message}")"
+  display="$(ccq_get_step_status_message "${step_name}" "${step_status}" "${message}")"
 
-  case "${status}" in
+  case "${step_status}" in
     Success|success|PASS|pass) ccq_ui_success "${display}" ;;
     Failed|failed|FAIL|fail) ccq_ui_danger "${display}" ;;
     Skipped|skipped|SKIP|skip|Unsupported|unsupported|ManualRequired|manual|required) ccq_ui_warning "${display}" ;;
@@ -627,7 +627,7 @@ ccq_summary_status_text() {
 
 ccq_show_install_summary() {
   local rows=("$@")
-  local row name status version
+  local row name row_status version
   local name_width status_width version_width
   local header_name="组件" header_status="状态" header_version="版本"
   local top mid bottom
@@ -642,11 +642,11 @@ ccq_show_install_summary() {
   version_width="$(ccq_string_display_width "${header_version}")"
 
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r name status version <<< "${row}"
+    IFS=$'\t' read -r name row_status version <<< "${row}"
     [ -n "${version}" ] || version='-'
     local current_name current_status current_version
     current_name="$(ccq_string_display_width "${name}")"
-    current_status="$(ccq_string_display_width "${status}")"
+    current_status="$(ccq_string_display_width "${row_status}")"
     current_version="$(ccq_string_display_width "${version}")"
     [ "${current_name}" -gt "${name_width}" ] && name_width="${current_name}"
     [ "${current_status}" -gt "${status_width}" ] && status_width="${current_status}"
@@ -666,10 +666,10 @@ ccq_show_install_summary() {
   ccq_ui_dim "${mid}"
 
   for row in "${rows[@]}"; do
-    IFS=$'\t' read -r name status version <<< "${row}"
+    IFS=$'\t' read -r name row_status version <<< "${row}"
     [ -n "${version}" ] || version='-'
-    local rendered="│ $(ccq_display_pad "${name}" "${name_width}") │ $(ccq_display_pad "${status}" "${status_width}") │ $(ccq_display_pad "${version}" "${version_width}") │"
-    case "${status}" in
+    local rendered="│ $(ccq_display_pad "${name}" "${name_width}") │ $(ccq_display_pad "${row_status}" "${status_width}") │ $(ccq_display_pad "${version}" "${version_width}") │"
+    case "${row_status}" in
       *成功*|*已安装*) ccq_ui_success "${rendered}" ;;
       *失败*|*错误*) ccq_ui_danger "${rendered}" ;;
       *跳过*|*手动*) ccq_ui_warning "${rendered}" ;;
