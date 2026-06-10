@@ -30,7 +30,8 @@ ccq_json_read() {
 
 ccq_json_write_atomic() {
   local file_path="${1:-}"
-  local json_content="${2:-{}}"
+  local json_content="${2}"
+  [ -z "${json_content}" ] && json_content="{}"
   local dir temp_path
   [ -z "${file_path}" ] && return 1
   dir="$(dirname "${file_path}")"
@@ -44,7 +45,8 @@ ccq_json_write_atomic() {
 
 ccq_json_merge_file() {
   local file_path="${1:-}"
-  local patch_json="${2:-{}}"
+  local patch_json="${2}"
+  [ -z "${patch_json}" ] && patch_json="{}"
   [ -z "${file_path}" ] && return 1
 
   if ! command -v node >/dev/null 2>&1; then

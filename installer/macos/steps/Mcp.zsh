@@ -167,7 +167,8 @@ EOF
 
 ccq_mcp_build_server_entry_json() {
   local server_id="${1:-}"
-  local credentials_json="${2:-{}}"
+  local credentials_json="${2}"
+  [ -z "${credentials_json}" ] && credentials_json="{}"
   ccq_mcp_contract_ready || return 1
   CREDENTIALS_JSON="${credentials_json}" node -e '
 const fs = require("fs");
