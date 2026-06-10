@@ -309,8 +309,12 @@ Install-ApiKey() {
 
   model_env_json="{}"
   if [ "${selected_key}" = "custom" ] || ccq_provider_requires_model_config "${selected_key}"; then
-    ccq_ui_primary "此供应商需要配置模型名称；留空表示不写入对应模型键" "essential"
-    model_env_json="$(ccq_provider_read_model_env 2>/dev/null || printf '{}')"
+    local ask_index
+    ask_index="$(ccq_show_single_select_menu "是否配置模型环境键？(可选，大多数供应商不需要)" 0 "跳过" "配置模型")" || ask_index=0
+    if [ "${ask_index}" = "1" ]; then
+      ccq_ui_primary "将写入 settings.env 的 3 个模型键；留空表示不设置该键" "essential"
+      model_env_json="$(ccq_provider_read_model_env 2>/dev/null || printf '{}')"
+    fi
   fi
 
   profile_json="$(ccq_provider_build_profile_json "${selected_key}" "${provider_name}" "${base_url}" "${api_key}" "${model_env_json}")" || {
