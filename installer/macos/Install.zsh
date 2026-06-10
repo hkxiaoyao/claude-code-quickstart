@@ -270,12 +270,16 @@ ccq_silent_step_installed() {
 }
 
 ccq_show_step_list() {
-  local group_name step_ids step_id step_name description optional deps tag index=0
-  ccq_ui_primary "已注册的 macOS 安装步骤："
+  local group_name step_ids step_id step_name description optional deps tag group_label group_desc index=0
+  ccq_ui_primary "已注册的安装步骤："
+  printf '\n'
   for group_name in Basic Advanced; do
     step_ids="$(ccq_get_group_step_ids "${group_name}" 2>/dev/null || true)"
     [ -n "${step_ids}" ] || continue
-    ccq_ui_primary "─── ${group_name} ───"
+    group_label="$(ccq_get_group_field "${group_name}" Label 2>/dev/null || printf '%s' "${group_name}")"
+    group_desc="$(ccq_get_group_field "${group_name}" Description 2>/dev/null || true)"
+    ccq_ui_primary "─── ${group_label}（${group_desc}）───"
+    printf '\n'
     for step_id in ${step_ids}; do
       index=$((index + 1))
       step_name="$(ccq_get_step_field "${step_id}" StepName 2>/dev/null || printf '%s' "${step_id}")"
@@ -285,8 +289,9 @@ ccq_show_step_list() {
       tag="[必选]"
       ccq_bool_true "${optional}" && tag="[可选]"
       ccq_ui_info "  ${index}. ${tag} ${step_name}"
-      ccq_ui_dim "       ${description}" "developer"
+      ccq_ui_dim "       ${description}"
       ccq_ui_dim "       依赖: ${deps:-无}" "developer"
+      printf '\n'
     done
   done
 }
@@ -391,21 +396,31 @@ ccq_register_ccq_shortcut() {
 
   local select_panel
   select_panel() {
-    local choice
     if [ ! -r /dev/tty ]; then
       printf '%s\\n' 'Manage'
       return 0
     fi
-    printf '\\n%s\\n' 'CCQ 面板选择' > /dev/tty
-    printf '  1) 安装面板\\n' > /dev/tty
-    printf '  2) 管理面板\\n' > /dev/tty
-    printf '请输入编号 [1-2]，或 q 取消: ' > /dev/tty
-    IFS= read -r choice < /dev/tty || return 1
-    case \"\${choice}\" in
-      1) printf '%s\\n' 'Install' ;;
-      2) printf '%s\\n' 'Manage' ;;
-      q|Q|'') return 1 ;;
-      *) printf '%s\\n' '未知选择' >&2; return 1 ;;
+    if ! command -v ccq_show_single_select_menu >/dev/null 2>&1; then
+      local choice
+      printf '\\n%s\\n' 'CCQ 面板选择' > /dev/tty
+      printf '  1) 安装面板\\n' > /dev/tty
+      printf '  2) 管理面板\\n' > /dev/tty
+      printf '请输入编号 [1-2]，或 q 取消: ' > /dev/tty
+      IFS= read -r choice < /dev/tty || return 1
+      case \"\${choice}\" in
+        1) printf '%s\\n' 'Install' ;;
+        2) printf '%s\\n' 'Manage' ;;
+        q|Q|'') return 1 ;;
+        *) printf '%s\\n' '未知选择' >&2; return 1 ;;
+      esac
+      return 0
+    fi
+    local idx
+    idx=\"\$(ccq_show_single_select_menu 'CCQ 面板选择' '使用 ↑/↓ 选择，Enter 确认，Esc 取消' '安装面板' '管理面板')\" || return 1
+    case \"\${idx}\" in
+      0) printf '%s\\n' 'Install' ;;
+      1) printf '%s\\n' 'Manage' ;;
+      *) return 1 ;;
     esac
   }
 
@@ -525,7 +540,7 @@ ccq_select_top_level_action() {
 
 ccq_select_advanced_action() {
   ccq_prompt_single "进阶扩展 - 请选择安装模式：" 0 \
-    "一键安装 - 安装全部必选进阶组件（不含可选 CLI）" \
+    "一键安装 - 安装全部必选进阶组件（不含可选的 cc-switch/Codex/Antigravity CLI）" \
     "可选安装 - 选择要安装的组件"
 }
 

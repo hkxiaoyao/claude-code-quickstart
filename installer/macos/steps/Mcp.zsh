@@ -129,6 +129,7 @@ const fs = require("fs");
 const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 const s = (c.McpServers || {})[process.argv[2]] || {};
 const out = [];
+if (s.CredentialType === "single-key" && s.ApiKeyName) out.push({name:s.ApiKeyName,label:s.ApiKeyName,secret:true,required:true});
 for (const item of s.Credentials || []) out.push({name:item.Name,label:item.Label || item.Name,secret:!!item.Secret,required:item.Required !== false});
 for (const item of s.ArgsCredentials || []) out.push({name:item.ArgName,label:item.Label || item.ArgName,secret:!!item.Secret,required:item.Required !== false});
 if (s.TokenArg) out.push({name:s.TokenArg,label:s.TokenLabel || s.TokenArg,secret:true,required:true});

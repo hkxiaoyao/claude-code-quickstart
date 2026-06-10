@@ -250,6 +250,46 @@ process.stdout.write((group.StepIds || []).join("\n"));
   esac
 }
 
+ccq_get_group_field() {
+  local group_name="${1:-}"
+  local field="${2:-}"
+  [ -z "${group_name}" ] || [ -z "${field}" ] && return 1
+  if ccq_registry_can_use_contract; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const group = contract.Groups[process.argv[2]];
+if (!group) process.exit(1);
+const field = process.argv[3];
+if (!Object.prototype.hasOwnProperty.call(group, field)) process.exit(1);
+const value = group[field];
+if (value === undefined) process.exit(1);
+if (Array.isArray(value)) process.stdout.write(value.join("\n"));
+else process.stdout.write(String(value));
+' "${CCQ_STEPS_CONTRACT}" "${group_name}" "${field}"
+    return $?
+  fi
+  case "${group_name}" in
+    Basic)
+      case "${field}" in
+        Label) printf '基础环境' ;;
+        Description) printf 'Claude Code 最小可用环境' ;;
+        InstallMode) printf 'OneClickOnly' ;;
+        *) return 1 ;;
+      esac
+      ;;
+    Advanced)
+      case "${field}" in
+        Label) printf '进阶扩展' ;;
+        Description) printf '增强配置，MCP，Workflow' ;;
+        InstallMode) printf 'OneClickOrSelect' ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 ccq_get_step_dependencies() {
   if ccq_registry_can_use_contract; then
     node -e '
