@@ -113,7 +113,8 @@ ccq_provider_build_profile_json() {
   local provider_name="${2:-}"
   local base_url="${3:-}"
   local api_key="${4:-}"
-  local model_env_json="${5:-{}}"
+  local model_env_json="${5}"
+  [ -z "${model_env_json}" ] && model_env_json="{}"
   ccq_provider_contract_node || return 1
   printf '%s' "${api_key}" | PROVIDER_KEY="${key}" PROVIDER_NAME="${provider_name}" PROVIDER_BASE_URL="${base_url}" MODEL_ENV_JSON="${model_env_json}" node -e '
 const fs = require("fs");
