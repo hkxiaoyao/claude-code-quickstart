@@ -310,7 +310,7 @@ Install-ApiKey() {
   model_env_json="{}"
   if [ "${selected_key}" = "custom" ] || ccq_provider_requires_model_config "${selected_key}"; then
     ccq_ui_primary "此供应商需要配置模型名称；留空表示不写入对应模型键" "essential"
-    model_env_json="$(ccq_provider_read_model_env)" || model_env_json="{}"
+    model_env_json="$(ccq_provider_read_model_env 2>/dev/null || printf '{}')"
   fi
 
   profile_json="$(ccq_provider_build_profile_json "${selected_key}" "${provider_name}" "${base_url}" "${api_key}" "${model_env_json}")" || {
