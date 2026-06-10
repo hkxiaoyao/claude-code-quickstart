@@ -94,7 +94,7 @@ ccq_call_step_function() {
 ccq_capture_step_function() {
   local function_name="${1:-}"
   local stderr_mode="${2:-capture}"
-  local output_file error_file status
+  local output_file error_file cmd_status
   [ -n "${function_name}" ] || return 1
   if ! command -v "${function_name}" >/dev/null 2>&1; then
     CCQ_CAPTURED_STEP_OUTPUT=""
@@ -106,12 +106,12 @@ ccq_capture_step_function() {
   case "${stderr_mode}" in
     discard)
       "${function_name}" >"${output_file}" 2>/dev/null
-      status=$?
+      cmd_status=$?
       ;;
     developer)
       error_file="$(mktemp "${TMPDIR:-/tmp}/ccq-step-err.XXXXXX")" || { rm -f "${output_file}"; return 1; }
       "${function_name}" >"${output_file}" 2>"${error_file}"
-      status=$?
+      cmd_status=$?
       if command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer && command -v ccq_tty_available >/dev/null 2>&1 && ccq_tty_available; then
         [ -s "${error_file}" ] && cat "${error_file}" > /dev/tty 2>/dev/null || true
       fi
@@ -120,12 +120,12 @@ ccq_capture_step_function() {
       ;;
     *)
       "${function_name}" >"${output_file}" 2>&1
-      status=$?
+      cmd_status=$?
       ;;
   esac
   CCQ_CAPTURED_STEP_OUTPUT="$(cat "${output_file}" 2>/dev/null || true)"
   rm -f "${output_file}"
-  return "${status}"
+  return "${cmd_status}"
 }
 
 ccq_parse_result_field() {
