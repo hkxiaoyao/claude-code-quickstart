@@ -77,13 +77,19 @@ Object.entries(servers)
 }
 
 ccq_mcp_select_servers() {
-  local lines line id name desc tag options=() ids=() choice item selected=()
+  local lines line id name desc tag options=() ids=() default_indices=() i
   lines="$(ccq_mcp_all_lines)" || return 1
   if ! ccq_mcp_tty; then
     ccq_mcp_recommended_ids
     return 0
   fi
 
+  if ! command -v ccq_show_multi_select_menu >/dev/null 2>&1; then
+    ccq_mcp_recommended_ids
+    return 0
+  fi
+
+  i=0
   while IFS= read -r line; do
     [ -n "${line}" ] || continue
     id="${line%%$'\t'*}"
@@ -94,34 +100,24 @@ ccq_mcp_select_servers() {
     tag="${rest#*$'\t'}"
     ids+=("${id}")
     options+=("${name} [$tag] - ${desc}")
+    [ "${tag}" = "recommended" ] && default_indices+=("${i}")
+    i=$((i + 1))
   done <<EOF
 ${lines}
 EOF
 
-  printf '%s\n' "请选择要配置的 MCP Server（多个用空格分隔，直接回车使用推荐项）" >/dev/tty
-  local i=1
-  for item in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${item}" >/dev/tty
-    i=$((i + 1))
-  done
-  printf '请输入编号: ' >/dev/tty
-  IFS= read -r choice </dev/tty || return 1
-  if [ -z "${choice}" ]; then
+  local selected_indices
+  selected_indices="$(ccq_show_multi_select_menu "请选择要配置的 MCP Server（空格切换，Enter 确认）" "${default_indices[*]}" "${options[@]}")" || {
     ccq_mcp_recommended_ids
     return 0
-  fi
-  for item in ${choice}; do
-    case "${item}" in
+  }
+
+  for i in ${selected_indices}; do
+    case "${i}" in
       ''|*[!0-9]*) ;;
-      *)
-        if [ "${item}" -ge 1 ] && [ "${item}" -le "${#ids[@]}" ]; then
-          selected+=("${ids[$item]}")
-        fi
-        ;;
+      *) [ "${i}" -ge 0 ] && [ "${i}" -lt "${#ids[@]}" ] && printf '%s\n' "${ids[$((i + 1))]}" ;;
     esac
   done
-  [ "${#selected[@]}" -gt 0 ] || return 1
-  printf '%s\n' "${selected[@]}"
 }
 
 ccq_mcp_collect_credentials_json() {
@@ -409,14 +405,13 @@ ccq_mcp_manage_menu() {
   while true; do
     ccq_mcp_show_status
     [ -r /dev/tty ] || return 0
-    printf '\nMCP 管理：1) 启用 2) 禁用 3) 删除 4) 安装/添加 q) 返回: ' >/dev/tty
-    IFS= read -r choice </dev/tty || return 1
+    choice="$(ccq_show_single_select_menu "MCP 管理 - 选择操作" 0 "启用" "禁用" "删除" "安装/添加" "返回")" || return 0
     case "${choice}" in
-      q|Q) return 0 ;;
-      1) server_id="$(ccq_mcp_prompt_text "要启用的 ServerId")" && ccq_mcp_enable_server "${server_id}" || ccq_ui_warning "启用失败" ;;
-      2) server_id="$(ccq_mcp_prompt_text "要禁用的 ServerId")" && ccq_mcp_disable_server "${server_id}" || ccq_ui_warning "禁用失败" ;;
-      3) server_id="$(ccq_mcp_prompt_text "要删除的 ServerId")" && ccq_mcp_remove_server "${server_id}" || ccq_ui_warning "删除失败" ;;
-      4) Install-Mcp >/dev/null || ccq_ui_warning "安装/添加失败" ;;
+      0) server_id="$(ccq_mcp_prompt_text "要启用的 ServerId")" && ccq_mcp_enable_server "${server_id}" || ccq_ui_warning "启用失败" ;;
+      1) server_id="$(ccq_mcp_prompt_text "要禁用的 ServerId")" && ccq_mcp_disable_server "${server_id}" || ccq_ui_warning "禁用失败" ;;
+      2) server_id="$(ccq_mcp_prompt_text "要删除的 ServerId")" && ccq_mcp_remove_server "${server_id}" || ccq_ui_warning "删除失败" ;;
+      3) Install-Mcp >/dev/null || ccq_ui_warning "安装/添加失败" ;;
+      4) return 0 ;;
       *) ccq_ui_warning "未知选项" ;;
     esac
   done

@@ -462,13 +462,11 @@ ccq_provider_edit_key() {
   [ -f "${profile_path}" ] || return 1
   ccq_provider_tty || return 1
 
-  printf '\n编辑供应商 %s\n  1) API Key\n  2) Base URL\n  3) 名称\n  q) 取消\n请输入编号: ' "${key}" >/dev/tty
-  IFS= read -r choice </dev/tty || return 1
+  choice="$(ccq_show_single_select_menu "编辑供应商 ${key} - 选择修改项" 0 "API Key" "Base URL" "名称")" || return 0
   case "${choice}" in
-    q|Q) return 0 ;;
-    1) new_value="$(ccq_provider_prompt_secret "新的 API Key（输入不会显示）")" || return 1 ;;
-    2) new_value="$(ccq_provider_prompt_text "新的 Base URL")" || return 1 ;;
-    3) new_value="$(ccq_provider_prompt_text "新的供应商名称")" || return 1 ;;
+    0) new_value="$(ccq_provider_prompt_secret "新的 API Key（输入不会显示）")" || return 1; choice=1 ;;
+    1) new_value="$(ccq_provider_prompt_text "新的 Base URL")" || return 1; choice=2 ;;
+    2) new_value="$(ccq_provider_prompt_text "新的供应商名称")" || return 1; choice=3 ;;
     *) CCQ_PROVIDER_ERROR="未知编辑选项"; return 1 ;;
   esac
   [ -n "${new_value}" ] || { CCQ_PROVIDER_ERROR="新值不能为空"; return 1; }
@@ -503,14 +501,13 @@ ccq_provider_manage_menu() {
   while true; do
     ccq_provider_show_status
     [ -r /dev/tty ] || return 0
-    printf '\n供应商管理：1) 添加 2) 编辑 3) 删除 4) 切换 q) 返回: ' >/dev/tty
-    IFS= read -r choice </dev/tty || return 1
+    choice="$(ccq_show_single_select_menu "供应商管理 - 选择操作" 0 "添加" "编辑" "删除" "切换" "返回")" || return 0
     case "${choice}" in
-      q|Q) return 0 ;;
-      1) Install-ApiKey >/dev/null || ccq_ui_warning "添加供应商失败" ;;
-      2) key="$(ccq_provider_prompt_text "要编辑的供应商 key")" && ccq_provider_edit_key "${key}" || ccq_ui_warning "编辑失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
-      3) key="$(ccq_provider_prompt_text "要删除的供应商 key")" && ccq_provider_remove_key "${key}" || ccq_ui_warning "删除失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
-      4) key="$(ccq_provider_prompt_text "要切换的供应商 key")" && ccq_provider_switch_key "${key}" || ccq_ui_warning "切换失败" ;;
+      0) Install-ApiKey >/dev/null || ccq_ui_warning "添加供应商失败" ;;
+      1) key="$(ccq_provider_prompt_text "要编辑的供应商 key")" && ccq_provider_edit_key "${key}" || ccq_ui_warning "编辑失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
+      2) key="$(ccq_provider_prompt_text "要删除的供应商 key")" && ccq_provider_remove_key "${key}" || ccq_ui_warning "删除失败: ${CCQ_PROVIDER_ERROR:-未知错误}" ;;
+      3) key="$(ccq_provider_prompt_text "要切换的供应商 key")" && ccq_provider_switch_key "${key}" || ccq_ui_warning "切换失败" ;;
+      4) return 0 ;;
       *) ccq_ui_warning "未知选项" ;;
     esac
   done
