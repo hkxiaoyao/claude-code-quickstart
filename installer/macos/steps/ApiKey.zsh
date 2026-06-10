@@ -79,7 +79,7 @@ ccq_provider_prompt_text() {
 
 ccq_provider_read_model_env() {
   ccq_provider_contract_node || return 1
-  local output="{}"
+  local output=""
   output="$(node -e '
 const fs = require("fs");
 const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -94,13 +94,13 @@ for (const key of c.ManagedEnv.ProviderManagedModelEnvKeys || []) {
     [ -n "${line}" ] || continue
     key="${line%%$'\t'*}"
     label="${line#*$'\t'}"
-    value="$(ccq_provider_prompt_text "  ${label} (${key})，留空跳过" "")"
+    value="$(ccq_provider_prompt_text "${label} (${key})，留空跳过" "")"
     if [ -n "${value}" ]; then
       patch="$(MODEL_KEY="${key}" MODEL_VALUE="${value}" PATCH_JSON="${patch}" node -e '
 const patch = JSON.parse(process.env.PATCH_JSON || "{}");
 patch[process.env.MODEL_KEY] = process.env.MODEL_VALUE;
-process.stdout.write(JSON.stringify(patch));
-')"
+console.log(JSON.stringify(patch));
+')" || return 1
     fi
   done <<EOF
 ${output}
