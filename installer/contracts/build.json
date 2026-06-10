@@ -103,7 +103,10 @@
       "macos/core/PackageManager.zsh",
       "macos/core/Json.zsh",
       "macos/core/Registry.zsh",
-      "macos/core/Bootstrap.zsh"
+      "macos/core/Bootstrap.zsh",
+      "macos/core/Provider.zsh",
+      "macos/core/McpManager.zsh",
+      "macos/core/Update.zsh"
     ],
     "Artifacts": [
       {

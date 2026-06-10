@@ -181,6 +181,63 @@ for (const name of names) console.log(name);
 ' || true
 }
 
+# ─── 预取并发（macOS zsh 后台 job 实现，对齐 Windows ThreadJob）─────────────
+ccq_skills_discovery_cache_dir() {
+  printf '%s/.ccq/skills-discovery-cache\n' "${TMPDIR:-/tmp}"
+}
+
+ccq_skills_prefetch_one() {
+  local source="${1:-}"
+  local skill="${2:-}"
+  local cache_file="${3:-}"
+  local names
+  names="$(ccq_skills_source_list "${source}" "${skill}" 2>/dev/null || true)"
+  if [ -n "${names}" ]; then
+    printf '%s\n' "${names}" > "${cache_file}" 2>/dev/null || true
+  else
+    printf '' > "${cache_file}" 2>/dev/null || true
+  fi
+}
+
+ccq_skills_prefetch_all() {
+  local cache_dir max_concurrent=2 jobs=0 record id name source skill skip_discovery cache_file pid
+  cache_dir="$(ccq_skills_discovery_cache_dir)"
+  mkdir -p "${cache_dir}" 2>/dev/null || return 0
+
+  while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
+    [ "${skip_discovery}" = "true" ] && continue
+    [ -z "${source}" ] && continue
+    cache_file="${cache_dir}/${id}.txt"
+    [ -f "${cache_file}" ] && continue
+
+    while [ "${jobs}" -ge "${max_concurrent}" ]; do
+      wait -n 2>/dev/null || sleep 0.1
+      jobs=$((jobs - 1))
+    done
+
+    ccq_skills_prefetch_one "${source}" "${skill}" "${cache_file}" &
+    jobs=$((jobs + 1))
+  done <<EOF
+$(ccq_skills_catalogue)
+EOF
+
+  wait 2>/dev/null || true
+}
+
+ccq_skills_source_list_cached() {
+  local id="${1:-}"
+  local source="${2:-}"
+  local skill="${3:-}"
+  local cache_dir cache_file
+  cache_dir="$(ccq_skills_discovery_cache_dir)"
+  cache_file="${cache_dir}/${id}.txt"
+  if [ -f "${cache_file}" ]; then
+    cat "${cache_file}" 2>/dev/null || ccq_skills_source_list "${source}" "${skill}"
+  else
+    ccq_skills_source_list "${source}" "${skill}"
+  fi
+}
+
 ccq_skills_select_source() {
   ccq_skills_tty || return 1
   local lines id name source skill desc default static_name skip_discovery order options=() records=() choice default_index=0 index=0
@@ -202,16 +259,17 @@ EOF
 }
 
 ccq_skills_select_children() {
-  local source="${1:-}"
-  local skill="${2:-}"
-  local skip_discovery="${3:-false}"
-  local static_name="${4:-}"
+  local id="${1:-}"
+  local source="${2:-}"
+  local skill="${3:-}"
+  local skip_discovery="${4:-false}"
+  local static_name="${5:-}"
   local names item selected_indices selected_index defaults=() i=0
   if [ "${skip_discovery}" = "true" ]; then
     [ -n "${skill}" ] && printf '%s\n' "${skill}"
     return 0
   fi
-  names="$(ccq_skills_source_list "${source}" "${skill}")"
+  names="$(ccq_skills_source_list_cached "${id}" "${source}" "${skill}")"
   [ -n "${names}" ] || return 0
   local options=(${names})
   [ "${#options[@]}" -gt 1 ] || { printf '%s\n' "${options[@]}"; return 0; }
@@ -280,13 +338,16 @@ Install-Skills() {
     ccq_skills_install_result false "" "Claude Code 不可用，请先完成 ClaudeCode 步骤"
     return 1
   fi
+
+  ccq_skills_prefetch_all &
+
   local record id name source skill desc default static_name skip_discovery order selected_names installed=() failures=() child copy_mode
   copy_mode="$(ccq_skills_resolve_copy_mode)"
   record="$(ccq_skills_select_source)" || { ccq_skills_install_result false "" "用户取消 Skills source 选择"; return 1; }
   IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order <<EOF
 ${record}
 EOF
-  if ! selected_names="$(ccq_skills_select_children "${source}" "${skill}" "${skip_discovery}" "${static_name}")"; then
+  if ! selected_names="$(ccq_skills_select_children "${id}" "${source}" "${skill}" "${skip_discovery}" "${static_name}")"; then
     ccq_skills_install_result false "" "用户取消子 Skills 选择"
     return 1
   fi

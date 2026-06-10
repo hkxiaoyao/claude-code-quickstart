@@ -49,9 +49,17 @@ if (fs.existsSync(settingsPath)) {
   }
 }
 const missing = [];
+const drifted = [];
+const deprecated = [];
 const env = settings.env && typeof settings.env === "object" && !Array.isArray(settings.env) ? settings.env : {};
+// 受管 env：缺失 → missing；存在但值不符 → drifted（仅 plansDirectory 之外的固定默认值参与漂移判定）
 for (const [key, value] of Object.entries(contract.ClaudeConfigEnvDefaults || {})) {
   if (!env[key] || !String(env[key]).trim()) missing.push(`env.${key}`);
+  else if (String(env[key]) !== String(value)) drifted.push(`env.${key}`);
+}
+// 废弃 env 键：存在即应清理
+for (const key of contract.ClaudeConfigDeprecatedEnvKeys || []) {
+  if (Object.prototype.hasOwnProperty.call(env, key)) deprecated.push(`env.${key}`);
 }
 for (const [key, value] of Object.entries(contract.TopLevelDefaults || {})) {
   if (key === "attribution") {
@@ -59,13 +67,15 @@ for (const [key, value] of Object.entries(contract.TopLevelDefaults || {})) {
     continue;
   }
   if (settings[key] === undefined || settings[key] === null || String(settings[key]).trim() === "") missing.push(key);
+  else if (key === "plansDirectory" && settings[key] !== value) drifted.push(key);
 }
 const permissions = settings.permissions && typeof settings.permissions === "object" ? settings.permissions : {};
 const allow = Array.isArray(permissions.allow) ? permissions.allow : [];
 for (const perm of contract.ClaudeConfigBasePermissions || []) {
   if (!allow.includes(perm)) missing.push(`permissions.allow.${perm}`);
 }
-process.stdout.write(JSON.stringify({ installed: !parseError && missing.length === 0, parseError, missing }, null, 2));
+const hasUpdate = missing.length > 0 || drifted.length > 0 || deprecated.length > 0;
+process.stdout.write(JSON.stringify({ installed: !parseError && missing.length === 0, parseError, missing, drifted, deprecated, hasUpdate }, null, 2));
 ' "${CCQ_CLAUDE_CONFIG_CONTRACT}" "${settings_path}"
 }
 

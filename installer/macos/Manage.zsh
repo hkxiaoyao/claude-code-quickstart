@@ -108,7 +108,7 @@ ccq_manage_load_core() {
 
   local core_dir="${CCQ_MACOS_ROOT}/core"
   local core_file
-  for core_file in Ui Process Profile Platform PackageManager Json Registry Bootstrap; do
+  for core_file in Ui Process Profile Platform PackageManager Json Registry Bootstrap Provider McpManager Update; do
     ccq_manage_source_file "${core_dir}/${core_file}.zsh" || {
       printf '无法加载 macOS core: %s\n' "${core_file}.zsh" >&2
       return 1
@@ -437,14 +437,33 @@ ccq_manage_update_action() {
     return 0
   fi
 
+  # 5.1 获取更新锁（防并发）
+  if ! ccq_update_acquire_lock; then
+    ccq_ui_danger "无法获取更新锁（30s 超时），可能有其他 CCQ 更新正在进行"
+    return 1
+  fi
+  trap 'ccq_update_release_lock' EXIT INT TERM
+
+  # 5.6 创建更新前快照
+  local snapshot_dir
+  snapshot_dir="$(ccq_update_create_snapshot 2>/dev/null || echo "")"
+  [ -n "${snapshot_dir}" ] && ccq_ui_dim "  快照目录: ${snapshot_dir}"
+
+  # 现有 update 流程
   ccq_manage_update_status
   local selected_ids step_id fail_count=0
-  selected_ids="$(ccq_manage_select_update_steps)" || return 0
+  selected_ids="$(ccq_manage_select_update_steps)" || { ccq_update_release_lock; return 0; }
   ccq_manage_reset_update_summary
   for step_id in ${selected_ids}; do
     ccq_manage_run_update_step "${step_id}" || fail_count=$((fail_count + 1))
   done
   ccq_manage_show_update_summary
+
+  # 5.6 清理旧快照
+  ccq_update_clear_old_snapshots 5 30 "${snapshot_dir}"
+
+  ccq_update_release_lock
+  trap - EXIT INT TERM
   [ "${fail_count}" -eq 0 ]
 }
 
@@ -487,16 +506,16 @@ ccq_manage_provider_action() {
       return 0
     fi
     if [ -n "${CCQ_PARAM_PROVIDER}" ]; then
-      ccq_provider_switch_key "${CCQ_PARAM_PROVIDER}" || { ccq_ui_danger "供应商切换失败: ${CCQ_PARAM_PROVIDER}"; return 1; }
-      ccq_ui_success "供应商已切换: ${CCQ_PARAM_PROVIDER}"
+      ccq_provider_switch "${CCQ_PARAM_PROVIDER}" || { ccq_ui_danger "供应商切换失败: ${CCQ_PARAM_PROVIDER}"; return 1; }
       return 0
     fi
-    ccq_provider_manage_menu
+    ccq_provider_sync_from_settings
+    ccq_provider_show_manage_menu
     return $?
   fi
 
   ccq_manage_show_provider_status
-  ccq_ui_warning "Provider 管理函数尚未加载，请确认 ApiKey.zsh 已实现并被入口加载"
+  ccq_ui_warning "Provider 核心模块未加载"
 }
 
 ccq_manage_mcp_meta_path() {
@@ -517,7 +536,7 @@ ccq_manage_mcp_action() {
   else
     ccq_ui_warning "  尚未发现 MCP vault: ${meta_path}"
   fi
-  ccq_ui_warning "MCP 管理函数尚未加载，请确认 Mcp.zsh 已实现并被入口加载"
+  ccq_ui_warning "McpManager 核心模块未加载"
 }
 
 ccq_manage_skills_action() {

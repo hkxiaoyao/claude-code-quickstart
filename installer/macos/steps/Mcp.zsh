@@ -120,10 +120,30 @@ EOF
   done
 }
 
+# 读取 Vault 中已保存的历史凭据（用于安装时提示复用）
+ccq_mcp_vault_credentials() {
+  local server_id="${1:-}"
+  local meta_path
+  meta_path="$(ccq_mcp_meta_path)"
+  [ -f "${meta_path}" ] || { printf '{}'; return 0; }
+  command -v node >/dev/null 2>&1 || { printf '{}'; return 0; }
+  node -e '
+const fs = require("fs");
+try {
+  const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8") || "{}");
+  const entry = (data.servers || {})[process.argv[2]] || {};
+  const creds = (entry.credentials || {}).values || {};
+  process.stdout.write(JSON.stringify(creds));
+} catch (e) { process.stdout.write("{}"); }
+' "${meta_path}" "${server_id}" 2>/dev/null || printf '{}'
+}
+
 ccq_mcp_collect_credentials_json() {
   local server_id="${1:-}"
   ccq_mcp_contract_ready || return 1
   local fields field name label secret required value json="{}"
+  local history_json history_value reply
+  history_json="$(ccq_mcp_vault_credentials "${server_id}")"
   fields="$(node -e '
 const fs = require("fs");
 const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
@@ -142,7 +162,22 @@ process.stdout.write(JSON.stringify(out));
     label="$(printf '%s' "${field}" | node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(v.label || v.name || "");')"
     secret="$(printf '%s' "${field}" | node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(v.secret ? "true" : "false");')"
     required="$(printf '%s' "${field}" | node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(v.required ? "true" : "false");')"
-    if [ "${secret}" = "true" ]; then
+
+    history_value="$(printf '%s' "${history_json}" | NAME="${name}" node -e 'const fs=require("fs"); const h=JSON.parse(fs.readFileSync(0,"utf8") || "{}"); process.stdout.write(h[process.env.NAME] || "");' 2>/dev/null || true)"
+
+    if [ -n "${history_value}" ] && ccq_mcp_tty; then
+      printf '  %s: 检测到历史凭据，复用? [Y/n] ' "${label}" >&2
+      read -r reply </dev/tty
+      if [ -z "${reply}" ] || [ "${reply}" = "Y" ] || [ "${reply}" = "y" ]; then
+        value="${history_value}"
+      else
+        if [ "${secret}" = "true" ]; then
+          value="$(ccq_mcp_prompt_secret "${label}（输入不会显示）")" || value=""
+        else
+          value="$(ccq_mcp_prompt_text "${label}")" || value=""
+        fi
+      fi
+    elif [ "${secret}" = "true" ]; then
       value="$(ccq_mcp_prompt_secret "${label}（输入不会显示）")" || value=""
     else
       value="$(ccq_mcp_prompt_text "${label}")" || value=""
@@ -316,105 +351,4 @@ Verify-Mcp() {
   return 1
 }
 
-ccq_mcp_show_status() {
-  local claude_json meta_path
-  claude_json="$(ccq_mcp_claude_json_path)"
-  meta_path="$(ccq_mcp_meta_path)"
-  ccq_ui_primary "MCP Server 状态："
-  node -e '
-const fs = require("fs");
-const claudePath = process.argv[1];
-const metaPath = process.argv[2];
-const claude = fs.existsSync(claudePath) ? JSON.parse(fs.readFileSync(claudePath, "utf8") || "{}") : {};
-const meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8") || "{}") : {};
-const ids = new Set([...Object.keys(claude.mcpServers || {}), ...Object.keys(meta.servers || {})]);
-if (!ids.size) { console.log("  尚未配置 MCP Server"); process.exit(0); }
-for (const id of ids) {
-  const active = !!(claude.mcpServers || {})[id];
-  const disabled = !!((meta.servers || {})[id]?.disabled);
-  const status = active ? "Active" : (disabled ? "Disabled" : "Missing");
-  console.log(`  - ${id}: ${status}`);
-}
-' "${claude_json}" "${meta_path}"
-}
-
-ccq_mcp_state_update_json() {
-  local action="${1:-}"
-  local server_id="${2:-}"
-  local claude_path meta_path
-  [ -n "${action}" ] && [ -n "${server_id}" ] || return 1
-  claude_path="$(ccq_mcp_claude_json_path)"
-  meta_path="$(ccq_mcp_meta_path)"
-  ACTION="${action}" node -e '
-const fs = require("fs");
-const id = process.argv[1];
-const claudePath = process.argv[2];
-const metaPath = process.argv[3];
-const action = process.env.ACTION;
-let claude = fs.existsSync(claudePath) ? JSON.parse(fs.readFileSync(claudePath, "utf8") || "{}") : {};
-let meta = fs.existsSync(metaPath) ? JSON.parse(fs.readFileSync(metaPath, "utf8") || "{}") : { schemaVersion: 1, servers: {} };
-if (!meta.servers || typeof meta.servers !== "object") meta.servers = {};
-if (action === "disable") {
-  const config = claude.mcpServers?.[id] || meta.servers[id]?.config;
-  if (!config) process.exit(1);
-  if (!meta.servers[id]) meta.servers[id] = { credentials: { values: {}, envFileValues: {} } };
-  meta.servers[id].config = config;
-  meta.servers[id].disabled = true;
-  meta.servers[id].updatedAt = new Date().toISOString();
-  if (claude.mcpServers) delete claude.mcpServers[id];
-} else if (action === "enable") {
-  const entry = meta.servers[id];
-  if (!entry || !entry.config) process.exit(1);
-  if (!claude.mcpServers || typeof claude.mcpServers !== "object") claude.mcpServers = {};
-  claude.mcpServers[id] = entry.config;
-  entry.disabled = false;
-  entry.updatedAt = new Date().toISOString();
-} else if (action === "remove") {
-  if (claude.mcpServers) delete claude.mcpServers[id];
-  if (meta.servers) delete meta.servers[id];
-} else {
-  process.exit(1);
-}
-process.stdout.write(JSON.stringify({ claude, meta }, null, 2) + "\n");
-' "${server_id}" "${claude_path}" "${meta_path}"
-}
-
-ccq_mcp_write_state_update() {
-  local action="${1:-}"
-  local server_id="${2:-}"
-  local envelope claude_json meta_json
-  envelope="$(ccq_mcp_state_update_json "${action}" "${server_id}")" || return 1
-  claude_json="$(printf '%s' "${envelope}" | node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(JSON.stringify(v.claude, null, 2) + "\n");')" || return 1
-  meta_json="$(printf '%s' "${envelope}" | node -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(JSON.stringify(v.meta, null, 2) + "\n");')" || return 1
-  ccq_json_write_atomic "$(ccq_mcp_claude_json_path)" "${claude_json}" || return 1
-  ccq_json_write_atomic "$(ccq_mcp_meta_path)" "${meta_json}" || return 1
-}
-
-ccq_mcp_disable_server() {
-  ccq_mcp_write_state_update disable "${1:-}"
-}
-
-ccq_mcp_enable_server() {
-  ccq_mcp_write_state_update enable "${1:-}"
-}
-
-ccq_mcp_remove_server() {
-  ccq_mcp_write_state_update remove "${1:-}"
-}
-
-ccq_mcp_manage_menu() {
-  local choice server_id
-  while true; do
-    ccq_mcp_show_status
-    [ -r /dev/tty ] || return 0
-    choice="$(ccq_show_single_select_menu "MCP 管理 - 选择操作" 0 "启用" "禁用" "删除" "安装/添加" "返回")" || return 0
-    case "${choice}" in
-      0) server_id="$(ccq_mcp_prompt_text "要启用的 ServerId")" && ccq_mcp_enable_server "${server_id}" || ccq_ui_warning "启用失败" ;;
-      1) server_id="$(ccq_mcp_prompt_text "要禁用的 ServerId")" && ccq_mcp_disable_server "${server_id}" || ccq_ui_warning "禁用失败" ;;
-      2) server_id="$(ccq_mcp_prompt_text "要删除的 ServerId")" && ccq_mcp_remove_server "${server_id}" || ccq_ui_warning "删除失败" ;;
-      3) Install-Mcp >/dev/null || ccq_ui_warning "安装/添加失败" ;;
-      4) return 0 ;;
-      *) ccq_ui_warning "未知选项" ;;
-    esac
-  done
-}
+# 管理函数已搬至 core/McpManager.zsh，此文件仅保留安装契约
