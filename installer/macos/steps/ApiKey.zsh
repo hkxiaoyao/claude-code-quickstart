@@ -209,29 +209,9 @@ ccq_provider_select_builtin() {
     options+=("${name} - ${desc}")
   done
 
-  printf '%s\n' "请选择第三方供应商" >/dev/tty
-  local i=1
-  for line in "${options[@]}"; do
-    printf '  %s) %s\n' "${i}" "${line}" >/dev/tty
-    i=$((i + 1))
-  done
-
-  local choice
-  while true; do
-    printf '请输入编号 [1-%s]，或 q 取消: ' "${#options[@]}" >/dev/tty
-    IFS= read -r choice </dev/tty || return 1
-    case "${choice}" in
-      q|Q) return 1 ;;
-      ''|*[!0-9]*) printf '%s\n' "请输入有效编号" >/dev/tty ;;
-      *)
-        if [ "${choice}" -ge 1 ] && [ "${choice}" -le "${#options[@]}" ]; then
-          printf '%s\n' "${keys[$choice]}"
-          return 0
-        fi
-        printf '%s\n' "编号超出范围" >/dev/tty
-        ;;
-    esac
-  done
+  local selected_index
+  selected_index="$(ccq_show_single_select_menu "请选择第三方供应商" 0 "${options[@]}")" || return 1
+  printf '%s\n' "${keys[$((selected_index + 1))]}"
 }
 
 ccq_provider_get_builtin_field() {
