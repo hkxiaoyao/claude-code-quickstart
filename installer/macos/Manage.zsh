@@ -301,8 +301,18 @@ ccq_manage_update_status_lines() {
     reason="-"
     if [ "${installed}" = "true" ]; then
       has_update_line="$(ccq_manage_step_has_update "${step_id}")"
-      has_update="${has_update_line%%$'\t'*}"
-      reason="${has_update_line#*$'\t'}"
+      if [ "${has_update_line}" != "${has_update_line#*$'\t'}" ]; then
+        # 含 tab 分隔符：正常解析两段
+        has_update="${has_update_line%%$'\t'*}"
+        reason="${has_update_line#*$'\t'}"
+      elif [ -n "${has_update_line}" ]; then
+        # 无 tab（异常输出）：整行作为状态，reason 保持占位符
+        has_update="${has_update_line}"
+      fi
+      case "${has_update}" in
+        true|false|null) ;;
+        *) has_update="null"; reason="检测输出异常" ;;
+      esac
     fi
 
     hint="$(ccq_manage_update_hint "${step_id}")"
@@ -389,14 +399,14 @@ EOF
     # 非交互模式：仅执行确认有更新的项
     local pos=0
     for selected_index in "${defaults[@]}"; do
-      printf '%s\n' "${ids[$((selected_index + 1))]}"
+      printf '%s\n' "${ids[$(((selected_index + 1) > ${#ids[@]} ? ${#ids[@]} : selected_index + 1))]}"
     done
     return 0
   fi
 
   indices="$(ccq_manage_prompt_multi "可更新组件（默认选中有更新项）" "${defaults[*]}" "${labels[@]}")" || return 1
   for selected_index in ${indices}; do
-    printf '%s\n' "${ids[$((selected_index + 1))]}"
+    printf '%s\n' "${ids[$(((selected_index + 1) > ${#ids[@]} ? ${#ids[@]} : selected_index + 1))]}"
   done
 }
 

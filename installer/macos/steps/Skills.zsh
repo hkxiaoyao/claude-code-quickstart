@@ -255,7 +255,7 @@ ${lines}
 EOF
   [ "${#options[@]}" -gt 0 ] || return 1
   choice="$(ccq_show_single_select_menu "Skills - 选择要安装的 Skills" "${default_index}" "${options[@]}")" || return 1
-  printf '%s\n' "${records[$((choice + 1))]}"
+  printf '%s\n' "${records[$(((choice + 1) > ${#records[@]} ? ${#records[@]} : choice + 1))]}"
 }
 
 ccq_skills_select_children() {
@@ -282,7 +282,7 @@ ccq_skills_select_children() {
   selected_indices="$(ccq_show_multi_select_menu "Skills - 选择要安装的子 Skills" "${defaults[*]}" "${options[@]}")" || return 1
   [ -n "${selected_indices}" ] || return 1
   for selected_index in ${selected_indices}; do
-    printf '%s\n' "${options[$((selected_index + 1))]}"
+    printf '%s\n' "${options[$(((selected_index + 1) > ${#options[@]} ? ${#options[@]} : selected_index + 1))]}"
   done
 }
 
@@ -481,7 +481,7 @@ ccq_skills_select_installed_names() {
   selected_indices="$(ccq_show_multi_select_menu "Skills - 选择要卸载的 Skills" "" "${options[@]}")" || return 1
   [ -n "${selected_indices}" ] || return 1
   for selected_index in ${selected_indices}; do
-    printf '%s\n' "${options[$((selected_index + 1))]}"
+    printf '%s\n' "${options[$(((selected_index + 1) > ${#options[@]} ? ${#options[@]} : selected_index + 1))]}"
   done
 }
 

@@ -115,7 +115,7 @@ EOF
   for i in ${selected_indices}; do
     case "${i}" in
       ''|*[!0-9]*) ;;
-      *) [ "${i}" -ge 0 ] && [ "${i}" -lt "${#ids[@]}" ] && printf '%s\n' "${ids[$((i + 1))]}" ;;
+      *) [ "${i}" -ge 0 ] && [ "${i}" -lt "${#ids[@]}" ] && printf '%s\n' "${ids[$(((i + 1) > ${#ids[@]} ? ${#ids[@]} : i + 1))]}" ;;
     esac
   done
 }
@@ -238,14 +238,15 @@ function buildConfig() {
 }
 const config = buildConfig();
 const definitionHash = crypto.createHash("sha256").update(JSON.stringify(server)).digest("hex").slice(0, 8);
-process.stdout.write(JSON.stringify({ config, meta: { disabled: false, credentials: { values: credentials, envFileValues: {} }, config, definitionHash, updatedAt: new Date().toISOString() } }, null, 2));
+// 紧凑单行输出：entry_json 经命令替换与 env 传递，多行 JSON 存在被截断/转义破坏的风险
+process.stdout.write(JSON.stringify({ config, meta: { disabled: false, credentials: { values: credentials, envFileValues: {} }, config, definitionHash, updatedAt: new Date().toISOString() } }));
 ' "${CCQ_MCP_CONTRACT}" "${server_id}"
 }
 
 ccq_mcp_apply_server_json() {
   local server_id="${1:-}"
   local entry_json="${2:-}"
-  local claude_json meta_path settings_path updated_claude updated_meta updated_settings
+  local claude_json meta_path settings_path updated_claude updated_settings
   claude_json="$(ccq_mcp_claude_json_path)"
   meta_path="$(ccq_mcp_meta_path)"
   settings_path="$(ccq_mcp_settings_path)"
@@ -263,20 +264,12 @@ process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 ' "${server_id}")" || return 1
   ccq_json_write_atomic "${claude_json}" "${updated_claude}" || return 1
 
-  updated_meta="$(ENTRY_JSON="${entry_json}" META_PATH="${meta_path}" node -e '
-const fs = require("fs");
-const id = process.argv[1];
-const entry = JSON.parse(process.env.ENTRY_JSON);
-const target = process.env.META_PATH;
-let data = { schemaVersion: 1, createdAt: new Date().toISOString(), servers: {} };
-if (fs.existsSync(target)) { const raw = fs.readFileSync(target, "utf8").trim(); if (raw) data = JSON.parse(raw); }
-if (!data.servers || typeof data.servers !== "object") data.servers = {};
-data.schemaVersion = data.schemaVersion || 1;
-data.updatedAt = new Date().toISOString();
-data.servers[id] = entry.meta;
-process.stdout.write(JSON.stringify(data, null, 2) + "\n");
-' "${server_id}")" || return 1
-  ccq_json_write_atomic "${meta_path}" "${updated_meta}" || return 1
+  # vault 读-改-写需要并发锁保护（防止与 disable/enable/remove 并发冲突）
+  if command -v ccq_mcp_with_lock >/dev/null 2>&1; then
+    ccq_mcp_with_lock ccq_mcp_apply_meta_locked "${server_id}" "${entry_json}" "${meta_path}" || return 1
+  else
+    ccq_mcp_apply_meta_locked "${server_id}" "${entry_json}" "${meta_path}" || return 1
+  fi
 
   updated_settings="$(SETTINGS_PATH="${settings_path}" node -e '
 const fs = require("fs");
@@ -291,6 +284,28 @@ if (!data.permissions.allow.includes(perm)) data.permissions.allow.push(perm);
 process.stdout.write(JSON.stringify(data, null, 2) + "\n");
 ' "${server_id}")" || return 1
   ccq_json_write_atomic "${settings_path}" "${updated_settings}" || return 1
+}
+
+# vault 读-改-写（由 ccq_mcp_with_lock 包裹调用，防止与 disable/enable/remove 并发冲突）
+ccq_mcp_apply_meta_locked() {
+  local server_id="${1:-}"
+  local entry_json="${2:-}"
+  local meta_path="${3:-}"
+  local updated_meta
+  updated_meta="$(ENTRY_JSON="${entry_json}" META_PATH="${meta_path}" node -e '
+const fs = require("fs");
+const id = process.argv[1];
+const entry = JSON.parse(process.env.ENTRY_JSON);
+const target = process.env.META_PATH;
+let data = { schemaVersion: 1, createdAt: new Date().toISOString(), servers: {} };
+if (fs.existsSync(target)) { const raw = fs.readFileSync(target, "utf8").trim(); if (raw) data = JSON.parse(raw); }
+if (!data.servers || typeof data.servers !== "object") data.servers = {};
+data.schemaVersion = data.schemaVersion || 1;
+data.updatedAt = new Date().toISOString();
+data.servers[id] = entry.meta;
+process.stdout.write(JSON.stringify(data, null, 2) + "\n");
+' "${server_id}")" || return 1
+  ccq_json_write_atomic "${meta_path}" "${updated_meta}"
 }
 
 ccq_mcp_install_server() {

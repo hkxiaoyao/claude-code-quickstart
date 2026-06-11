@@ -229,27 +229,30 @@ function Get-ManagedBlockContent {
         foreach ($line in $lines) {
             $lineNumber++
 
-            if ($line.Trim() -eq $StartMarker.Trim()) {
+            # 空行/null 防御：StrictMode 下对 $null 调用 .Trim() 会抛异常
+            $lineText = if ($null -eq $line) { "" } else { [string]$line }
+
+            if ($lineText.Trim() -eq $StartMarker.Trim()) {
                 $result.StartLine = $lineNumber
                 $inBlock = $true
                 $result.Found = $true
                 continue
             }
 
-            if ($line.Trim() -eq $EndMarker.Trim() -and $inBlock) {
+            if ($lineText.Trim() -eq $EndMarker.Trim() -and $inBlock) {
                 $result.EndLine = $lineNumber
                 $inBlock = $false
                 continue
             }
 
             if ($inBlock) {
-                $null = $result.Content.Add($line)
+                $null = $result.Content.Add($lineText)
             } elseif ($result.StartLine -eq -1) {
                 # 在标记块之前
-                $null = $result.BeforeBlock.Add($line)
+                $null = $result.BeforeBlock.Add($lineText)
             } elseif ($result.EndLine -ne -1) {
                 # 在标记块之后
-                $null = $result.AfterBlock.Add($line)
+                $null = $result.AfterBlock.Add($lineText)
             }
         }
 

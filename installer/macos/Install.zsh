@@ -446,6 +446,38 @@ ccq_register_ccq_shortcut() {
   return 1
 }
 
+ccq_seed_fingerprints_after_install() {
+  local executed=("$@")
+  local fp_managed_steps=("ClaudeMd" "ClaudeConfig" "CcgWorkflow")
+  local manifest step_id step_status fn_name fp seeded=0
+
+  command -v ccq_profile_read_manifest >/dev/null 2>&1 || return 0
+  manifest="$(ccq_profile_read_manifest 2>/dev/null || true)"
+  [ -n "${manifest}" ] || manifest='{"schemaVersion":1,"steps":{}}'
+
+  for step_id in "${executed[@]}"; do
+    printf '%s\n' "${fp_managed_steps[@]}" | grep -qxF "${step_id}" || continue
+    step_status="$(ccq_state_get_status "${step_id}" 2>/dev/null || true)"
+    [ "${step_status}" = "Success" ] || [ "${step_status}" = "Skipped" ] || continue
+    fn_name="Get-${step_id}Fingerprint"
+    command -v "${fn_name}" >/dev/null 2>&1 || continue
+    fp="$("${fn_name}" 2>/dev/null || true)"
+    [ -n "${fp}" ] || continue
+    manifest="$(printf '%s' "${manifest}" | STEP_ID="${step_id}" FP="${fp}" APPLIED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" node -e '
+const m = JSON.parse(require("fs").readFileSync(0, "utf8"));
+if (!m.steps) m.steps = {};
+m.steps[process.env.STEP_ID] = {
+  fingerprint: process.env.FP,
+  appliedAt: process.env.APPLIED_AT
+};
+console.log(JSON.stringify(m));
+' 2>/dev/null)" || continue
+    seeded=1
+  done
+
+  [ "${seeded}" = "1" ] && ccq_profile_write_manifest "${manifest}" 2>/dev/null || true
+}
+
 ccq_show_final_summary() {
   local executed=("$@")
   local success=0 skipped=0 failed=0 unsupported=0 manual=0 step_id step_status step_name version data status_text
@@ -483,6 +515,9 @@ ccq_show_final_summary() {
   if [ $((unsupported + manual)) -gt 0 ]; then
     ccq_ui_warning "  需手动处理: $((unsupported + manual))"
   fi
+
+  # 指纹种子写入（Success/Skipped 步骤）
+  ccq_seed_fingerprints_after_install "${executed[@]}"
 
   if [ "${failed}" -eq 0 ]; then
     ccq_register_ccq_shortcut >/dev/null 2>&1 || true

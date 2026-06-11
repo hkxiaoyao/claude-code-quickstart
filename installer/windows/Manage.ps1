@@ -379,7 +379,8 @@ function Get-UpdateStatus {
         $statusList += $entry
     }
 
-    return $statusList
+    # HC-13: 逗号阻止单元素数组被管道展开为裸 hashtable
+    return ,$statusList
 }
 
 
@@ -465,7 +466,8 @@ function Invoke-UpdateAction {
     #>
     param([switch]$ListOnly)
 
-    $updateStatus = Get-UpdateStatus
+    # HC-13: @() 包裹防止单元素/空结果下 .Count 异常
+    $updateStatus = @(Get-UpdateStatus)
 
     if ($ListOnly) {
         $hasUpdates = @($updateStatus | Where-Object { $_.HasUpdate -eq $true }).Count -gt 0

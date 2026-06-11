@@ -39,7 +39,7 @@ curl -fsSL "https://github.com/MrNine-666/claude-code-quickstart/releases/latest
 
 - 最低系统版本：macOS 12+。
 - 包管理器：Homebrew。
-- Node.js：通过 nvm 官方脚本安装 LTS。
+- Node.js：通过 nvm 官方脚本安装 LTS，**只做 nvm（不支持 fnm / npm 全局包备份恢复）**。
 - Profile 写入：
   - Homebrew 仅在 CCQ 执行官方安装成功后，按官方推荐追加 `eval "$(<brew路径> shellenv)"` 到 `~/.zprofile`。
   - `ccq` 快捷函数写入 `~/.zshrc`。

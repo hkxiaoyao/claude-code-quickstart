@@ -231,7 +231,7 @@ ccq_create_update_snapshot() {
       cp "${source_file}" "${backup_dest}" 2>/dev/null || continue
 
       hash="$(ccq_string_fingerprint "$(cat "${source_file}" 2>/dev/null || true)")"
-      file_timestamp="$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${source_file}" 2>/dev/null || echo "${created_at}")"
+      file_timestamp="$(date -r "$(stat -f %m "${source_file}" 2>/dev/null || echo 0)" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "${created_at}")"
 
       files_array+=("{\"source\":\"${source_file}\",\"relative\":\"${relative_path}\",\"hash\":\"${hash}\",\"timestamp\":\"${file_timestamp}\"}")
     fi
@@ -248,7 +248,7 @@ ccq_create_update_snapshot() {
       cp "${rules_pattern}" "${backup_dest}" 2>/dev/null || continue
 
       hash="$(ccq_string_fingerprint "$(cat "${rules_pattern}" 2>/dev/null || true)")"
-      file_timestamp="$(stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ' "${rules_pattern}" 2>/dev/null || echo "${created_at}")"
+      file_timestamp="$(date -r "$(stat -f %m "${rules_pattern}" 2>/dev/null || echo 0)" -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo "${created_at}")"
 
       files_array+=("{\"source\":\"${rules_pattern}\",\"relative\":\"${relative_path}\",\"hash\":\"${hash}\",\"timestamp\":\"${file_timestamp}\"}")
     fi

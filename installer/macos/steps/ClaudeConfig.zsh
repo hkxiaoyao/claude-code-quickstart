@@ -101,8 +101,14 @@ if (fs.existsSync(settingsPath)) {
 }
 const items = [];
 function isObject(v) { return v && typeof v === "object" && !Array.isArray(v); }
+const forbiddenKeys = ["ANTHROPIC_AUTH_TOKEN"];
+const forbiddenPattern = /.*_API_KEY$/;
+function isForbidden(key) {
+  return forbiddenKeys.includes(key) || forbiddenPattern.test(key);
+}
 if (!isObject(settings.env)) { settings.env = {}; items.push("config::env::section-added"); }
 for (const [key, value] of Object.entries(contract.ClaudeConfigEnvDefaults || {})) {
+  if (isForbidden(key)) continue;
   if (mode === "update") {
     if (settings.env[key] !== String(value)) {
       items.push(settings.env[key] === undefined ? `config::env.${key}::added` : `config::env.${key}::updated`);
@@ -114,6 +120,7 @@ for (const [key, value] of Object.entries(contract.ClaudeConfigEnvDefaults || {}
   }
 }
 for (const key of contract.ClaudeConfigDeprecatedEnvKeys || []) {
+  if (isForbidden(key)) continue;
   if (Object.prototype.hasOwnProperty.call(settings.env, key)) {
     delete settings.env[key];
     items.push(`config::env.${key}::removed`);

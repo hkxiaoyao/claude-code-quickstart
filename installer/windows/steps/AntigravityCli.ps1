@@ -197,13 +197,15 @@ function Update-AntigravityCli {
             $updateResult = Invoke-AntigravityCliInstaller
         }
 
-        if (-not $updateResult.Success) {
+        # StrictMode 防御：$updateResult 可能为 $null（异常路径下安装器也失败时）
+        if ($null -eq $updateResult -or -not $updateResult.Success) {
             if (-not $usedInstallerFallback) {
                 Write-UiWarning "agy update 未成功，尝试通过官方安装脚本覆盖更新..."
                 $updateResult = Invoke-AntigravityCliInstaller
             }
-            if (-not $updateResult.Success) {
-                throw "更新失败: $($updateResult.Error)"
+            if ($null -eq $updateResult -or -not $updateResult.Success) {
+                $errDetail = if ($updateResult) { $updateResult.Error } else { "安装脚本未返回结果" }
+                throw "更新失败: $errDetail"
             }
         }
 

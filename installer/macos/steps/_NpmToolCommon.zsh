@@ -88,3 +88,18 @@ ccq_npx_run() {
   ccq_npm_tool_require_npx || return 1
   ccq_run_command --timeout "${CCQ_DEFAULT_TIMEOUT_SECONDS:-300}" --retries 1 -- npx "$@"
 }
+
+ccq_npm_package_has_update() {
+  local package_name="${1:-}"
+  [ -n "${package_name}" ] || return 1
+  ccq_npm_tool_require_npm || return 1
+
+  local outdated_json
+  outdated_json="$(npm outdated -g --json 2>/dev/null || printf '{}')"
+
+  printf '%s' "${outdated_json}" | PKG="${package_name}" node -e '
+const outdated = JSON.parse(require("fs").readFileSync(0, "utf8"));
+const pkg = process.env.PKG;
+console.log(outdated[pkg] ? "true" : "false");
+'
+}

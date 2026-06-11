@@ -139,6 +139,8 @@ Update-AntigravityCli() {
   local old_version new_version item
   old_version="$(ccq_antigravity_version 2>/dev/null || true)"
 
+  # ccq_antigravity_version 在子 shell 中刷新的 PATH 不会传播回来，检测 agy 前显式刷新
+  ccq_refresh_path
   if ccq_command_exists agy; then
     ccq_run_native_command agy update || true
   fi

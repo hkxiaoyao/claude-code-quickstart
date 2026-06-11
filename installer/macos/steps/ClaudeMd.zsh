@@ -129,7 +129,8 @@ Install-ClaudeMd() {
   local target template
   target="$(ccq_claude_md_path)"
   template="$(ccq_claude_md_template)"
-  if ! ccq_write_file_atomic "${target}" "${template}\n"; then
+  # $'\n' 写入真实换行符（"\n" 在 printf '%s' 下是字面反斜杠+n，会导致指纹永远不匹配）
+  if ! ccq_write_file_atomic "${target}" "${template}"$'\n'; then
     ccq_claude_md_install_result false "CLAUDE.md 写入失败" ""
     return 1
   fi

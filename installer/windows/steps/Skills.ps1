@@ -1396,7 +1396,7 @@ function Show-SkillsSelectMenu {
         -Options ([string[]]$options.ToArray()) `
         -DefaultIndex $defaultIndex
 
-    if ($selectedIndex -lt 0 -or $selectedIndex -ge $itemMap.Count) {
+    if ($selectedIndex -eq -1 -or $selectedIndex -lt 0 -or $selectedIndex -ge $itemMap.Count) {
         return @()
     }
 

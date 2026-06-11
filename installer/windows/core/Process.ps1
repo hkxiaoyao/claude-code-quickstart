@@ -437,10 +437,14 @@ function Get-NpmOutdatedGlobal {
                 -SuppressOutput -TimeoutSeconds 10 -RetryCount 0
             if ($prefixResult.Success -and $prefixResult.Output) {
                 $prefix = $prefixResult.Output.Trim()
-                # ResolveLinkTarget($path, $true) 递归解析 junction/symlink 链（.NET 6+ / PS 7+）
-                $resolved = [System.IO.Directory]::ResolveLinkTarget($prefix, $true)
-                if ($null -ne $resolved -and (Test-Path $resolved.FullName) -and $resolved.FullName -ne $prefix) {
-                    $arguments += @("--prefix", $resolved.FullName)
+                # ResolveLinkTarget($path, $true) 递归解析 junction/symlink 链（.NET 6+ / PS 7.3+）
+                try {
+                    $resolved = [System.IO.Directory]::ResolveLinkTarget($prefix, $true)
+                    if ($null -ne $resolved -and (Test-Path $resolved.FullName) -and $resolved.FullName -ne $prefix) {
+                        $arguments += @("--prefix", $resolved.FullName)
+                    }
+                } catch {
+                    # PS 7.0-7.2 不支持 ResolveLinkTarget，降级跳过 --prefix
                 }
             }
         } catch {

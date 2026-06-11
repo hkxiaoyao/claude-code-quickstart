@@ -81,7 +81,7 @@ zsh installer/macos/Install.zsh --list-steps
 zsh installer/macos/Manage.zsh --action Update --list-updates
 ```
 
-macOS 硬约束：最低 macOS 12+；使用 Homebrew + nvm；Profile 写入 `~/.zprofile` / `~/.zshrc`；禁止调用 winget、注册表、MSI/EXE、Windows Terminal 或 Windows `$PROFILE`。
+macOS 硬约束：最低 macOS 12+；使用 Homebrew + nvm（**只做 nvm，不支持 fnm/npm 全局包备份**）；Profile 写入 `~/.zprofile` / `~/.zshrc`；禁止调用 winget、注册表、MSI/EXE、Windows Terminal 或 Windows `$PROFILE`。
 
 ---
 

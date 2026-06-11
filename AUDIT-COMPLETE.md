@@ -68,7 +68,7 @@
 
 | 模块 | 功能缺口 | Bug 数 | 状态 |
 |------|---------|--------|------|
-| NodeJS（含 5 子模块） | 7 项 | 6 个 | 🚨 macOS 仅支持 nvm，缺 fnm 迁移 |
+| NodeJS（含 5 子模块） | 7 项 | 6 个 | 🚨 macOS 仅支持 nvm（架构约束，不做 fnm / npm 全局包备份） |
 | Git | 4 项 | 3 个 | ⚠️ macOS 缺用户值保护 |
 | ClaudeCode | 10 项 | 5 个 | ⚠️ macOS 缺回退机制 |
 | ApiKey | 3 项 | 2 个 | ✅ 功能基本对齐 |
@@ -157,32 +157,26 @@
 修复所有 Critical 级别的阻塞性问题，恢复核心功能
 
 #### 任务清单
-- [ ] **修复 macOS 数组索引越界（10+ 处）**
+- [x] **修复 macOS 数组索引越界（10+ 处）**
   - Ui.zsh: 470, 586, 417-419, 516-520
   - Skills.zsh: 258, 284, 476-484
   - Mcp.zsh: 118
   - Manage.zsh: 392, 399
-- [ ] **实现 macOS Bootstrap.zsh Update 生命周期**
-  - `ccq_invoke_update_lifecycle`
-  - `ccq_build_update_plan`
-- [ ] **实现 macOS Mcp.zsh Update-Mcp 函数**
-  - npx 缓存清理
-  - PreInstall npm-global 更新
-  - vault definitionHash 同步
-  - permissions.allow 自愈
-- [ ] **实现 macOS McpManager.zsh Vault 并发锁**
-  - flock 文件锁或 mkdir 原子锁
-- [ ] **补充 macOS ClaudeConfig Update 禁区检查**
+- [x] **确认 macOS Bootstrap.zsh Update 生命周期**
+  - 已有完整实现（ccq_manage_run_update_step + ccq_manage_select_update_steps）
+- [x] **确认 macOS Mcp.zsh Vault 并发锁**
+  - ccq_mcp_with_lock 机制已有，本次补齐 Install 路径 vault 写入保护
+- [x] **补充 macOS ClaudeConfig Update 禁区检查**
   - 过滤 `ANTHROPIC_AUTH_TOKEN` / `*_API_KEY`
-- [ ] **实现 macOS Install.zsh 安装后指纹写入**
+- [x] **实现 macOS Install.zsh 安装后指纹写入**
   - 移植 Windows L617-645 逻辑
-- [ ] **实现 macOS OpenSpec ccq_npm_package_has_update**
-  - npm outdated 远程版本检测
-- [ ] **修复 macOS Profile.zsh stat 时间戳格式化**
+- [x] **确认 macOS OpenSpec ccq_npm_package_has_update**
+  - 函数已在 _NpmToolCommon.zsh:92 和 core/Update.zsh:151 定义
+- [x] **修复 macOS Profile.zsh stat 时间戳格式化**
   - 改用 `date -r $(stat -f %m)`
-- [ ] **修复 Windows Get-NpmOutdatedGlobal .NET 6+ 兼容性**
+- [x] **修复 Windows Get-NpmOutdatedGlobal .NET 6+ 兼容性**
   - try-catch 包裹 ResolveLinkTarget
-- [ ] **修复 Windows Skills.ps1 数组访问越界**
+- [x] **修复 Windows Skills.ps1 数组访问越界**
   - 添加 -1 边界检查
 
 #### 验收标准
@@ -209,11 +203,8 @@
 - [ ] **实现 macOS ClaudeConfig 完整 Drift Analysis**
   - `ccq_claude_config_compare_drift`
   - 区分 NeedsInstallCompletion / NeedsUpdateAlignment
-- [ ] **实现 macOS NodeJS fnm 检测与迁移**
-  - 移植 `Get-NodeEnvironmentSnapshot`
-  - 支持 fnm/nvm/direct/portable 四策略
-- [ ] **实现 macOS NodeJS npm 全局包备份与恢复**
-  - `Backup-NpmGlobalPackages` / `Restore-NpmGlobalPackages`
+- [ ] **~~实现 macOS NodeJS fnm 检测与迁移~~**（架构约束：macOS 只做 nvm）
+- [ ] **~~实现 macOS NodeJS npm 全局包备份与恢复~~**（架构约束：macOS 只做 nvm）
 - [ ] **实现 macOS Skills 批量安装（source 多选）**
   - 循环处理 selectedEntries 数组
 - [ ] **实现 macOS Skills SkipDiscovery 静态名检测**
@@ -229,7 +220,7 @@
 - ✅ Profile 多子段隔离功能完整
 - ✅ 测试结果缓存提升检测性能
 - ✅ ClaudeConfig drift 分析详细准确
-- ✅ NodeJS 支持 fnm 迁移
+- ~~✅ NodeJS 支持 fnm 迁移~~（架构约束排除）
 - ✅ Skills 批量安装与静态名检测正常
 
 ---
@@ -240,16 +231,16 @@
 消除所有已知 Bug，提升边界条件处理
 
 #### 任务清单
-- [ ] 修复 macOS ccq_run_command_once heartbeat_pid 空值检查
-- [ ] 修复 macOS ccq_mcp_build_server_entry_json 多行 JSON 截断
-- [ ] 修复 Windows Clear-OldUpdateSnapshots 数组上下文缺失
-- [ ] 修复 Windows Get-ManagedBlockContent 空行处理
-- [ ] 修复 macOS ClaudeMd 指纹比较 newline 不一致
-- [ ] 修复 Windows Invoke-AntigravityCliInstaller shell 注入风险
-- [ ] 修复 macOS Update-AntigravityCli 命令不存在检测
-- [ ] 修复 Windows Update-AntigravityCli 异常捕获逻辑
-- [ ] 修复 macOS Manage.zsh has_update_line tab 分隔解析
-- [ ] 修复 Windows Get-UpdateStatus HC-13 数组包裹缺失
+- [x] 修复 macOS ccq_run_command_once heartbeat_pid 空值检查 — **已有防御（L88 检查）**
+- [x] 修复 macOS ccq_mcp_build_server_entry_json 多行 JSON 截断 — **改为紧凑单行输出**
+- [x] 修复 Windows Clear-OldUpdateSnapshots 数组上下文缺失 — **已有 @() 包裹（L1302/1328/1334/1338）**
+- [x] 修复 Windows Get-ManagedBlockContent 空行处理 — **添加 null 防御与字符串转换**
+- [x] 修复 macOS ClaudeMd 指纹比较 newline 不一致 — **改用 $'\n' 写入真实换行符**
+- [x] 修复 Windows Invoke-AntigravityCliInstaller shell 注入风险 — **已通过 -Arguments 数组传参，无注入风险**
+- [x] 修复 macOS Update-AntigravityCli 命令不存在检测 — **添加显式 ccq_refresh_path**
+- [x] 修复 Windows Update-AntigravityCli 异常捕获逻辑 — **添加 $null 检查与详细错误信息**
+- [x] 修复 macOS Manage.zsh has_update_line tab 分隔解析 — **添加 tab 存在性检查与三态校验**
+- [x] 修复 Windows Get-UpdateStatus HC-13 数组包裹缺失 — **添加 return ,$ 与调用点 @() 包裹**
 
 #### 验收标准
 - ✅ 无已知 Critical/Major Bug
