@@ -328,6 +328,24 @@ Test-SkillsInstalled() {
   fi
 }
 
+# ─── 安装摘要（成功/已存在/失败/跳过 四分类，对齐 Windows）─────────────────
+
+ccq_skills_show_install_summary() {
+  local installed_csv="${1:-}"
+  local existing_csv="${2:-}"
+  local failed_csv="${3:-}"
+  local skipped_csv="${4:-}"
+  printf '\n'
+  ccq_ui_primary "Skills 安装摘要："
+  [ -n "${installed_csv}" ] && ccq_ui_success "  新安装: ${installed_csv}"
+  [ -n "${existing_csv}" ] && ccq_ui_dim "  已存在(重装): ${existing_csv}"
+  [ -n "${failed_csv}" ] && ccq_ui_danger "  失败: ${failed_csv}"
+  [ -n "${skipped_csv}" ] && ccq_ui_warning "  跳过: ${skipped_csv}"
+  if [ -z "${installed_csv}${existing_csv}${failed_csv}${skipped_csv}" ]; then
+    ccq_ui_dim "  本次无 Skills 变更"
+  fi
+}
+
 Install-Skills() {
   ccq_source_npm_common
   if ! ccq_npm_tool_require_npx; then
@@ -341,7 +359,8 @@ Install-Skills() {
 
   ccq_skills_prefetch_all &
 
-  local record id name source skill desc default static_name skip_discovery order selected_names installed=() failures=() child copy_mode
+  local record id name source skill desc default static_name skip_discovery order selected_names child copy_mode
+  local installed=() existing=() failures=() pre_installed
   copy_mode="$(ccq_skills_resolve_copy_mode)"
   record="$(ccq_skills_select_source)" || { ccq_skills_install_result false "" "用户取消 Skills source 选择"; return 1; }
   IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order <<EOF
@@ -354,26 +373,43 @@ EOF
   if [ -z "${selected_names}" ] && [ -n "${skill}" ]; then
     selected_names="${skill}"
   fi
+
+  # 安装前快照已安装名单：用于区分"新安装"与"已存在(重装)"
+  pre_installed="$(ccq_skills_installed_names 2>/dev/null || true)"
+
   if [ -z "${selected_names}" ]; then
     if ccq_skills_install_one "${source}" "" "${copy_mode}"; then
       installed+=("${id}")
     else
       failures+=("${id}")
+      ccq_ui_warning "Skill 安装失败: ${id}，继续处理剩余项" "developer"
     fi
   else
     for child in ${selected_names}; do
       if ccq_skills_install_one "${source}" "${child}" "${copy_mode}"; then
-        installed+=("${child}")
+        if printf '%s\n' "${pre_installed}" | grep -qi "^${child}$"; then
+          existing+=("${child}")
+        else
+          installed+=("${child}")
+        fi
       else
         failures+=("${child}")
+        ccq_ui_warning "Skill 安装失败: ${child}，继续处理剩余项" "developer"
       fi
     done
   fi
+
+  ccq_skills_show_install_summary \
+    "$(ccq_join_by_comma "${installed[@]}")" \
+    "$(ccq_join_by_comma "${existing[@]}")" \
+    "$(ccq_join_by_comma "${failures[@]}")" \
+    ""
+
   if [ "${#failures[@]}" -gt 0 ]; then
-    ccq_skills_install_result false "$(ccq_join_by_comma "${installed[@]}")" "安装失败: $(ccq_join_by_comma "${failures[@]}")"
+    ccq_skills_install_result false "$(ccq_join_by_comma "${installed[@]}" "${existing[@]}")" "安装失败: $(ccq_join_by_comma "${failures[@]}")"
     return 1
   fi
-  ccq_skills_install_result true "$(ccq_join_by_comma "${installed[@]}")" ""
+  ccq_skills_install_result true "$(ccq_join_by_comma "${installed[@]}" "${existing[@]}")" ""
 }
 
 Verify-Skills() {
@@ -385,14 +421,37 @@ Verify-Skills() {
   return 1
 }
 
+# 根据 skills update 输出判断是否无可更新项（对齐 Windows Test-SkillsUpdateOutputNoChange）
+ccq_skills_update_output_is_noop() {
+  local text="${1:-}"
+  [ -n "${text}" ] || return 1
+  printf '%s' "${text}" | node -e '
+const text = require("fs").readFileSync(0, "utf8").replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+process.exit(/no\s+updates|already\s+up\s+to\s+date|up\s+to\s+date|all\s+skills\s+.*latest|0\s+skills?\s+updated/i.test(text) ? 0 : 1);
+' 2>/dev/null
+}
+
 Update-Skills() {
   ccq_source_npm_common
   if ! ccq_npm_tool_require_npx; then
     ccq_step_update_result false "" "" "${CCQ_NPM_TOOL_ERROR:-npx 不可用}"
     return 1
   fi
-  if ccq_run_command_developer_or_silent --timeout 300 --retries 1 -- npx --yes skills update -g -y; then
-    ccq_step_update_result true "npx::skills::update" "" ""
+
+  # 无已安装 Skills → noop 短路，不执行远程 update
+  local before_names
+  before_names="$(ccq_skills_installed_names 2>/dev/null || true)"
+  if [ -z "${before_names}" ]; then
+    ccq_step_update_result true "noop::Skills::no-installed-skills" "" ""
+    return 0
+  fi
+
+  if ccq_run_command_developer_or_silent --timeout 600 --retries 1 -- npx --yes skills update -g -y; then
+    if ccq_skills_update_output_is_noop "${CCQ_LAST_OUTPUT}${CCQ_LAST_ERROR}"; then
+      ccq_step_update_result true "noop::Skills::no-change" "" ""
+    else
+      ccq_step_update_result true "skills::global::updated" "" ""
+    fi
     return 0
   fi
   ccq_step_update_result false "" "" "Skills 官方 update 失败"
@@ -433,7 +492,7 @@ Uninstall-Skills() {
     return 1
   fi
 
-  local selected names_arg=() name removed=() confirm
+  local selected names_arg=() name removed=() failed=() confirm
   selected="$(ccq_skills_select_installed_names)" || {
     ccq_skills_remove_result true "" ""
     return 0
@@ -447,27 +506,68 @@ Uninstall-Skills() {
     [ "${confirm}" = "0" ] || { ccq_skills_remove_result true "" ""; return 0; }
   fi
 
-  if ccq_run_command --timeout 300 --retries 1 -- npx --yes skills remove "${names_arg[@]}" -g -a claude-code --yes >/dev/null 2>&1; then
-    for name in "${names_arg[@]}"; do
+  # 逐个卸载：单项失败不中断剩余项（spec: Skills 管理卸载对齐）
+  for name in "${names_arg[@]}"; do
+    if ccq_run_command --timeout 300 --retries 1 -- npx --yes skills remove "${name}" -g -a claude-code --yes >/dev/null 2>&1; then
       removed+=("${name}")
-    done
-    ccq_skills_remove_result true "$(ccq_join_by_comma "${removed[@]}")" ""
-    return 0
+    else
+      failed+=("${name}")
+      ccq_ui_warning "Skill 卸载失败: ${name}，继续处理剩余项" "developer"
+    fi
+  done
+
+  printf '\n'
+  ccq_ui_primary "Skills 卸载摘要："
+  [ "${#removed[@]}" -gt 0 ] && ccq_ui_success "  已卸载: $(ccq_join_by_comma "${removed[@]}")"
+  [ "${#failed[@]}" -gt 0 ] && ccq_ui_danger "  失败: $(ccq_join_by_comma "${failed[@]}")"
+
+  if [ "${#failed[@]}" -gt 0 ]; then
+    ccq_skills_remove_result false "$(ccq_join_by_comma "${removed[@]}")" "卸载失败: $(ccq_join_by_comma "${failed[@]}")"
+    return 1
   fi
-  ccq_skills_remove_result false "" "Skills 卸载失败"
-  return 1
+  ccq_skills_remove_result true "$(ccq_join_by_comma "${removed[@]}")" ""
 }
 
 ccq_skills_show_status() {
-  local names
-  names="$(ccq_skills_installed_names)"
+  local installed line id name source skill desc default static_name skip_discovery order
+  local check_name extra_names=()
+  installed="$(ccq_skills_installed_names)"
   ccq_ui_primary "Skills 状态："
-  if [ -n "${names}" ]; then
-    printf '%s\n' "${names}" | while IFS= read -r name; do
-      [ -n "${name}" ] && ccq_ui_info "  - ${name}"
-    done
-  else
+  if [ -z "${installed}" ]; then
     ccq_ui_warning "  尚未检测到 Claude Code 全局 Skills"
+    return 0
+  fi
+
+  # 按 catalogue 条目展示安装状态（静态名可判定的条目）
+  local claimed=" "
+  while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
+    [ -n "${id}" ] || continue
+    check_name="${static_name:-${skill}}"
+    [ -n "${check_name}" ] || continue
+    if printf '%s\n' "${installed}" | grep -qi "^${check_name}$"; then
+      ccq_ui_success "  [已安装] ${name} - ${check_name}"
+      claimed="${claimed}${check_name:l} "
+    fi
+  done <<EOF
+$(ccq_skills_catalogue)
+EOF
+
+  # catalogue 之外的已安装 Skills（含集合类 source 安装的子 Skills）
+  while IFS= read -r check_name; do
+    [ -n "${check_name}" ] || continue
+    case "${claimed}" in
+      *" ${check_name:l} "*) ;;
+      *) extra_names+=("${check_name}") ;;
+    esac
+  done <<EOF
+${installed}
+EOF
+  if [ "${#extra_names[@]}" -gt 0 ]; then
+    ccq_ui_info "  其他已安装 Skills:"
+    local extra
+    for extra in "${extra_names[@]}"; do
+      ccq_ui_info "    - ${extra}"
+    done
   fi
 }
 

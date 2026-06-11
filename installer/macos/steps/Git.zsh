@@ -72,11 +72,39 @@ ccq_git_has_required_config() {
   return 0
 }
 
+# 推荐配置键值对（与 Windows recommendedConfigs 对齐）
+ccq_git_recommended_configs() {
+  cat <<'EOF'
+init.defaultBranch	main	默认分支名
+core.quotepath	false	中文文件名显示
+i18n.commit.encoding	utf-8	提交信息编码
+i18n.logoutputencoding	utf-8	日志输出编码
+EOF
+}
+
+# 写入推荐配置：已有用户值不覆盖（spec: 用户配置保护）
 ccq_git_apply_config() {
-  git config --global init.defaultBranch main || return 1
-  git config --global core.quotepath false || return 1
-  git config --global i18n.commit.encoding utf-8 || return 1
-  git config --global i18n.logoutputencoding utf-8 || return 1
+  local key value desc existing failed=0
+  while IFS=$'\t' read -r key value desc; do
+    [ -n "${key}" ] || continue
+    existing="$(ccq_git_config_value "${key}")"
+    if [ -n "${existing}" ] && [ "${existing}" != "${value}" ]; then
+      ccq_ui_info "  ${desc} 已存在用户配置: ${existing}（不覆盖）" "developer"
+      continue
+    fi
+    if [ "${existing}" = "${value}" ]; then
+      continue
+    fi
+    if git config --global "${key}" "${value}" 2>/dev/null; then
+      ccq_ui_success "  ${desc} 配置成功: ${value}" "developer"
+    else
+      ccq_ui_warning "  ${desc} 配置失败: ${key}" "developer"
+      failed=$((failed + 1))
+    fi
+  done <<EOF
+$(ccq_git_recommended_configs)
+EOF
+  [ "${failed}" -eq 0 ]
 }
 
 ccq_git_version_ok() {
