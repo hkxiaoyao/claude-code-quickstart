@@ -1,8 +1,8 @@
 # claude-code-quickstart -- AI 上下文索引
 
-> 生成时间：2026-03-15 | 覆盖率：97% (33/34 文件)
+> 生成时间：2026-06-11 | 覆盖率：97% (33/34 文件)
 
-Windows 10/11 与 macOS 12+ 双平台的 **Claude Code 开发环境自动化安装器**。Windows 使用双阶段 PowerShell 架构（PS 5.1 引导 + PS 7 主安装/管理），macOS 使用 zsh + Homebrew + nvm 原生入口；13 步安装依赖链、Manage Skills 管理入口、共享 contracts 契约与实时检测机制。
+Windows 10/11 与 macOS 12+ 双平台的 **Claude Code 开发环境自动化安装器**。Windows 使用双阶段 PowerShell 架构（PS 5.1 引导 + PS 7 主安装/管理），macOS 使用 zsh + Homebrew + nvm 原生入口；13 步安装依赖链、Manage 四大管理入口（Update / Provider / MCP / Skills）、共享 contracts 契约与实时检测机制。
 
 ---
 
@@ -48,10 +48,12 @@ graph TD
     D --> D3["CcSwitch / CodexCli / AntigravityCli (可选)"]
     F --> F1["steps / providers / MCP / ClaudeConfig / templates / build"]
     G --> G1["Install / Manage zsh"]
-    G --> G2["core/*.zsh / steps/*.zsh"]
+    G --> G2["core: Ui / Process / Profile / Platform / PackageManager / Json / Registry / Bootstrap / McpManager / Provider"]
+    G --> G3["steps: 13 个安装步骤 + Skills 管理"]
     H --> H1["bootstrap.ps1 / install.ps1 / manage.ps1 / install.sh / manage.sh"]
     click C "./installer/windows/core/CLAUDE.md"
     click D "./installer/windows/steps/CLAUDE.md"
+    click G "./installer/macos/README.md"
 ```
 
 ---

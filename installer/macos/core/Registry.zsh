@@ -403,3 +403,118 @@ process.stdout.write(ordered.join("\n"));
   fi
   ccq_get_execution_order_fallback "$@"
 }
+
+# ============ Legacy StepId 映射 ============
+
+ccq_get_legacy_step_id_map() {
+  if ccq_registry_can_use_contract; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const map = {};
+for (const step of contract.Steps) {
+  if (step.LegacyIds && Array.isArray(step.LegacyIds)) {
+    for (const legacyId of step.LegacyIds) {
+      map[legacyId] = step.StepId;
+    }
+  }
+}
+console.log(JSON.stringify(map, null, 2));
+' "${CCQ_STEPS_CONTRACT}"
+    return $?
+  fi
+  # Bootstrap snapshot 无 legacy 映射
+  printf '{}\n'
+}
+
+ccq_resolve_legacy_step_id() {
+  local step_id="${1:-}"
+  [ -z "${step_id}" ] && return 1
+
+  if ccq_registry_can_use_contract; then
+    local map_json resolved
+    map_json="$(ccq_get_legacy_step_id_map)"
+    resolved="$(printf '%s' "${map_json}" | node -e "
+      const map = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+      const input = process.argv[1];
+      console.log(map[input] || input);
+    " "${step_id}" 2>/dev/null || printf '%s' "${step_id}")"
+    printf '%s\n' "${resolved}"
+    return 0
+  fi
+
+  # Bootstrap snapshot 无 legacy 映射，直接返回原 ID
+  printf '%s\n' "${step_id}"
+}
+
+# ============ 平台过滤 ============
+
+ccq_step_is_supported() {
+  local step_id="${1:-}"
+  [ -z "${step_id}" ] && return 1
+
+  if ccq_registry_can_use_contract; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const step = contract.Steps.find(s => s.StepId === process.argv[2]);
+if (!step) process.exit(1);
+
+// 检查 SupportedPlatforms
+const platforms = step.SupportedPlatforms || ["Windows", "macOS"];
+if (!platforms.includes("macOS")) process.exit(1);
+
+// 检查 MacOSStepFile 是否存在
+if (!step.MacOSStepFile) process.exit(1);
+
+process.exit(0);
+' "${CCQ_STEPS_CONTRACT}" "${step_id}"
+    return $?
+  fi
+
+  # Bootstrap snapshot 中所有步骤都支持 macOS
+  ccq_registry_init_bootstrap_snapshot
+  [ -n "${CCQ_BOOTSTRAP_STEP_NAME[${step_id}]:-}" ]
+}
+
+# ============ 循环依赖检测 ============
+
+ccq_detect_circular_dependencies() {
+  if ccq_registry_can_use_contract; then
+    node -e '
+const fs = require("fs");
+const contract = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const stepById = new Map(contract.Steps.map(s => [s.StepId, s]));
+
+function hasCycle(stepId, visited = new Set(), stack = new Set()) {
+  if (stack.has(stepId)) return true;
+  if (visited.has(stepId)) return false;
+
+  visited.add(stepId);
+  stack.add(stepId);
+
+  const step = stepById.get(stepId);
+  if (step && step.Dependencies) {
+    for (const dep of step.Dependencies) {
+      if (hasCycle(dep, visited, stack)) return true;
+    }
+  }
+
+  stack.delete(stepId);
+  return false;
+}
+
+for (const step of contract.Steps) {
+  if (hasCycle(step.StepId)) {
+    console.error(`循环依赖检测到: ${step.StepId}`);
+    process.exit(1);
+  }
+}
+process.exit(0);
+' "${CCQ_STEPS_CONTRACT}"
+    return $?
+  fi
+
+  # Bootstrap snapshot 已知无循环依赖
+  return 0
+}

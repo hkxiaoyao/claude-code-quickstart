@@ -254,6 +254,132 @@ ccq_run_steps() {
   ordered="$(ccq_get_execution_order "$@")" || return 1
   local step_id
   for step_id in ${ordered}; do
-    ccq_invoke_step_lifecycle "${step_id}" || return 1
+    ccq_invoke_step_lifecycle "${step_id}"
+    local lifecycle_status=$?
+
+    # Critical 失败策略：检查是否为 critical 步骤
+    if [ "${lifecycle_status}" -ne 0 ]; then
+      local is_optional
+      is_optional="$(ccq_get_step_field "${step_id}" IsOptional 2>/dev/null || printf 'false')"
+
+      # 非可选步骤失败时中止后续步骤
+      if ! ccq_normalize_success "${is_optional}"; then
+        local step_status
+        step_status="$(ccq_state_get_status "${step_id}" 2>/dev/null || echo 'Failed')"
+
+        # Unsupported 和 ManualRequired 不中止流程
+        case "${step_status}" in
+          "${CCQ_STEP_STATUS_UNSUPPORTED}"|"${CCQ_STEP_STATUS_MANUAL_REQUIRED}") ;;
+          *)
+            if command -v ccq_ui_danger >/dev/null 2>&1; then
+              ccq_ui_danger "关键步骤 ${step_id} 失败，中止后续安装"
+            fi
+            return 1
+            ;;
+        esac
+      fi
+    fi
   done
+  return 0
+}
+
+# ============ 最终摘要增强 ============
+
+ccq_show_installation_summary() {
+  local pass_count=0 fail_count=0 skip_count=0 unsupported_count=0 manual_count=0
+  local i=1
+
+  while [ "${i}" -le "${#CCQ_STATE_STEP_IDS[@]}" ]; do
+    local status="${CCQ_STATE_STEP_STATUSES[$i]:-}"
+    case "${status}" in
+      "${CCQ_STEP_STATUS_SUCCESS}") pass_count=$((pass_count + 1)) ;;
+      "${CCQ_STEP_STATUS_FAILED}") fail_count=$((fail_count + 1)) ;;
+      "${CCQ_STEP_STATUS_SKIPPED}") skip_count=$((skip_count + 1)) ;;
+      "${CCQ_STEP_STATUS_UNSUPPORTED}") unsupported_count=$((unsupported_count + 1)) ;;
+      "${CCQ_STEP_STATUS_MANUAL_REQUIRED}") manual_count=$((manual_count + 1)) ;;
+    esac
+    i=$((i + 1))
+  done
+
+  if command -v ccq_ui_primary >/dev/null 2>&1; then
+    ccq_ui_primary ""
+    ccq_ui_primary "============ 安装摘要 ============"
+  fi
+
+  if command -v ccq_ui_success >/dev/null 2>&1 && [ "${pass_count}" -gt 0 ]; then
+    ccq_ui_success "  [PASS]         ${pass_count} 个步骤"
+  fi
+  if command -v ccq_ui_danger >/dev/null 2>&1 && [ "${fail_count}" -gt 0 ]; then
+    ccq_ui_danger "  [FAIL]         ${fail_count} 个步骤"
+  fi
+  if command -v ccq_ui_info >/dev/null 2>&1 && [ "${skip_count}" -gt 0 ]; then
+    ccq_ui_info "  [SKIP]         ${skip_count} 个步骤"
+  fi
+  if command -v ccq_ui_dim >/dev/null 2>&1 && [ "${unsupported_count}" -gt 0 ]; then
+    ccq_ui_dim "  [UNSUPPORTED]  ${unsupported_count} 个步骤"
+  fi
+  if command -v ccq_ui_warning >/dev/null 2>&1 && [ "${manual_count}" -gt 0 ]; then
+    ccq_ui_warning "  [MANUAL]       ${manual_count} 个步骤"
+  fi
+
+  if command -v ccq_ui_primary >/dev/null 2>&1; then
+    ccq_ui_primary "=================================="
+  fi
+
+  # 返回码：失败数 > 0 返回 1
+  [ "${fail_count}" -eq 0 ]
+}
+
+# ============ 错误详情展开 ============
+
+ccq_show_error_details() {
+  local step_id="${1:-}"
+  local error_message="${2:-}"
+  local exit_code="${3:-1}"
+
+  if command -v ccq_ui_danger >/dev/null 2>&1; then
+    ccq_ui_danger ""
+    ccq_ui_danger "步骤失败: ${step_id}"
+    ccq_ui_danger "错误摘要: ${error_message}"
+  fi
+
+  # 检查是否为 Developer 模式
+  local is_developer=0
+  if command -v ccq_output_is_developer >/dev/null 2>&1 && ccq_output_is_developer; then
+    is_developer=1
+  fi
+
+  # Developer 模式自动展开详情
+  if [ "${is_developer}" = "1" ]; then
+    if command -v ccq_ui_dim >/dev/null 2>&1; then
+      ccq_ui_dim ""
+      ccq_ui_dim "技术详情:"
+      ccq_ui_dim "  退出码: ${exit_code}"
+      ccq_ui_dim "  步骤 ID: ${step_id}"
+      [ -n "${CCQ_LAST_ERROR:-}" ] && ccq_ui_dim "  错误输出: ${CCQ_LAST_ERROR}"
+      [ -n "${CCQ_LAST_OUTPUT:-}" ] && ccq_ui_dim "  标准输出: ${CCQ_LAST_OUTPUT}"
+    fi
+  else
+    # 非 Developer 模式提示按 D 展开
+    if command -v ccq_ui_info >/dev/null 2>&1; then
+      ccq_ui_info ""
+      ccq_ui_info "按 D 键查看技术详情，或按其他键继续..."
+    fi
+
+    # 读取单个按键
+    local key
+    if command -v ccq_tty_available >/dev/null 2>&1 && ccq_tty_available; then
+      read -sk 1 key 2>/dev/null || key=""
+      if [ "${key}" = "d" ] || [ "${key}" = "D" ]; then
+        if command -v ccq_ui_dim >/dev/null 2>&1; then
+          ccq_ui_dim ""
+          ccq_ui_dim "技术详情:"
+          ccq_ui_dim "  退出码: ${exit_code}"
+          ccq_ui_dim "  步骤 ID: ${step_id}"
+          [ -n "${CCQ_LAST_ERROR:-}" ] && ccq_ui_dim "  错误输出: ${CCQ_LAST_ERROR}"
+          [ -n "${CCQ_LAST_OUTPUT:-}" ] && ccq_ui_dim "  标准输出: ${CCQ_LAST_OUTPUT}"
+        fi
+      fi
+    fi
+  fi
 }

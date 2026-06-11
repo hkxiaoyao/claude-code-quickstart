@@ -357,3 +357,101 @@ $script:BuiltinProviders = @{
 ### 加载顺序
 
 Provider.ps1 在 McpManager.ps1 之后加载。依赖 Ui.ps1、Profile.ps1 的函数。被 steps/ApiKey.ps1 dot-source 引用。
+
+---
+
+## macOS 对照
+
+macOS 安装器实现了与 Windows 功能对等的核心模块，采用 zsh 脚本体系。详见 [installer/macos/README.md](../../macos/README.md)。
+
+### 核心模块映射
+
+| Windows (PowerShell) | macOS (zsh) | 功能对齐度 |
+|---------------------|-------------|-----------|
+| `Ui.ps1` | `Ui.zsh` | 95% - 语义颜色、表格、菜单、错误展开 |
+| `Process.ps1` | `Process.zsh` | 95% - 命令执行、重试、超时、npm outdated 缓存 |
+| `Profile.ps1` | `Profile.zsh` | 98% - 原子写入、备份、受管区块、Manifest、Snapshot |
+| `Admin.ps1` | - | N/A - macOS 无需管理员自提权 |
+| `Net.ps1` | - | N/A - macOS 使用 curl/wget 原生工具 |
+| `Registry.ps1` | `Registry.zsh` | 98% - 步骤注册表、拓扑排序、Legacy 映射 |
+| `Bootstrap.ps1` | `Bootstrap.zsh` | 95% - 生命周期、Critical 失败策略、五类摘要 |
+| `McpManager.ps1` | `McpManager.zsh` | 98% - Vault、状态管理、批量切换、动态 Rules |
+| `Provider.ps1` | `Provider.zsh` | 98% - CRUD、Sync、模型环境键管理 |
+
+### 平台差异要点
+
+**并发保护**：
+- Windows: `System.Threading.Mutex`（30s 超时）
+- macOS: `flock`（30s 超时）
+
+**JSON 操作**：
+- Windows: `ConvertFrom-Json -AsHashtable` / `ConvertTo-Json`
+- macOS: `node -e` 单行脚本（复杂操作）+ `jq`（简单查询）
+
+**Profile 路径**：
+- Windows: `$PROFILE` (`Documents\PowerShell\Microsoft.PowerShell_profile.ps1`)
+- macOS: `~/.zprofile` / `~/.zshrc`
+
+**包管理器**：
+- Windows: `winget` (Windows Package Manager)
+- macOS: `brew` (Homebrew)
+
+**Node.js 安装**：
+- Windows: `fnm` (Fast Node Manager)
+- macOS: `nvm` 官方脚本
+
+**状态指示器**：
+- Windows: `[PASS]` / `[FAIL]` / `[SKIP]`
+- macOS: `[PASS]` / `[FAIL]` / `[SKIP]` / `[UNSUPPORTED]` / `[MANUAL]`
+
+### 共享机制
+
+**contracts 业务契约**（100% 共享）：
+- `installer/contracts/steps.json` - 步骤元数据、依赖、分组
+- `installer/contracts/providers.json` - 供应商定义
+- `installer/contracts/mcp-servers.json` - MCP Server 配置
+- `installer/contracts/claude-config.json` - Claude 配置模板
+
+**配置文件 schema**（100% 共享）：
+- `~/.claude/settings.json` - Claude Code 主配置
+- `~/.claude.json` - Claude 初始化标记
+- `~/.claude/providers/*.json` - 供应商 Profile
+- `~/.ccq/mcp-meta.json` - MCP Vault
+
+**托管标记块**（语法一致）：
+```
+# >>> Claude Code Quickstart >>>
+# 受管内容
+# <<< Claude Code Quickstart <<<
+```
+
+### 核心函数命名对照
+
+| 功能 | Windows | macOS |
+|------|---------|-------|
+| 命令执行 | `Invoke-ExternalCommand` | `ccq_run_command` |
+| 原子写入 | `Write-FileAtomic` | `ccq_write_file_atomic` |
+| 备份文件 | `Backup-File` | `ccq_backup_file` |
+| 供应商切换 | `Switch-Provider` | `ccq_switch_provider` |
+| MCP 启用 | `Enable-McpServer` | `ccq_enable_mcp_server` |
+| 步骤生命周期 | `Invoke-StepLifecycle` | `ccq_invoke_step_lifecycle` |
+| 拓扑排序 | `Get-ExecutionOrder` | `ccq_get_execution_order` |
+| 错误详情展开 | `Show-ErrorDetails` | `ccq_show_error_details` |
+
+### macOS 特有功能
+
+**fnm 路径修复**（`Process.zsh`）：
+- 自动解析 `/fnm_multishells/` 或 `/.fnm/` 的符号链接真实路径
+- npm outdated 查询自动追加 `--prefix <真实路径>`
+
+**Homebrew 集成**（`PackageManager.zsh`）：
+- 自动检测 Homebrew 安装路径（Apple Silicon: `/opt/homebrew`, Intel: `/usr/local`)
+- 官方安装脚本执行后自动追加 `eval "$(<brew> shellenv)"` 到 `~/.zprofile`
+
+**Platform 检测**（`Platform.zsh`）：
+- CPU 架构检测：`uname -m` → `arm64` / `x86_64`
+- macOS 版本检测：`sw_vers -productVersion` → 最低 12+
+
+---
+
+_本小姐的 macOS 实现与 Windows 功能完全对等，代码质量有保证！_ (￣▽￣)ノ

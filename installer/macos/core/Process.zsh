@@ -277,3 +277,76 @@ ccq_run_command_developer_or_silent() {
 ccq_npx() {
   ccq_run_command --timeout "${CCQ_DEFAULT_TIMEOUT_SECONDS}" --retries 0 -- npx "$@"
 }
+
+# npm outdated 全局缓存 - 会话级缓存避免重复查询
+CCQ_NPM_OUTDATED_CACHE=""
+CCQ_NPM_OUTDATED_CACHED=0
+
+ccq_npm_outdated_global() {
+  local force="${1:-0}"
+
+  # 缓存命中且非强制刷新
+  if [ "${CCQ_NPM_OUTDATED_CACHED}" = "1" ] && [ "${force}" != "1" ]; then
+    printf '%s' "${CCQ_NPM_OUTDATED_CACHE}"
+    return 0
+  fi
+
+  # npm 不可用时返回空字符串
+  if ! ccq_command_exists npm; then
+    CCQ_NPM_OUTDATED_CACHE=""
+    CCQ_NPM_OUTDATED_CACHED=1
+    return 0
+  fi
+
+  # 解析 npm 全局前缀，处理 fnm 符号链接
+  local npm_prefix
+  npm_prefix="$(npm prefix -g 2>/dev/null || true)"
+
+  # fnm 路径修复：解析 /fnm_multishells/ 或 /.fnm/ 的真实路径
+  if [ -n "${npm_prefix}" ]; then
+    case "${npm_prefix}" in
+      *"/fnm_multishells/"*|*"/.fnm/"*)
+        if ccq_command_exists readlink; then
+          npm_prefix="$(readlink -f "${npm_prefix}" 2>/dev/null || true)"
+        fi
+        if [ -z "${npm_prefix}" ] && ccq_command_exists realpath; then
+          npm_prefix="$(realpath "${npm_prefix}" 2>/dev/null || true)"
+        fi
+        ;;
+    esac
+  fi
+
+  # 执行 npm outdated 查询
+  local npm_args=("outdated" "-g" "--json")
+  if [ -n "${npm_prefix}" ]; then
+    npm_args+=("--prefix" "${npm_prefix}")
+  fi
+
+  local outdated_json
+  outdated_json="$(npm "${npm_args[@]}" 2>/dev/null || true)"
+
+  # 解析 JSON 转 TSV 格式: <package_name><TAB><current><TAB><latest>
+  local tsv_output=""
+  if [ -n "${outdated_json}" ]; then
+    tsv_output="$(node -e "
+      try {
+        const data = JSON.parse(process.argv[1]);
+        const lines = [];
+        for (const [pkg, info] of Object.entries(data)) {
+          const current = info.current || '';
+          const latest = info.latest || '';
+          lines.push(\`\${pkg}\t\${current}\t\${latest}\`);
+        }
+        console.log(lines.join('\\n'));
+      } catch (e) {
+        // JSON 解析失败返回空
+      }
+    " "${outdated_json}" 2>/dev/null || true)"
+  fi
+
+  # 更新缓存
+  CCQ_NPM_OUTDATED_CACHE="${tsv_output}"
+  CCQ_NPM_OUTDATED_CACHED=1
+
+  printf '%s' "${tsv_output}"
+}
