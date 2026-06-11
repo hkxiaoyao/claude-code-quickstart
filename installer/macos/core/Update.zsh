@@ -10,6 +10,75 @@ CCQ_UPDATE_ZSH_LOADED=1
 
 : "${CCQ_UPDATE_LOCK:=${TMPDIR:-/tmp}/.ccq-update.lock}"
 : "${CCQ_UPDATE_LOCK_TIMEOUT:=30}"
+: "${CCQ_UPDATE_MANIFEST:=${HOME}/.ccq/update-manifest.json}"
+
+# ─── 更新清单（内容指纹管理）──────────────────────────────────────────────
+
+ccq_update_manifest_path() { printf '%s\n' "${CCQ_UPDATE_MANIFEST}"; }
+
+# 读取清单（容错：文件不存在或损坏时返回空清单）
+ccq_update_read_manifest() {
+  local manifest_path
+  manifest_path="$(ccq_update_manifest_path)"
+  if [ ! -f "${manifest_path}" ] || ! command -v node >/dev/null 2>&1; then
+    printf '{"schemaVersion":1,"steps":{}}\n'
+    return 0
+  fi
+  node -e '
+const fs = require("fs");
+try {
+  const raw = fs.readFileSync(process.argv[1], "utf8").trim();
+  const obj = raw ? JSON.parse(raw) : {};
+  if (!obj.steps || typeof obj.steps !== "object" || Array.isArray(obj.steps)) obj.steps = {};
+  obj.schemaVersion = obj.schemaVersion || 1;
+  process.stdout.write(JSON.stringify(obj));
+} catch (e) {
+  process.stdout.write(JSON.stringify({ schemaVersion: 1, steps: {} }));
+}
+' "${manifest_path}" 2>/dev/null || printf '{"schemaVersion":1,"steps":{}}\n'
+}
+
+# 写入某个步骤的清单条目: ccq_update_write_manifest_entry <stepId> <entryJson>
+ccq_update_write_manifest_entry() {
+  local step_id="${1:-}"
+  local entry_json="${2:-}"
+  local manifest_path merged
+  [ -n "${step_id}" ] && [ -n "${entry_json}" ] || return 1
+  command -v node >/dev/null 2>&1 || return 1
+  manifest_path="$(ccq_update_manifest_path)"
+
+  merged="$(ccq_update_read_manifest | STEP_ID="${step_id}" ENTRY_JSON="${entry_json}" node -e '
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(0, "utf8"));
+manifest.steps[process.env.STEP_ID] = JSON.parse(process.env.ENTRY_JSON);
+manifest.updatedAt = new Date().toISOString();
+process.stdout.write(JSON.stringify(manifest, null, 2));
+')" || return 1
+  ccq_json_write_atomic "${manifest_path}" "${merged}"
+}
+
+# 读取某个步骤的清单条目 JSON（不存在输出 {}）
+ccq_update_get_manifest_entry() {
+  local step_id="${1:-}"
+  [ -n "${step_id}" ] || { printf '{}'; return 0; }
+  ccq_update_read_manifest | STEP_ID="${step_id}" node -e '
+const fs = require("fs");
+const manifest = JSON.parse(fs.readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify(manifest.steps[process.env.STEP_ID] || {}));
+' 2>/dev/null || printf '{}'
+}
+
+# ─── SHA256 指纹（内容变更检测）───────────────────────────────────────────
+
+ccq_string_fingerprint() {
+  printf '%s' "${1:-}" | shasum -a 256 2>/dev/null | awk '{print $1}'
+}
+
+ccq_file_fingerprint() {
+  local file_path="${1:-}"
+  [ -f "${file_path}" ] || return 1
+  shasum -a 256 "${file_path}" 2>/dev/null | awk '{print $1}'
+}
 
 # ─── 更新锁（防并发损坏）───────────────────────────────────────────────────
 
@@ -53,6 +122,10 @@ _ccq_npm_outdated_cache=""
 
 ccq_npm_outdated_global() {
   local force="${1:-false}"
+  case "${force}" in
+    --refresh|true) force="true" ;;
+    *) force="false" ;;
+  esac
 
   if [ "${force}" != "true" ] && [ -n "${_ccq_npm_outdated_cache}" ]; then
     printf '%s\n' "${_ccq_npm_outdated_cache}"
@@ -96,6 +169,11 @@ ccq_update_snapshot_files() {
 .claude/CLAUDE.md
 .ccq/mcp-meta.json
 EOF
+  # ccq 动态渲染的 rules 文件（按实际存在枚举）
+  local rules_file
+  for rules_file in "${HOME}"/.claude/rules/ccq-*.md(N); do
+    printf '%s\n' "${rules_file#${HOME}/}"
+  done
 }
 
 ccq_update_create_snapshot() {
@@ -142,9 +220,10 @@ console.log(JSON.stringify(m, null, 2));
 
   printf '%s\n' "${manifest_json}" > "${snapshot_dir}/manifest.json"
 
+  # stdout 仅输出快照路径（供调用方捕获）；提示信息走 stderr
   local file_count
   file_count="$(printf '%s' "${manifest_json}" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).files.length)')"
-  ccq_ui_success "✓ 更新快照已创建: ${snapshot_dir} (${file_count} 个文件)"
+  ccq_ui_success "✓ 更新快照已创建: ${snapshot_dir} (${file_count} 个文件)" >&2
   printf '%s\n' "${snapshot_dir}"
 }
 

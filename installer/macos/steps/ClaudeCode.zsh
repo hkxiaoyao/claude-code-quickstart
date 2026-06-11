@@ -92,6 +92,14 @@ Verify-ClaudeCode() {
 }
 
 Update-ClaudeCode() {
+  # noop 判断：npm 远程无新版本时跳过重装
+  if command -v ccq_npm_package_has_update >/dev/null 2>&1 && \
+     [ "$(ccq_npm_package_has_update '@anthropic-ai/claude-code')" = "false" ]; then
+    printf 'Success=true\n'
+    printf 'UpdatedItems=noop::ClaudeCode::up-to-date\n'
+    printf 'ErrorMessage=\n'
+    return 0
+  fi
   if Install-ClaudeCode >/dev/null 2>&1; then
     printf 'Success=true\n'
     printf 'UpdatedItems=npm::claude-code::latest\n'

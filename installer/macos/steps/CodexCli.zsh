@@ -55,6 +55,12 @@ Verify-CodexCli() {
 }
 
 Update-CodexCli() {
+  # noop 判断：npm 远程无新版本时跳过重装
+  if command -v ccq_npm_package_has_update >/dev/null 2>&1 && \
+     [ "$(ccq_npm_package_has_update '@openai/codex')" = "false" ]; then
+    ccq_step_update_result true "noop::CodexCli::up-to-date" "$(ccq_codex_version)" ""
+    return 0
+  fi
   if Install-CodexCli >/dev/null 2>&1; then
     ccq_step_update_result true "npm::codex-cli::latest" "$(ccq_codex_version)" ""
     return 0

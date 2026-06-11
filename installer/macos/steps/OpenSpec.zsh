@@ -58,6 +58,12 @@ Verify-OpenSpec() {
 }
 
 Update-OpenSpec() {
+  # noop 判断：npm 远程无新版本时跳过重装
+  if command -v ccq_npm_package_has_update >/dev/null 2>&1 && \
+     [ "$(ccq_npm_package_has_update '@fission-ai/openspec')" = "false" ]; then
+    ccq_step_update_result true "noop::OpenSpec::up-to-date" "$(ccq_openspec_version)" ""
+    return 0
+  fi
   if Install-OpenSpec >/dev/null 2>&1; then
     ccq_step_update_result true "npm::openspec-cli::latest" "$(ccq_openspec_version)" ""
     return 0

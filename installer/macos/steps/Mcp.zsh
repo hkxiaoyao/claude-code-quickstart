@@ -335,6 +335,12 @@ Install-Mcp() {
     ccq_mcp_install_result false 0 "没有成功配置任何 MCP Server"
     return 1
   fi
+
+  # 安装后同步 MCP Rules（core/McpManager.zsh 提供）
+  if command -v ccq_mcp_sync_rules >/dev/null 2>&1; then
+    ccq_mcp_sync_rules >/dev/null 2>&1 || ccq_ui_warning "MCP Rules 同步失败" "developer"
+  fi
+
   ccq_mcp_install_result true "${count}" ""
 }
 

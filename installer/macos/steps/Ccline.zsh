@@ -96,6 +96,12 @@ Verify-Ccline() {
 }
 
 Update-Ccline() {
+  # noop 判断：npm 远程无新版本时跳过重装
+  if command -v ccq_npm_package_has_update >/dev/null 2>&1 && \
+     [ "$(ccq_npm_package_has_update '@cometix/ccline')" = "false" ]; then
+    ccq_step_update_result true "noop::Ccline::up-to-date" "$(ccq_ccline_version)" ""
+    return 0
+  fi
   if Install-Ccline >/dev/null 2>&1; then
     ccq_step_update_result true "npm::ccline::latest" "$(ccq_ccline_version)" ""
     return 0

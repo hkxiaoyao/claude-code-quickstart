@@ -149,6 +149,22 @@ Verify-ClaudeMd() {
   return 1
 }
 
+# 模板与现有文件指纹比较：模板有变更返回 0（有更新），一致返回 1
+ccq_claudemd_has_update() {
+  local target template_fp file_fp
+  target="$(ccq_claude_md_path)"
+  [ -f "${target}" ] || return 0
+  command -v shasum >/dev/null 2>&1 || return 0
+  # 标准化尾部空白后比较（Install 写入时模板末尾追加换行）
+  template_fp="$(ccq_claude_md_template | sed -e 's/[[:space:]]*$//' | shasum -a 256 | awk '{print $1}')"
+  file_fp="$(sed -e 's/[[:space:]]*$//' "${target}" | shasum -a 256 2>/dev/null | awk '{print $1}')"
+  [ "${template_fp}" != "${file_fp}" ]
+}
+
 Update-ClaudeMd() {
+  if ! ccq_claudemd_has_update; then
+    ccq_claude_md_install_result true "" "noop::ClaudeMd::fingerprint-match"
+    return 0
+  fi
   Install-ClaudeMd
 }

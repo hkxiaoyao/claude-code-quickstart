@@ -192,8 +192,85 @@ ccq_manage_update_hint() {
   esac
 }
 
+# 步骤 → npm 全局包名映射（用于 hasUpdate 三态检测）
+ccq_manage_npm_package_for_step() {
+  case "${1:-}" in
+    ClaudeCode) printf '@anthropic-ai/claude-code' ;;
+    Ccline) printf '@cometix/ccline' ;;
+    CodexCli) printf '@openai/codex' ;;
+    OpenSpec) printf '@fission-ai/openspec' ;;
+    *) printf '' ;;
+  esac
+}
+
+# 计算单个步骤的 hasUpdate 三态: true / false / null
+# 输出: hasUpdate <TAB> reason
+ccq_manage_step_has_update() {
+  local step_id="${1:-}"
+  local npm_pkg components has_drift
+
+  npm_pkg="$(ccq_manage_npm_package_for_step "${step_id}")"
+  if [ -n "${npm_pkg}" ]; then
+    if command -v ccq_npm_package_has_update >/dev/null 2>&1; then
+      if [ "$(ccq_npm_package_has_update "${npm_pkg}")" = "true" ]; then
+        printf 'true\tnpm 有新版本\n'
+      else
+        printf 'false\t已是最新\n'
+      fi
+      return 0
+    fi
+    printf 'null\t无法检测 npm 版本\n'
+    return 0
+  fi
+
+  case "${step_id}" in
+    CcgWorkflow)
+      if command -v ccq_cg_update_components >/dev/null 2>&1; then
+        components="$(ccq_cg_update_components 2>/dev/null || true)"
+        local update_kind
+        update_kind="$(ccq_parse_result_field "${components}" UpdateKind 2>/dev/null || printf 'none')"
+        if [ "${update_kind}" = "none" ]; then
+          printf 'false\t分量均为最新\n'
+        else
+          printf 'true\t%s\n' "${update_kind}"
+        fi
+        return 0
+      fi
+      printf 'null\t分量检测不可用\n'
+      ;;
+    ClaudeConfig)
+      if command -v ccq_claude_config_analyze_json >/dev/null 2>&1; then
+        has_drift="$(ccq_claude_config_analyze_json 2>/dev/null | node -e 'const fs=require("fs"); try { const v=JSON.parse(fs.readFileSync(0,"utf8")); process.stdout.write(v.hasUpdate ? "true" : "false"); } catch (e) { process.stdout.write("null"); }' 2>/dev/null || printf 'null')"
+        case "${has_drift}" in
+          true) printf 'true\t配置存在缺失或漂移\n' ;;
+          false) printf 'false\t配置已对齐\n' ;;
+          *) printf 'null\t无法解析配置\n' ;;
+        esac
+        return 0
+      fi
+      printf 'null\tdrift 检测不可用\n'
+      ;;
+    ClaudeMd)
+      if command -v ccq_claudemd_has_update >/dev/null 2>&1; then
+        if ccq_claudemd_has_update 2>/dev/null; then
+          printf 'true\t模板内容有变更\n'
+        else
+          printf 'false\t模板内容一致\n'
+        fi
+        return 0
+      fi
+      printf 'null\t指纹检测不可用\n'
+      ;;
+    *)
+      # CcSwitch / AntigravityCli 等无法程序判断 → null
+      printf 'null\t无法检测，更新由工具自行判断\n'
+      ;;
+  esac
+}
+
 ccq_manage_update_status_lines() {
   local step_id update_function test_function step_name version_tag installed test_result hint settings_path
+  local has_update_line has_update reason
   for step_id in $(ccq_get_group_step_ids Basic; ccq_get_group_step_ids Advanced); do
     update_function="$(ccq_get_step_field "${step_id}" UpdateFunction 2>/dev/null || true)"
     [ -n "${update_function}" ] || continue
@@ -219,13 +296,26 @@ ccq_manage_update_status_lines() {
       fi
     fi
 
+    # hasUpdate 三态检测（仅对已安装步骤）
+    has_update="null"
+    reason="-"
+    if [ "${installed}" = "true" ]; then
+      has_update_line="$(ccq_manage_step_has_update "${step_id}")"
+      has_update="${has_update_line%%$'\t'*}"
+      reason="${has_update_line#*$'\t'}"
+    fi
+
     hint="$(ccq_manage_update_hint "${step_id}")"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${step_id}" "${step_name}" "${installed}" "${version_tag}" "${update_function}" "${hint}"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${step_id}" "${step_name}" "${installed}" "${version_tag}" "${update_function}" "${hint}" "${has_update}" "${reason}"
   done
 }
 
 ccq_manage_update_status() {
-  local lines line step_id step_name installed version_tag update_function hint state_text label
+  local lines line step_id step_name installed version_tag update_function hint has_update reason state_text label
+  ccq_ui_dim "正在检测组件状态与远程版本..."
+  if command -v ccq_npm_outdated_global >/dev/null 2>&1; then
+    ccq_npm_outdated_global true >/dev/null 2>&1 || true
+  fi
   lines="$(ccq_manage_update_status_lines)"
   ccq_ui_primary "可更新组件状态："
   if [ -z "${lines}" ]; then
@@ -233,15 +323,27 @@ ccq_manage_update_status() {
     return 0
   fi
 
-  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint; do
+  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint has_update reason; do
     [ -n "${step_id}" ] || continue
-    if [ "${installed}" = "true" ]; then
-      state_text="可更新"
-      label="$(ccq_status_label Success)"
-    else
-      state_text="未安装"
+    if [ "${installed}" != "true" ]; then
       label="$(ccq_status_label Skipped)"
+      ccq_ui_info "  ${label} ${step_name} (${step_id}) - 未安装"
+      continue
     fi
+    case "${has_update}" in
+      true)
+        label="$(ccq_status_label Success)"
+        state_text="有更新: ${reason}"
+        ;;
+      false)
+        label="$(ccq_status_label Skipped)"
+        state_text="已最新"
+        ;;
+      *)
+        label="$(ccq_status_label Skipped)"
+        state_text="未知: ${reason}"
+        ;;
+    esac
     ccq_ui_info "  ${label} ${step_name} (${step_id}) - ${state_text} - 当前版本: ${version_tag:-'-'} - 策略: ${hint}"
   done <<EOF
 ${lines}
@@ -249,15 +351,26 @@ EOF
 }
 
 ccq_manage_select_update_steps() {
-  local lines line step_id step_name installed version_tag update_function hint
-  local ids=() labels=() defaults=() idx=0 indices selected_index
+  local lines line step_id step_name installed version_tag update_function hint has_update reason
+  local ids=() labels=() defaults=() idx=0 indices selected_index update_count=0
   lines="$(ccq_manage_update_status_lines)"
-  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint; do
+  while IFS=$'\t' read -r step_id step_name installed version_tag update_function hint has_update reason; do
     [ -n "${step_id}" ] || continue
     [ "${installed}" = "true" ] || continue
     ids+=("${step_id}")
-    labels+=("${step_name} (${step_id}) - ${version_tag:-'-'} - ${hint}")
-    defaults+=("${idx}")
+    case "${has_update}" in
+      true)
+        labels+=("${step_name} (${step_id}) - 有更新: ${reason}")
+        defaults+=("${idx}")
+        update_count=$((update_count + 1))
+        ;;
+      false)
+        labels+=("${step_name} (${step_id}) - 已最新")
+        ;;
+      *)
+        labels+=("${step_name} (${step_id}) - 未知: ${reason}")
+        ;;
+    esac
     idx=$((idx + 1))
   done <<EOF
 ${lines}
@@ -268,12 +381,20 @@ EOF
     return 1
   fi
 
+  if [ "${update_count}" -eq 0 ]; then
+    ccq_ui_success "所有可检测项目均为最新" >&2
+  fi
+
   if [ ! -r /dev/tty ]; then
-    printf '%s\n' "${ids[@]}"
+    # 非交互模式：仅执行确认有更新的项
+    local pos=0
+    for selected_index in "${defaults[@]}"; do
+      printf '%s\n' "${ids[$((selected_index + 1))]}"
+    done
     return 0
   fi
 
-  indices="$(ccq_manage_prompt_multi "可更新组件" "${defaults[*]}" "${labels[@]}")" || return 1
+  indices="$(ccq_manage_prompt_multi "可更新组件（默认选中有更新项）" "${defaults[*]}" "${labels[@]}")" || return 1
   for selected_index in ${indices}; do
     printf '%s\n' "${ids[$((selected_index + 1))]}"
   done
@@ -431,36 +552,89 @@ ccq_manage_run_update_step() {
   esac
 }
 
+# Finalize: 成功更新的指纹管理步骤回写 manifest
+ccq_manage_write_manifest_for_step() {
+  local step_id="${1:-}"
+  command -v ccq_update_write_manifest_entry >/dev/null 2>&1 || return 0
+  case "${step_id}" in
+    ClaudeMd)
+      local fp entry
+      if command -v ccq_file_fingerprint >/dev/null 2>&1; then
+        fp="$(ccq_file_fingerprint "${HOME}/.claude/CLAUDE.md" 2>/dev/null || true)"
+        [ -n "${fp}" ] || return 0
+        entry="$(printf '{"fingerprint":"%s","appliedAt":"%s"}' "${fp}" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')")"
+        ccq_update_write_manifest_entry "${step_id}" "${entry}" 2>/dev/null || ccq_ui_warning "清单回写失败: ${step_id}" "developer"
+      fi
+      ;;
+    CcgWorkflow)
+      local engine_version entry
+      engine_version="$(ccq_cg_version 2>/dev/null || true)"
+      entry="$(printf '{"appliedAt":"%s","components":{"engineVersion":"%s"}}' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${engine_version}")"
+      ccq_update_write_manifest_entry "${step_id}" "${entry}" 2>/dev/null || ccq_ui_warning "清单回写失败: ${step_id}" "developer"
+      ;;
+  esac
+}
+
 ccq_manage_update_action() {
   if [ "${CCQ_PARAM_LIST_UPDATES}" = "1" ]; then
     ccq_manage_update_status
     return 0
   fi
 
-  # 5.1 获取更新锁（防并发）
+  # Init: 获取更新锁（防并发）
   if ! ccq_update_acquire_lock; then
     ccq_ui_danger "无法获取更新锁（30s 超时），可能有其他 CCQ 更新正在进行"
     return 1
   fi
   trap 'ccq_update_release_lock' EXIT INT TERM
 
-  # 5.6 创建更新前快照
-  local snapshot_dir
-  snapshot_dir="$(ccq_update_create_snapshot 2>/dev/null || echo "")"
-  [ -n "${snapshot_dir}" ] && ccq_ui_dim "  快照目录: ${snapshot_dir}"
-
-  # 现有 update 流程
+  # Detect + Select: 状态检测与多选（默认选中有更新项）
   ccq_manage_update_status
   local selected_ids step_id fail_count=0
-  selected_ids="$(ccq_manage_select_update_steps)" || { ccq_update_release_lock; return 0; }
+  selected_ids="$(ccq_manage_select_update_steps)" || { ccq_update_release_lock; trap - EXIT INT TERM; return 0; }
+  if [ -z "${selected_ids}" ]; then
+    ccq_ui_dim "未选择任何更新项"
+    ccq_update_release_lock
+    trap - EXIT INT TERM
+    return 0
+  fi
+
+  # Snapshot: 创建更新前快照
+  local snapshot_dir
+  snapshot_dir="$(ccq_update_create_snapshot 2>/dev/null || echo "")"
+  if [ -n "${snapshot_dir}" ]; then
+    ccq_ui_dim "  快照目录: ${snapshot_dir}"
+  else
+    ccq_ui_warning "快照创建失败"
+    if [ -r /dev/tty ]; then
+      local reply
+      printf '快照失败，是否继续更新? [y/N] ' >/dev/tty
+      IFS= read -r reply </dev/tty || reply=""
+      case "${reply}" in
+        y|Y) ;;
+        *) ccq_update_release_lock; trap - EXIT INT TERM; return 1 ;;
+      esac
+    else
+      ccq_ui_danger "非交互模式下快照失败，中断更新"
+      ccq_update_release_lock
+      trap - EXIT INT TERM
+      return 1
+    fi
+  fi
+
+  # Execute: 按选择顺序执行更新
   ccq_manage_reset_update_summary
   for step_id in ${selected_ids}; do
-    ccq_manage_run_update_step "${step_id}" || fail_count=$((fail_count + 1))
+    if ccq_manage_run_update_step "${step_id}"; then
+      ccq_manage_write_manifest_for_step "${step_id}"
+    else
+      fail_count=$((fail_count + 1))
+    fi
   done
-  ccq_manage_show_update_summary
 
-  # 5.6 清理旧快照
-  ccq_update_clear_old_snapshots 5 30 "${snapshot_dir}"
+  # Finalize: 摘要 + 清理旧快照 + 释放锁
+  ccq_manage_show_update_summary
+  ccq_update_clear_old_snapshots 5 7 "${snapshot_dir}"
 
   ccq_update_release_lock
   trap - EXIT INT TERM
@@ -506,11 +680,11 @@ ccq_manage_provider_action() {
       return 0
     fi
     if [ -n "${CCQ_PARAM_PROVIDER}" ]; then
-      ccq_provider_switch "${CCQ_PARAM_PROVIDER}" || { ccq_ui_danger "供应商切换失败: ${CCQ_PARAM_PROVIDER}"; return 1; }
+      ccq_provider_switch_key "${CCQ_PARAM_PROVIDER}" || { ccq_ui_danger "供应商切换失败: ${CCQ_PARAM_PROVIDER}"; return 1; }
+      ccq_ui_success "已切换到供应商: ${CCQ_PARAM_PROVIDER}"
       return 0
     fi
-    ccq_provider_sync_from_settings
-    ccq_provider_show_manage_menu
+    ccq_provider_manage_menu
     return $?
   fi
 
