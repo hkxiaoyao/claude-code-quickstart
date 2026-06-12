@@ -16,9 +16,17 @@ Set-StrictMode -Version Latest
 # ── 契约模板加载（contracts-first + inline fallback）──
 
 function Get-ClaudeMdContractsRoot {
+    # irm|iex 场景下 $PSScriptRoot 为空，直接返回空触发 fallback
+    if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return ""
+    }
+
     $currentDir = $PSScriptRoot
     for ($i = 0; $i -lt 3; $i++) {
         $currentDir = Split-Path -Parent $currentDir
+        if ([string]::IsNullOrWhiteSpace($currentDir)) {
+            break
+        }
         if (Test-Path (Join-Path $currentDir "installer\contracts\templates")) {
             return (Join-Path $currentDir "installer\contracts\templates")
         }
