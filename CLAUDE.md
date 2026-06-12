@@ -93,6 +93,7 @@ Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode] 
 | **HC-MAC-01** | macOS 入口使用 zsh/bash 脚本体系：首次云端入口 `curl -fsSL <install.sh URL> | bash`，脚本内部自动切换到 `/bin/zsh`；不要求 macOS 用户先安装 PowerShell |
 | **HC-MAC-02** | macOS 使用 Homebrew + nvm：最低 macOS 12+，**npm 只通过 nvm 管理（不支持 fnm / npm 全局包备份恢复）**，Profile 写入 `~/.zprofile` / `~/.zshrc`，PATH 分隔符为 `:`，禁止在 macOS 代码中调用 winget、注册表、MSI/EXE 或 Windows `$PROFILE` |
 | **HC-MAC-03** | Windows 与 macOS 共享 `installer/contracts/` 业务契约与 JSON schema；平台差异只放在 Windows PowerShell runtime 或 macOS zsh runtime 中 |
+| **HC-MAC-04** | **macOS 官方安装模式**：Homebrew 与 nvm 均使用官方安装脚本，**不得手动写入** `~/.zprofile` / `~/.zshrc` 的 PATH 或环境变量初始化代码。所有 Profile 配置由官方安装脚本完成，安装器只需执行官方脚本并验证结果 |
 | **SC-3** | 状态指示器：`[PASS]` / `[FAIL]` / `[SKIP]`，macOS 额外支持 `[UNSUPPORTED]` / `[MANUAL]` 且不计为 Success |
 | **SC-5** | 错误展示：友好信息 + 按 `D` 展开技术详情 |
 

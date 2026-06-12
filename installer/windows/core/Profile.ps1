@@ -12,6 +12,45 @@ $script:BackupDirectory = "$env:TEMP\ClaudeEnvInstaller\Backups"
 $script:ManagedBlockStartMarker = "# >>> Claude Code Quickstart >>>"
 $script:ManagedBlockEndMarker = "# <<< Claude Code Quickstart <<<"
 
+# ── 契约加载（contracts-first + inline fallback）──
+
+function Get-CleanupPolicyContractsRoot {
+    $currentDir = $PSScriptRoot
+    for ($i = 0; $i -lt 3; $i++) {
+        $currentDir = Split-Path -Parent $currentDir
+        if (Test-Path (Join-Path $currentDir "installer\contracts")) {
+            return (Join-Path $currentDir "installer\contracts")
+        }
+    }
+    return ""
+}
+
+function Get-CleanupPolicyContractPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CLEANUP_POLICY_CONTRACT)) {
+        return $env:CCQ_CLEANUP_POLICY_CONTRACT
+    }
+    $contractsRoot = Get-CleanupPolicyContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) { return "" }
+    return (Join-Path $contractsRoot "cleanup-policy.json")
+}
+
+function Get-CleanupPolicyContract {
+    $contractPath = Get-CleanupPolicyContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath)) {
+        return $null
+    }
+    try {
+        $contractRaw = Get-Content $contractPath -Raw -ErrorAction Stop
+        $contractObj = $contractRaw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if ($contractObj -and $contractObj.ContainsKey("contract")) {
+            return $contractObj["contract"]
+        }
+    } catch {
+        # 静默降级到 fallback
+    }
+    return $null
+}
+
 # ============================================================
 # 路径归一化工具（解决 Windows 8.3 短文件名问题）
 # ============================================================
@@ -1282,21 +1321,31 @@ function Clear-OldUpdateSnapshots {
     .SYNOPSIS
     清理旧的更新快照目录
     .PARAMETER MaxSnapshots
-    保留的最大快照数（默认 5）
+    保留的最大快照数（默认从契约读取，fallback 5）
     .PARAMETER DaysToKeep
-    保留天数（默认 30）
+    保留天数（默认从契约读取，fallback 30）
     .PARAMETER CurrentSnapshotDir
     当前会话快照目录，跳过不清理
     .RETURNS
     清理的目录数量
     #>
     param(
-        [int]$MaxSnapshots = 5,
-        [int]$DaysToKeep = 30,
+        [int]$MaxSnapshots = 0,
+        [int]$DaysToKeep = 0,
         [string]$CurrentSnapshotDir = ""
     )
 
     try {
+        # 从契约读取策略参数（contracts-first）
+        $contractPolicy = Get-CleanupPolicyContract
+        if ($MaxSnapshots -le 0) {
+            $MaxSnapshots = if ($contractPolicy -and $contractPolicy.maxSnapshots) { $contractPolicy.maxSnapshots } else { 5 }
+        }
+        if ($DaysToKeep -le 0) {
+            $DaysToKeep = if ($contractPolicy -and $contractPolicy.maxAgeInDays) { $contractPolicy.maxAgeInDays } else { 30 }
+        }
+        $recentMinutesSkip = if ($contractPolicy -and $contractPolicy.recentMinutesSkip) { $contractPolicy.recentMinutesSkip } else { 5 }
+
         if (-not (Test-Path $script:BackupDirectory)) {
             return 0
         }
@@ -1310,7 +1359,7 @@ function Clear-OldUpdateSnapshots {
         }
 
         $cutoffDate = (Get-Date).AddDays(-$DaysToKeep)
-        $recentCutoff = (Get-Date).AddMinutes(-5)
+        $recentCutoff = (Get-Date).AddMinutes(-$recentMinutesSkip)
         $dirsToDelete = @()
 
         foreach ($dir in $allSnapshots) {
@@ -1319,7 +1368,7 @@ function Clear-OldUpdateSnapshots {
                 continue
             }
 
-            # 跳过最近 5 分钟内创建的目录
+            # 跳过最近 N 分钟内创建的目录
             if ($dir.CreationTime -gt $recentCutoff) {
                 continue
             }

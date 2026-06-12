@@ -13,6 +13,42 @@ Set-StrictMode -Version Latest
 # 模板定义
 # ============================================================
 
+# ── 契约模板加载（contracts-first + inline fallback）──
+
+function Get-ClaudeMdContractsRoot {
+    $currentDir = $PSScriptRoot
+    for ($i = 0; $i -lt 3; $i++) {
+        $currentDir = Split-Path -Parent $currentDir
+        if (Test-Path (Join-Path $currentDir "installer\contracts\templates")) {
+            return (Join-Path $currentDir "installer\contracts\templates")
+        }
+    }
+    return ""
+}
+
+function Get-ClaudeMdTemplateContent {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('base', 'platform-windows', 'platform-macos')]
+        [string]$TemplateName
+    )
+
+    $contractsRoot = Get-ClaudeMdContractsRoot
+    if (-not [string]::IsNullOrWhiteSpace($contractsRoot)) {
+        $templatePath = Join-Path $contractsRoot "claude-md.$TemplateName.md"
+        if (Test-Path $templatePath) {
+            try {
+                return Get-Content $templatePath -Raw -Encoding UTF8
+            } catch {
+                Write-UiWarning "读取 claude-md.$TemplateName.md 失败，使用 inline fallback: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    # Fallback: 返回 inline 模板
+    return $null
+}
+
 # CLAUDE.md 主文件模板（~80 行，确保在 token 截断限制内完整可见）
 $script:ClaudeMdTemplate = @'
 # Claude Code 增强配置
@@ -121,7 +157,32 @@ function Get-ClaudeMdFingerprint {
     .RETURNS
     string - 基于模板内容的 SHA-256 指纹
     #>
-    return Get-StringFingerprint -Text $script:ClaudeMdTemplate
+    $finalTemplate = Get-ClaudeMdAssembledTemplate
+    return Get-StringFingerprint -Text $finalTemplate
+}
+
+function Get-ClaudeMdAssembledTemplate {
+    <#
+    .SYNOPSIS
+    拼装完整 CLAUDE.md 内容（base + platform-windows）
+    .DESCRIPTION
+    优先从契约模板文件拼装，失败时降级到 inline fallback。
+    拼装后的内容用于指纹计算和实际写入。
+    .RETURNS
+    string - 完整的 CLAUDE.md 内容
+    #>
+
+    # 尝试从契约模板拼装
+    $baseContent = Get-ClaudeMdTemplateContent -TemplateName 'base'
+    $platformContent = Get-ClaudeMdTemplateContent -TemplateName 'platform-windows'
+
+    if ($baseContent -and $platformContent) {
+        # 成功从契约读取，拼装返回
+        return $baseContent.TrimEnd() + "`n`n" + $platformContent.TrimEnd() + "`n"
+    }
+
+    # 降级到 inline fallback
+    return $script:ClaudeMdTemplate
 }
 
 # ============================================================
@@ -168,13 +229,14 @@ function Install-ClaudeMd {
         }
 
         Write-UiPrimary "写入 CLAUDE.md 配置..." -Level Detail
-        $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $script:ClaudeMdTemplate
+        $assembledTemplate = Get-ClaudeMdAssembledTemplate
+        $writeResult = Write-FileAtomically -FilePath $claudeMdPath -Content $assembledTemplate
 
         if (-not $writeResult) {
             throw "CLAUDE.md 写入失败"
         }
 
-        $lineCount = ($script:ClaudeMdTemplate -split "`n").Count
+        $lineCount = ($assembledTemplate -split "`n").Count
         Write-UiSuccess "CLAUDE.md 已写入 ($lineCount 行)" -Level Detail
 
         Write-UiInfo "配置路径: $claudeMdPath" -Level Detail

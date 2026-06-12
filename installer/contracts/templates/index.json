@@ -47,6 +47,33 @@
       "Renderer": "Render-McpToolChain",
       "Category": "Development",
       "Status": "existing"
+    },
+    {
+      "Id": "claude-md-template.base",
+      "Source": "installer/contracts/templates/claude-md.base.md",
+      "ManagedByStepId": "ClaudeMd",
+      "Platform": "cross-platform",
+      "ContentFile": "claude-md.base.md",
+      "Description": "跨平台通用章节（一~三、五）",
+      "Status": "existing"
+    },
+    {
+      "Id": "claude-md-template.platform-windows",
+      "Source": "installer/contracts/templates/claude-md.platform-windows.md",
+      "ManagedByStepId": "ClaudeMd",
+      "Platform": "Windows",
+      "ContentFile": "claude-md.platform-windows.md",
+      "Description": "Windows 专属环境章节（四-环境特定 + 输出设置）",
+      "Status": "existing"
+    },
+    {
+      "Id": "claude-md-template.platform-macos",
+      "Source": "installer/contracts/templates/claude-md.platform-macos.md",
+      "ManagedByStepId": "ClaudeMd",
+      "Platform": "MacOS",
+      "ContentFile": "claude-md.platform-macos.md",
+      "Description": "macOS 专属环境章节（四-环境特定 + Windows 兼容提醒 + 输出设置）",
+      "Status": "existing"
     }
   ]
 }

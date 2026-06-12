@@ -634,6 +634,115 @@ function Test-CanonicalSourceLayout {
 . (Join-Path $script:CoreRoot 'Provider.ps1')
 . (Join-Path $script:StepsRoot 'ClaudeConfig.ps1')
 . (Join-Path $script:StepsRoot 'Skills.ps1')
+. (Join-Path $script:StepsRoot 'CcgWorkflow.ps1')
+
+function Test-CcgWorkflowContract {
+    param([Parameter(Mandatory)][hashtable]$Contract)
+
+    if (-not $Contract.ContainsKey('contract')) {
+        Add-Issue "ccg-workflow.json: 缺少 contract 节"
+        return
+    }
+
+    $c = $Contract['contract']
+
+    # 验证 managedEnvDefaults 与 CcgWorkflow.ps1 fallback 一致
+    if ($c.ContainsKey('managedEnvDefaults')) {
+        $expected = @{
+            "CODEAGENT_POST_MESSAGE_DELAY" = "1"
+            "CODEX_TIMEOUT"                = "7200"
+            "BASH_DEFAULT_TIMEOUT_MS"      = "600000"
+            "BASH_MAX_TIMEOUT_MS"          = "3600000"
+        }
+        Assert-Equal 'CcgWorkflow managedEnvDefaults' $expected $c['managedEnvDefaults']
+    } else {
+        Add-Issue "ccg-workflow.json: 缺少 managedEnvDefaults 字段"
+    }
+
+    # 验证 managedRuleFiles 与 CcgWorkflow.ps1 fallback 一致
+    if ($c.ContainsKey('managedRuleFiles')) {
+        $expected = @('ccq-ccgworkflow.md', 'ccq-multimodel.md', 'ccq-tools.md', 'ccq-workflow.md')
+        Assert-Equal 'CcgWorkflow managedRuleFiles' $expected $c['managedRuleFiles']
+    } else {
+        Add-Issue "ccg-workflow.json: 缺少 managedRuleFiles 字段"
+    }
+
+    # 验证 verifyItems 结构
+    if ($c.ContainsKey('verifyItems')) {
+        if ($c['verifyItems'] -isnot [array] -or $c['verifyItems'].Count -lt 7) {
+            Add-Issue "ccg-workflow.json: verifyItems 应为至少 7 项的数组"
+        }
+    } else {
+        Add-Issue "ccg-workflow.json: 缺少 verifyItems 字段"
+    }
+}
+
+function Test-CleanupPolicyContract {
+    param([Parameter(Mandatory)][hashtable]$Contract)
+
+    if (-not $Contract.ContainsKey('contract')) {
+        Add-Issue "cleanup-policy.json: 缺少 contract 节"
+        return
+    }
+
+    $c = $Contract['contract']
+
+    # 验证策略参数
+    $requiredFields = @('maxSnapshots', 'maxAgeInDays', 'recentMinutesSkip', 'directoryPattern', 'baseDirectory')
+    foreach ($field in $requiredFields) {
+        if (-not $c.ContainsKey($field)) {
+            Add-Issue "cleanup-policy.json: 缺少 $field 字段"
+        }
+    }
+
+    # 验证默认值
+    if ($c['maxSnapshots'] -ne 5) {
+        Add-Issue "cleanup-policy.json: maxSnapshots 应为 5"
+    }
+    if ($c['maxAgeInDays'] -ne 30) {
+        Add-Issue "cleanup-policy.json: maxAgeInDays 应为 30"
+    }
+    if ($c['recentMinutesSkip'] -ne 5) {
+        Add-Issue "cleanup-policy.json: recentMinutesSkip 应为 5"
+    }
+    if ($c['directoryPattern'] -ne 'update_*') {
+        Add-Issue "cleanup-policy.json: directoryPattern 应为 'update_*'"
+    }
+}
+
+function Test-CjkWidthRangesContract {
+    param([Parameter(Mandatory)][hashtable]$Contract)
+
+    if (-not $Contract.ContainsKey('contract')) {
+        Add-Issue "cjk-width-ranges.json: 缺少 contract 节"
+        return
+    }
+
+    $c = $Contract['contract']
+
+    # 验证 ranges 数组
+    if (-not $c.ContainsKey('ranges') -or $c['ranges'] -isnot [array]) {
+        Add-Issue "cjk-width-ranges.json: 缺少 ranges 数组"
+        return
+    }
+
+    # 应有 8 段（7 段 CJK + 1 段 Emoji）
+    if ($c['ranges'].Count -lt 8) {
+        Add-Issue "cjk-width-ranges.json: ranges 应至少包含 8 段（含 Emoji 0x1F300-0x1FAFF）"
+    }
+
+    # 验证 Emoji 段存在
+    $hasEmoji = $false
+    foreach ($range in $c['ranges']) {
+        if ($range['start'] -eq '0x1F300' -and $range['end'] -eq '0x1FAFF') {
+            $hasEmoji = $true
+            break
+        }
+    }
+    if (-not $hasEmoji) {
+        Add-Issue "cjk-width-ranges.json: 缺少 Emoji 段 0x1F300-0x1FAFF"
+    }
+}
 
 function Main {
     if (-not (Test-Path $script:InstallerRoot -PathType Container)) {
@@ -649,6 +758,9 @@ function Main {
     Test-BuildManifestContract -Contract (Read-ContractJson 'build.json')
     Test-SkillsContract -Contract (Read-ContractJson 'skills.json')
     Test-UiContract -Contract (Read-ContractJson 'ui.json')
+    Test-CcgWorkflowContract -Contract (Read-ContractJson 'ccg-workflow.json')
+    Test-CleanupPolicyContract -Contract (Read-ContractJson 'cleanup-policy.json')
+    Test-CjkWidthRangesContract -Contract (Read-ContractJson 'cjk-width-ranges.json')
 
     if ($script:Issues.Count -gt 0) {
         Write-Host "[FAIL] contracts 一致性检查失败 ($($script:Issues.Count) 项)" -ForegroundColor Red

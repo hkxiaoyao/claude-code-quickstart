@@ -783,11 +783,77 @@ function Verify-ClaudeConfig {
     return $result
 }
 
+function Get-ClaudeConfigDriftScriptPath {
+    <#
+    .SYNOPSIS
+    返回 claude-config-drift.js 脚本路径
+    #>
+    $contractsRoot = Get-ClaudeConfigContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) {
+        return ""
+    }
+    return Join-Path $contractsRoot "scripts\claude-config-drift.js"
+}
+
+function Invoke-ClaudeConfigDriftScript {
+    <#
+    .SYNOPSIS
+    调用 claude-config-drift.js 脚本
+    .PARAMETER Mode
+    analyze / install / update
+    .RETURNS
+    PSCustomObject (已解析的 JSON)
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("analyze", "install", "update")]
+        [string]$Mode
+    )
+
+    $scriptPath = Get-ClaudeConfigDriftScriptPath
+    if ([string]::IsNullOrWhiteSpace($scriptPath) -or -not (Test-Path $scriptPath)) {
+        throw "claude-config-drift.js 脚本不存在: $scriptPath"
+    }
+
+    $contractPath = Get-ClaudeConfigContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath)) {
+        throw "ClaudeConfig 契约不存在: $contractPath"
+    }
+
+    $settingsPath = Get-ClaudeSettingsPath
+
+    # 检测 node 可用性
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeCmd) {
+        throw "node 不可用，无法执行 claude-config-drift.js"
+    }
+
+    # 调用脚本
+    $args = @(
+        "`"$scriptPath`""
+        "--contract-path `"$contractPath`""
+        "--settings-path `"$settingsPath`""
+        "--mode $Mode"
+    )
+    $output = & node $scriptPath --contract-path $contractPath --settings-path $settingsPath --mode $Mode 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "claude-config-drift.js 执行失败 (exit $LASTEXITCODE): $output"
+    }
+
+    # 解析 JSON
+    try {
+        return ($output | ConvertFrom-Json -AsHashtable)
+    } catch {
+        throw "claude-config-drift.js 输出无法解析为 JSON: $output"
+    }
+}
+
 function Update-ClaudeConfig {
     <#
     .SYNOPSIS
     声明式对齐 ClaudeConfig 管辖的 env 键到最新默认值
     .DESCRIPTION
+    优先使用 claude-config-drift.js (需要 node)，失败时回退到 PowerShell 实现。
     与 Install 的"仅补缺失"策略不同，Update 使用"声明式对齐"：
     - 白名单键：强制覆盖为最新值
     - 废弃键：从 env 中删除
@@ -802,6 +868,55 @@ function Update-ClaudeConfig {
         Data         = @{}
         UpdatedItems = @()
     }
+
+    # 尝试使用 node 脚本（仅 Update/Manage 路径）
+    try {
+        $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $scriptPath = Get-ClaudeConfigDriftScriptPath
+
+        if ($nodeCmd -and -not [string]::IsNullOrWhiteSpace($scriptPath) -and (Test-Path $scriptPath)) {
+            Write-UiDim "使用 claude-config-drift.js 执行更新..." -Level Debug
+
+            $driftResult = Invoke-ClaudeConfigDriftScript -Mode "update"
+
+            if ($driftResult -and $driftResult.ContainsKey("applied")) {
+                $applied = $driftResult["applied"]
+                $newSettings = $applied["newSettings"]
+                $updatedItems = $applied["updatedItems"]
+
+                # 原子写入
+                $settingsPath = Get-ClaudeSettingsPath
+                $tempPath = "$settingsPath.tmp_$([guid]::NewGuid().ToString('N').Substring(0,8))"
+                $newSettings | ConvertTo-Json -Depth 10 | Set-Content $tempPath -Encoding UTF8
+
+                for ($retry = 0; $retry -lt 3; $retry++) {
+                    try {
+                        Move-Item $tempPath $settingsPath -Force
+                        break
+                    } catch {
+                        if ($retry -eq 2) { throw }
+                        Start-Sleep -Seconds ([math]::Pow(2, $retry))
+                    }
+                }
+
+                if ($updatedItems -and $updatedItems.Count -gt 0 -and $updatedItems[0] -ne "noop::ClaudeConfig::no-change") {
+                    $result.UpdatedItems = @($updatedItems)
+                    Write-UiSuccess "✓ ClaudeConfig 已更新 ($($updatedItems.Count) 项变更)" -Level Detail
+                } else {
+                    $result.UpdatedItems = @("noop::ClaudeConfig::no-change")
+                    Write-UiDim "ClaudeConfig 已是最新，无需更新" -Level Debug
+                }
+
+                $result.Success = $true
+                return $result
+            }
+        }
+    } catch {
+        Write-UiWarning "node 脚本执行失败，回退到 PowerShell 实现: $($_.Exception.Message)" -Level Debug
+    }
+
+    # Fallback：PowerShell 原生实现
+    Write-UiDim "使用 PowerShell 原生实现执行更新..." -Level Debug
 
     # 禁区键集合
     $forbiddenKeys = @("ANTHROPIC_AUTH_TOKEN")

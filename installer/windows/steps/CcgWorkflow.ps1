@@ -13,21 +13,71 @@ $ErrorActionPreference = 'Stop'
 # CCG Workflow 安装目录
 $script:ClaudeDir = "$(Get-UserHome)\.claude"
 
+# ── 契约加载（contracts-first + inline fallback）──
+
+function Get-CcgWorkflowContractsRoot {
+    $installerRoot = $PSScriptRoot
+    for ($i = 0; $i -lt 3; $i++) {
+        $installerRoot = Split-Path -Parent $installerRoot
+        if (Test-Path (Join-Path $installerRoot "installer")) {
+            return (Join-Path $installerRoot "installer\contracts")
+        }
+    }
+    return ""
+}
+
+function Get-CcgWorkflowContractPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:CCQ_CCGWORKFLOW_CONTRACT)) {
+        return $env:CCQ_CCGWORKFLOW_CONTRACT
+    }
+    $contractsRoot = Get-CcgWorkflowContractsRoot
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) { return "" }
+    return (Join-Path $contractsRoot "ccg-workflow.json")
+}
+
+function Get-CcgWorkflowContract {
+    $contractPath = Get-CcgWorkflowContractPath
+    if ([string]::IsNullOrWhiteSpace($contractPath) -or -not (Test-Path $contractPath)) {
+        return $null
+    }
+    try {
+        $contractRaw = Get-Content $contractPath -Raw -ErrorAction Stop
+        $contractObj = $contractRaw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        if ($contractObj -and $contractObj.ContainsKey("contract")) {
+            return $contractObj["contract"]
+        }
+    } catch {
+        Write-UiWarning "读取 ccg-workflow.json 契约失败，将使用 inline fallback: $($_.Exception.Message)"
+    }
+    return $null
+}
+
 # CcgWorkflow 负责的 env 默认值（仅补齐缺失项，不覆盖已有配置）
-$script:CcgWorkflowEnvDefaults = @{
+$script:CcgWorkflowEnvDefaultsFallback = @{
     "CODEAGENT_POST_MESSAGE_DELAY" = "1"
     "CODEX_TIMEOUT"                = "7200"
     "BASH_DEFAULT_TIMEOUT_MS"      = "600000"
     "BASH_MAX_TIMEOUT_MS"          = "3600000"
 }
 
+$script:CcgWorkflowEnvDefaults = $script:CcgWorkflowEnvDefaultsFallback
+$contract = Get-CcgWorkflowContract
+if ($contract -and $contract.ContainsKey("managedEnvDefaults")) {
+    $script:CcgWorkflowEnvDefaults = $contract["managedEnvDefaults"]
+}
+
 # CCG 旧规则文件已并入 ClaudeMd 主模板；此步骤只负责清理历史生成物
-$script:CcgWorkflowManagedRuleFiles = @(
+$script:CcgWorkflowManagedRuleFilesFallback = @(
     "ccq-ccgworkflow.md",
     "ccq-multimodel.md",
     "ccq-tools.md",
     "ccq-workflow.md"
 )
+
+$script:CcgWorkflowManagedRuleFiles = $script:CcgWorkflowManagedRuleFilesFallback
+if ($contract -and $contract.ContainsKey("managedRuleFiles")) {
+    $script:CcgWorkflowManagedRuleFiles = @($contract["managedRuleFiles"])
+}
 
 function Get-CcgWorkflowFingerprint {
     <#

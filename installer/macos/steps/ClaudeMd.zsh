@@ -9,7 +9,50 @@ CCQ_STEP_CLAUDEMD_ZSH_LOADED=1
 
 ccq_claude_md_path() { printf '%s\n' "${HOME}/.claude/CLAUDE.md"; }
 
-ccq_claude_md_template() {
+# ── 契约模板加载（contracts-first + inline fallback）──
+
+ccq_claude_md_contracts_root() {
+  local installer_root="${CCQ_INSTALLER_ROOT:-}"
+  if [ -z "${installer_root}" ]; then
+    installer_root="$(cd "${0:A:h}/../.." 2>/dev/null && pwd)"
+  fi
+  [ -d "${installer_root}/contracts/templates" ] && printf '%s\n' "${installer_root}/contracts/templates"
+}
+
+ccq_claude_md_template_content() {
+  local template_name="${1:-}"
+  [ -z "${template_name}" ] && return 1
+
+  local contracts_root template_path
+  contracts_root="$(ccq_claude_md_contracts_root)"
+
+  if [ -n "${contracts_root}" ]; then
+    template_path="${contracts_root}/claude-md.${template_name}.md"
+    if [ -f "${template_path}" ]; then
+      cat "${template_path}" && return 0
+    fi
+  fi
+
+  return 1
+}
+
+ccq_claude_md_assembled_template() {
+  local base_content platform_content
+
+  # 尝试从契约模板拼装
+  base_content="$(ccq_claude_md_template_content base 2>/dev/null)"
+  platform_content="$(ccq_claude_md_template_content platform-macos 2>/dev/null)"
+
+  if [ -n "${base_content}" ] && [ -n "${platform_content}" ]; then
+    printf '%s\n\n%s\n' "${base_content}" "${platform_content}"
+    return 0
+  fi
+
+  # 降级到 inline fallback
+  ccq_claude_md_template_fallback
+}
+
+ccq_claude_md_template_fallback() {
   cat <<'EOF'
 # Claude Code 增强配置
 
@@ -126,11 +169,17 @@ Test-ClaudeMdInstalled() {
 }
 
 Install-ClaudeMd() {
-  local target template
+  local target assembled_template
   target="$(ccq_claude_md_path)"
-  template="$(ccq_claude_md_template)"
+  assembled_template="$(ccq_claude_md_assembled_template)"
+
+  if [ -z "${assembled_template}" ]; then
+    ccq_claude_md_install_result false "CLAUDE.md 模板拼装失败" ""
+    return 1
+  fi
+
   # $'\n' 写入真实换行符（"\n" 在 printf '%s' 下是字面反斜杠+n，会导致指纹永远不匹配）
-  if ! ccq_write_file_atomic "${target}" "${template}"$'\n'; then
+  if ! ccq_write_file_atomic "${target}" "${assembled_template}"$'\n'; then
     ccq_claude_md_install_result false "CLAUDE.md 写入失败" ""
     return 1
   fi
@@ -152,12 +201,15 @@ Verify-ClaudeMd() {
 
 # 模板与现有文件指纹比较：模板有变更返回 0（有更新），一致返回 1
 ccq_claudemd_has_update() {
-  local target template_fp file_fp
+  local target template_fp file_fp assembled_template
   target="$(ccq_claude_md_path)"
   [ -f "${target}" ] || return 0
   command -v shasum >/dev/null 2>&1 || return 0
+
+  # 使用拼装后的模板计算指纹
+  assembled_template="$(ccq_claude_md_assembled_template)"
   # 标准化尾部空白后比较（Install 写入时模板末尾追加换行）
-  template_fp="$(ccq_claude_md_template | sed -e 's/[[:space:]]*$//' | shasum -a 256 | awk '{print $1}')"
+  template_fp="$(printf '%s' "${assembled_template}" | sed -e 's/[[:space:]]*$//' | shasum -a 256 | awk '{print $1}')"
   file_fp="$(sed -e 's/[[:space:]]*$//' "${target}" | shasum -a 256 2>/dev/null | awk '{print $1}')"
   [ "${template_fp}" != "${file_fp}" ]
 }

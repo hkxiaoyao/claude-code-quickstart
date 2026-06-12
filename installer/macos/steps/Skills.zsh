@@ -163,13 +163,25 @@ ccq_skills_any_known_installed() {
   [ -n "${installed}" ]
 }
 
+ccq_skills_discovery_script_path() {
+  printf '%s\n' "${CCQ_CONTRACTS_DIR:-${CCQ_INSTALLER_ROOT}/contracts}/scripts/skills-discovery.js"
+}
+
 ccq_skills_source_list() {
   local source="${1:-}"
   local skill="${2:-}"
   local args=(--yes skills add "${source}" --list -g --agent claude-code)
+  local script_path
   [ -n "${skill}" ] && args+=(--skill "${skill}")
   ccq_npm_tool_require_npx || return 1
-  npx "${args[@]}" 2>/dev/null | node -e '
+
+  script_path="$(ccq_skills_discovery_script_path)"
+  if [ -f "${script_path}" ]; then
+    # 优先使用共享 js 脚本
+    npx "${args[@]}" 2>&1 | node "${script_path}" --mode parse --input - 2>/dev/null | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8")); (v.names||[]).forEach(n=>console.log(n));' || true
+  else
+    # Fallback: 内嵌实现
+    npx "${args[@]}" 2>/dev/null | node -e '
 const fs = require("fs");
 const text = fs.readFileSync(0, "utf8").replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 const names = new Set();
@@ -179,6 +191,7 @@ for (const raw of text.split(/\r?\n/)) {
 }
 for (const name of names) console.log(name);
 ' || true
+  fi
 }
 
 # ─── 预取并发（macOS zsh 后台 job 实现，对齐 Windows ThreadJob）─────────────
@@ -240,22 +253,30 @@ ccq_skills_source_list_cached() {
 
 ccq_skills_select_source() {
   ccq_skills_tty || return 1
-  local lines id name source skill desc default static_name skip_discovery order options=() records=() choice default_index=0 index=0
+  local lines id name source skill desc default static_name skip_discovery order options=() records=() defaults=() index=0
   lines="$(ccq_skills_catalogue)"
   while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
     [ -n "${id}" ] || continue
     options+=("${name} - ${desc}")
     records+=("${id}	${name}	${source}	${skill}	${desc}	${default}	${static_name}	${skip_discovery}	${order}")
     if [ "${default}" = "true" ]; then
-      default_index="${index}"
+      defaults+=("${index}")
     fi
     index=$((index + 1))
   done <<EOF
 ${lines}
 EOF
   [ "${#options[@]}" -gt 0 ] || return 1
-  choice="$(ccq_show_single_select_menu "Skills - 选择要安装的 Skills" "${default_index}" "${options[@]}")" || return 1
-  printf '%s\n' "${records[$(((choice + 1) > ${#records[@]} ? ${#records[@]} : choice + 1))]}"
+
+  # 多选 Skills source
+  local selected_indices
+  selected_indices="$(ccq_show_multi_select_menu "Skills - 选择要安装的 Skills（支持多选）" "${defaults[*]}" "${options[@]}")" || return 1
+  [ -n "${selected_indices}" ] || return 1
+
+  # 输出选中的所有 records（每行一条）
+  for selected_index in ${selected_indices}; do
+    printf '%s\n' "${records[$(((selected_index + 1) > ${#records[@]} ? ${#records[@]} : selected_index + 1))]}"
+  done
 }
 
 ccq_skills_select_children() {
@@ -265,10 +286,17 @@ ccq_skills_select_children() {
   local skip_discovery="${4:-false}"
   local static_name="${5:-}"
   local names item selected_indices selected_index defaults=() i=0
+
+  # SkipDiscovery 静态名检测：优先使用 static_name，回退到 skill
   if [ "${skip_discovery}" = "true" ]; then
-    [ -n "${skill}" ] && printf '%s\n' "${skill}"
+    if [ -n "${static_name}" ]; then
+      printf '%s\n' "${static_name}"
+    elif [ -n "${skill}" ]; then
+      printf '%s\n' "${skill}"
+    fi
     return 0
   fi
+
   names="$(ccq_skills_source_list_cached "${id}" "${source}" "${skill}")"
   [ -n "${names}" ] || return 0
   local options=(${names})
@@ -359,45 +387,61 @@ Install-Skills() {
 
   ccq_skills_prefetch_all &
 
-  local record id name source skill desc default static_name skip_discovery order selected_names child copy_mode
-  local installed=() existing=() failures=() pre_installed
+  local selected_records copy_mode installed=() existing=() failures=() pre_installed
   copy_mode="$(ccq_skills_resolve_copy_mode)"
-  record="$(ccq_skills_select_source)" || { ccq_skills_install_result false "" "用户取消 Skills source 选择"; return 1; }
-  IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order <<EOF
-${record}
-EOF
-  if ! selected_names="$(ccq_skills_select_children "${id}" "${source}" "${skill}" "${skip_discovery}" "${static_name}")"; then
-    ccq_skills_install_result false "" "用户取消子 Skills 选择"
-    return 1
-  fi
-  if [ -z "${selected_names}" ] && [ -n "${skill}" ]; then
-    selected_names="${skill}"
-  fi
 
-  # 安装前快照已安装名单：用于区分"新安装"与"已存在(重装)"
+  # 多选 source，返回多行 record
+  selected_records="$(ccq_skills_select_source)" || {
+    ccq_skills_install_result false "" "用户取消 Skills source 选择"
+    return 1
+  }
+
+  [ -n "${selected_records}" ] || {
+    ccq_skills_install_result false "" "未选择任何 Skills"
+    return 1
+  }
+
+  # 安装前快照已安装名单
   pre_installed="$(ccq_skills_installed_names 2>/dev/null || true)"
 
-  if [ -z "${selected_names}" ]; then
-    if ccq_skills_install_one "${source}" "" "${copy_mode}"; then
-      installed+=("${id}")
-    else
-      failures+=("${id}")
-      ccq_ui_warning "Skill 安装失败: ${id}，继续处理剩余项" "developer"
+  # 循环处理每个 selected record
+  while IFS=$'\t' read -r id name source skill desc default static_name skip_discovery order; do
+    [ -n "${id}" ] || continue
+
+    local selected_names child
+    if ! selected_names="$(ccq_skills_select_children "${id}" "${source}" "${skill}" "${skip_discovery}" "${static_name}")"; then
+      ccq_ui_warning "跳过 ${id}：用户取消子 Skills 选择" "developer"
+      continue
     fi
-  else
-    for child in ${selected_names}; do
-      if ccq_skills_install_one "${source}" "${child}" "${copy_mode}"; then
-        if printf '%s\n' "${pre_installed}" | grep -qi "^${child}$"; then
-          existing+=("${child}")
-        else
-          installed+=("${child}")
-        fi
+
+    if [ -z "${selected_names}" ] && [ -n "${skill}" ]; then
+      selected_names="${skill}"
+    fi
+
+    if [ -z "${selected_names}" ]; then
+      if ccq_skills_install_one "${source}" "" "${copy_mode}"; then
+        installed+=("${id}")
       else
-        failures+=("${child}")
-        ccq_ui_warning "Skill 安装失败: ${child}，继续处理剩余项" "developer"
+        failures+=("${id}")
+        ccq_ui_warning "Skill 安装失败: ${id}，继续处理剩余项" "developer"
       fi
-    done
-  fi
+    else
+      for child in ${selected_names}; do
+        if ccq_skills_install_one "${source}" "${child}" "${copy_mode}"; then
+          if printf '%s\n' "${pre_installed}" | grep -qi "^${child}$"; then
+            existing+=("${child}")
+          else
+            installed+=("${child}")
+          fi
+        else
+          failures+=("${child}")
+          ccq_ui_warning "Skill 安装失败: ${child}，继续处理剩余项" "developer"
+        fi
+      done
+    fi
+  done <<EOF
+${selected_records}
+EOF
 
   ccq_skills_show_install_summary \
     "$(ccq_join_by_comma "${installed[@]}")" \

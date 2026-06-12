@@ -379,8 +379,7 @@ function Get-UpdateStatus {
         $statusList += $entry
     }
 
-    # HC-13: 逗号阻止单元素数组被管道展开为裸 hashtable
-    return ,$statusList
+    return $statusList
 }
 
 

@@ -104,7 +104,11 @@
       "Dependencies": [
         "NodeJS"
       ],
-      "Group": "Basic"
+      "Group": "Basic",
+      "NpmPackageName": "@anthropic-ai/claude-code",
+      "CommandName": "claude",
+      "VersionArgs": ["--version"],
+      "MinNodeVersion": "18.0.0"
     },
     {
       "StepId": "ApiKey",
@@ -140,7 +144,11 @@
       "Dependencies": [
         "ClaudeCode"
       ],
-      "Group": "Advanced"
+      "Group": "Advanced",
+      "NpmPackageName": "@cometix/ccline",
+      "CommandName": "ccline",
+      "VersionArgs": ["--version"],
+      "MinNodeVersion": "18.0.0"
     },
     {
       "StepId": "ClaudeConfig",
@@ -210,7 +218,11 @@
       "Dependencies": [
         "NodeJS"
       ],
-      "Group": "Advanced"
+      "Group": "Advanced",
+      "NpmPackageName": "ccg-workflow",
+      "CommandName": "codeagent-wrapper",
+      "VersionArgs": ["--version"],
+      "MinNodeVersion": "18.0.0"
     },
     {
       "StepId": "Skills",
@@ -247,7 +259,11 @@
       "Dependencies": [
         "NodeJS"
       ],
-      "Group": "Advanced"
+      "Group": "Advanced",
+      "NpmPackageName": "@fission-ai/openspec",
+      "CommandName": "openspec",
+      "VersionArgs": ["--version"],
+      "MinNodeVersion": "18.0.0"
     },
     {
       "StepId": "CcSwitch",
@@ -284,7 +300,11 @@
       "Dependencies": [
         "NodeJS"
       ],
-      "Group": "Advanced"
+      "Group": "Advanced",
+      "NpmPackageName": "codex-cli",
+      "CommandName": "codex",
+      "VersionArgs": ["--version"],
+      "MinNodeVersion": "18.0.0"
     },
     {
       "StepId": "AntigravityCli",

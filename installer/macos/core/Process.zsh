@@ -350,3 +350,327 @@ ccq_npm_outdated_global() {
 
   printf '%s' "${tsv_output}"
 }
+
+# ============ Unified Test Framework ============
+
+# 会话级测试结果缓存
+typeset -gA CCQ_TEST_RESULT_CACHE
+
+ccq_get_cached_test_result() {
+  local cache_key="${1:-}"
+  local ttl_seconds="${2:-30}"
+  [ -z "${cache_key}" ] && return 1
+
+  local cache_entry="${CCQ_TEST_RESULT_CACHE[${cache_key}]:-}"
+  [ -z "${cache_entry}" ] && return 1
+
+  local created_at="${cache_entry%%:*}"
+  local now="$(date +%s)"
+  local elapsed=$((now - created_at))
+
+  [ ${elapsed} -le ${ttl_seconds} ] || { unset "CCQ_TEST_RESULT_CACHE[${cache_key}]"; return 1; }
+
+  printf '%s\n' "${cache_entry#*:}"
+}
+
+ccq_set_cached_test_result() {
+  local cache_key="${1:-}"
+  local result="${2:-}"
+  [ -z "${cache_key}" ] && return 1
+
+  local now="$(date +%s)"
+  CCQ_TEST_RESULT_CACHE[${cache_key}]="${now}:${result}"
+}
+
+ccq_clear_test_cache() {
+  local step_id="${1:-}"
+  if [ -z "${step_id}" ]; then
+    CCQ_TEST_RESULT_CACHE=()
+  else
+    unset "CCQ_TEST_RESULT_CACHE[${step_id}]"
+  fi
+}
+
+ccq_resolve_json_path() {
+  local json="${1:-}"
+  local path="${2:-}"
+  [ -z "${json}" ] || [ -z "${path}" ] && return 1
+
+  node -e "
+    try {
+      const data = JSON.parse(process.argv[1]);
+      const segments = process.argv[2].split('.');
+      let current = data;
+      for (const seg of segments) {
+        if (current == null) { process.exit(1); }
+        current = current[seg];
+      }
+      if (current != null) { console.log(current); }
+    } catch (e) { process.exit(1); }
+  " "${json}" "${path}" 2>/dev/null
+}
+
+ccq_test_path_structure() {
+  local checks_json="${1:-}"
+  [ -z "${checks_json}" ] && { printf '{"allPassed":false,"details":[]}'; return 0; }
+
+  local all_passed=1
+  local details="[]"
+
+  details="$(node -e "
+    const checks = JSON.parse(process.argv[1]);
+    const fs = require('fs');
+    const path = require('path');
+    const details = [];
+    let allPassed = true;
+
+    for (const check of checks) {
+      let passed = false;
+      let info = '';
+
+      if (check.type === 'dir') {
+        passed = fs.existsSync(check.path) && fs.statSync(check.path).isDirectory();
+        if (passed && check.filter && check.minCount !== undefined) {
+          const files = fs.readdirSync(check.path).filter(f => f.includes(check.filter));
+          passed = files.length >= check.minCount;
+          info = \`found \${files.length}/\${check.minCount}\`;
+        }
+      } else if (check.type === 'file') {
+        passed = fs.existsSync(check.path) && fs.statSync(check.path).isFile();
+        if (passed && check.contentMatch) {
+          const content = fs.readFileSync(check.path, 'utf8');
+          passed = new RegExp(check.contentMatch).test(content);
+          if (!passed) info = 'content mismatch';
+        }
+      }
+
+      if (!passed) allPassed = false;
+      details.push({ path: check.path, passed, info });
+    }
+
+    console.log(JSON.stringify({ allPassed, details }));
+  " "${checks_json}" 2>/dev/null || printf '{"allPassed":false,"details":[]}')"
+
+  printf '%s' "${details}"
+}
+
+ccq_test_json_config() {
+  local file_path="${1:-}"
+  local required_fields_json="${2:-[]}"
+  local required_array_items_json="${3:-[]}"
+  [ ! -f "${file_path}" ] && { printf '{"allPassed":false,"missingFields":[],"parseError":"file not found"}'; return 0; }
+
+  local result
+  result="$(node -e "
+    const fs = require('fs');
+    const filePath = process.argv[1];
+    const requiredFields = JSON.parse(process.argv[2]);
+    const requiredArrayItems = JSON.parse(process.argv[3]);
+
+    let json, parseError = '';
+    try {
+      json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (e) {
+      console.log(JSON.stringify({ allPassed: false, missingFields: [], parseError: 'JSON parse failed: ' + e.message }));
+      process.exit(0);
+    }
+
+    const resolveJsonPath = (obj, path) => {
+      const segments = path.split('.');
+      let current = obj;
+      for (const seg of segments) {
+        if (current == null) return null;
+        current = current[seg];
+      }
+      return current;
+    };
+
+    let allPassed = true;
+    const missingFields = [];
+
+    for (const field of requiredFields) {
+      const value = resolveJsonPath(json, field.path);
+      const mode = field.matchMode || 'Exists';
+      let passed = false;
+
+      if (mode === 'Exists') {
+        passed = value != null && value !== '';
+      } else if (mode === 'Exact') {
+        passed = String(value) === String(field.expectedValue || '');
+      } else if (mode === 'Contains') {
+        passed = String(value).includes(String(field.expectedValue || ''));
+      }
+
+      if (!passed) {
+        allPassed = false;
+        missingFields.push(field.path);
+      }
+    }
+
+    for (const arrayCheck of requiredArrayItems) {
+      const array = resolveJsonPath(json, arrayCheck.path);
+      if (!Array.isArray(array)) {
+        allPassed = false;
+        missingFields.push(arrayCheck.path);
+        continue;
+      }
+      for (const item of arrayCheck.items) {
+        if (!array.includes(item)) {
+          allPassed = false;
+          missingFields.push(\`\${arrayCheck.path}::\${item}\`);
+        }
+      }
+    }
+
+    console.log(JSON.stringify({ allPassed, missingFields, parsedJson: json }));
+  " "${file_path}" "${required_fields_json}" "${required_array_items_json}" 2>/dev/null || printf '{"allPassed":false,"missingFields":[],"parseError":"node execution failed"}')"
+
+  printf '%s' "${result}"
+}
+
+ccq_invoke_unified_check() {
+  local step_id="${1:-}"; shift || true
+  local display_name="${step_id}"
+  local command="" min_version="" path_checks_json="[]" config_file=""
+  local required_fields_json="[]" required_array_items_json="[]"
+  local custom_verify="" use_cache=0 quiet=0
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --display-name) display_name="$2"; shift 2 ;;
+      --command) command="$2"; shift 2 ;;
+      --min-version) min_version="$2"; shift 2 ;;
+      --path-checks) path_checks_json="$2"; shift 2 ;;
+      --config-file) config_file="$2"; shift 2 ;;
+      --required-fields) required_fields_json="$2"; shift 2 ;;
+      --required-array-items) required_array_items_json="$2"; shift 2 ;;
+      --custom-verify) custom_verify="$2"; shift 2 ;;
+      --use-cache) use_cache=1; shift ;;
+      --quiet) quiet=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  # 缓存检查
+  if [ ${use_cache} -eq 1 ]; then
+    local cached
+    cached="$(ccq_get_cached_test_result "${step_id}" 30 2>/dev/null || true)"
+    if [ -n "${cached}" ]; then
+      printf '%s\n' "${cached}"
+      return 0
+    fi
+  fi
+
+  local is_installed=0 version="" message="${display_name} 未安装"
+
+  # CLI 命令检测
+  if [ -n "${command}" ]; then
+    if ccq_command_exists "${command}"; then
+      is_installed=1
+      version="$(ccq_get_command_version "${command}" 2>/dev/null || true)"
+      message="${display_name} 已安装"
+
+      # 版本比较（简化逻辑：仅比较主版本号）
+      if [ -n "${min_version}" ] && [ -n "${version}" ]; then
+        local current_major="${version%%.*}"
+        local required_major="${min_version%%.*}"
+        if [ "${current_major}" -lt "${required_major}" ] 2>/dev/null; then
+          is_installed=0
+          message="${display_name} 版本过低 (当前: ${version}, 需要: ${min_version}+)"
+        fi
+      fi
+    else
+      is_installed=0
+      message="${display_name} 命令不存在"
+    fi
+
+    [ ${is_installed} -eq 0 ] && {
+      local result="{\"isInstalled\":false,\"version\":\"${version}\",\"message\":\"${message}\"}"
+      [ ${use_cache} -eq 1 ] && ccq_set_cached_test_result "${step_id}" "${result}"
+      printf '%s\n' "${result}"
+      return 0
+    }
+  fi
+
+  # 目录结构检测
+  if [ "${path_checks_json}" != "[]" ]; then
+    local path_result
+    path_result="$(ccq_test_path_structure "${path_checks_json}")"
+    local all_passed
+    all_passed="$(printf '%s' "${path_result}" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).allPassed' 2>/dev/null || echo false)"
+
+    if [ "${all_passed}" != "true" ]; then
+      is_installed=0
+      message="${display_name} 目录结构不完整"
+      local result="{\"isInstalled\":false,\"version\":\"${version}\",\"message\":\"${message}\"}"
+      [ ${use_cache} -eq 1 ] && ccq_set_cached_test_result "${step_id}" "${result}"
+      printf '%s\n' "${result}"
+      return 0
+    fi
+  fi
+
+  # 配置文件检测
+  if [ -n "${config_file}" ]; then
+    local config_result
+    config_result="$(ccq_test_json_config "${config_file}" "${required_fields_json}" "${required_array_items_json}")"
+    local parse_error
+    parse_error="$(printf '%s' "${config_result}" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).parseError || ""' 2>/dev/null || true)"
+
+    if [ -n "${parse_error}" ]; then
+      is_installed=0
+      message="${display_name} 配置解析失败: ${parse_error}"
+      local result="{\"isInstalled\":false,\"version\":\"${version}\",\"message\":\"${message}\"}"
+      [ ${use_cache} -eq 1 ] && ccq_set_cached_test_result "${step_id}" "${result}"
+      printf '%s\n' "${result}"
+      return 0
+    fi
+
+    local all_passed
+    all_passed="$(printf '%s' "${config_result}" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).allPassed' 2>/dev/null || echo false)"
+
+    if [ "${all_passed}" != "true" ]; then
+      is_installed=0
+      local missing_fields
+      missing_fields="$(printf '%s' "${config_result}" | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).missingFields.join(", ")' 2>/dev/null || true)"
+      message="${display_name} 配置不完整: ${missing_fields}"
+      local result="{\"isInstalled\":false,\"version\":\"${version}\",\"message\":\"${message}\"}"
+      [ ${use_cache} -eq 1 ] && ccq_set_cached_test_result "${step_id}" "${result}"
+      printf '%s\n' "${result}"
+      return 0
+    fi
+  fi
+
+  # 自定义验证
+  if [ -n "${custom_verify}" ]; then
+    local custom_result
+    custom_result="$(eval "${custom_verify}" 2>/dev/null || echo "0")"
+    if [ "${custom_result}" = "0" ] || [ "${custom_result}" = "false" ]; then
+      is_installed=0
+      message="${display_name} 自定义验证未通过"
+    elif [ "${custom_result}" != "1" ] && [ "${custom_result}" != "true" ]; then
+      version="${custom_result}"
+    fi
+  fi
+
+  # 全部通过
+  [ ${is_installed} -eq 0 ] && is_installed=1
+  [ -z "${message}" ] || [ "${message}" = "${display_name} 未安装" ] && message="${display_name} 已安装"
+
+  local final_result="{\"isInstalled\":${is_installed},\"version\":\"${version}\",\"message\":\"${message}\"}"
+
+  # UI 输出
+  if [ ${quiet} -eq 0 ]; then
+    if [ ${is_installed} -eq 1 ]; then
+      local version_suffix=""
+      [ -n "${version}" ] && version_suffix=" (版本: ${version})"
+      command -v ccq_ui_success >/dev/null 2>&1 && ccq_ui_success "✓ ${display_name} 已安装${version_suffix}"
+    else
+      command -v ccq_ui_warning >/dev/null 2>&1 && ccq_ui_warning "⚠ ${display_name} [FAIL]: ${message}"
+    fi
+  fi
+
+  # 写入缓存
+  [ ${use_cache} -eq 1 ] && ccq_set_cached_test_result "${step_id}" "${final_result}"
+
+  printf '%s\n' "${final_result}"
+}

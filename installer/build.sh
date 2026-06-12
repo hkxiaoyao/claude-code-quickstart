@@ -167,6 +167,8 @@ function contractEmbeds() {
     { file: 'claude-config.json', marker: 'CCQ_CONTRACT_CLAUDE_CONFIG_JSON', env: 'CCQ_CLAUDE_CONFIG_CONTRACT' },
     { file: 'skills.json', marker: 'CCQ_CONTRACT_SKILLS_JSON', env: 'CCQ_SKILLS_CONTRACT' },
     { file: 'ui.json', marker: 'CCQ_CONTRACT_UI_JSON', env: 'CCQ_UI_CONTRACT' },
+    { file: 'scripts/claude-config-drift.js', marker: 'CCQ_SCRIPT_CLAUDE_CONFIG_DRIFT_JS', env: null },
+    { file: 'scripts/skills-discovery.js', marker: 'CCQ_SCRIPT_SKILLS_DISCOVERY_JS', env: null },
   ];
 }
 
@@ -200,13 +202,24 @@ function appendMacOSWrapper(lines) {
   lines.push('export CCQ_BUILT_CONTRACTS_DIR');
   lines.push('export CCQ_CONTRACTS_DIR="${CCQ_BUILT_CONTRACTS_DIR}"');
 
+  // 导出环境变量（仅针对有 env 字段的契约）
   for (const contract of contractEmbeds()) {
-    lines.push(`export ${contract.env}="\${CCQ_BUILT_CONTRACTS_DIR}/${contract.file}"`);
+    if (contract.env) {
+      lines.push(`export ${contract.env}="\${CCQ_BUILT_CONTRACTS_DIR}/${contract.file}"`);
+    }
   }
 
+  // 嵌入所有契约和脚本文件
   for (const contract of contractEmbeds()) {
     const contractPath = path.join(installerRoot, 'contracts', contract.file);
     if (!fs.existsSync(contractPath)) fail(`契约文件不存在，无法生成自包含 macOS artifact: ${contractPath}`);
+
+    // 确保目标目录存在（处理 scripts/ 子目录）
+    const targetDir = path.dirname(contract.file);
+    if (targetDir !== '.') {
+      lines.push(`mkdir -p "\${CCQ_BUILT_CONTRACTS_DIR}/${targetDir}"`);
+    }
+
     lines.push(`cat > "\${CCQ_BUILT_CONTRACTS_DIR}/${contract.file}" <<'${contract.marker}'`);
     lines.push(readText(contractPath).replace(/[\r\n]+$/g, ''));
     lines.push(contract.marker);

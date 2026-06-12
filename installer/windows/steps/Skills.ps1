@@ -416,15 +416,68 @@ function Remove-SkillsAnsiSequences {
     return $clean
 }
 
+function Get-SkillsDiscoveryScriptPath {
+    <#
+    .SYNOPSIS
+    返回 skills-discovery.js 脚本路径
+    #>
+    $contractsRoot = if (Get-Variable -Name InstallerRoot -Scope Script -ErrorAction SilentlyContinue) {
+        Join-Path $script:InstallerRoot "contracts"
+    } else {
+        $installerRoot = Split-Path -Parent $PSScriptRoot
+        if ((Split-Path -Leaf $installerRoot) -ieq 'windows') {
+            $installerRoot = Split-Path -Parent $installerRoot
+        }
+        Join-Path $installerRoot "contracts"
+    }
+
+    if ([string]::IsNullOrWhiteSpace($contractsRoot)) {
+        return ""
+    }
+    return Join-Path $contractsRoot "scripts\skills-discovery.js"
+}
+
 function ConvertFrom-SkillsSourceListOutput {
     <#
     .SYNOPSIS
     从 skills add --list 输出中提取实际 Skill name。
+    优先使用 skills-discovery.js（需要 node），失败时回退到 PowerShell 实现。
     #>
     param(
         [string]$Text = ""
     )
 
+    # 尝试使用 node 脚本（仅 Manage 路径）
+    try {
+        $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $scriptPath = Get-SkillsDiscoveryScriptPath
+
+        if ($nodeCmd -and -not [string]::IsNullOrWhiteSpace($scriptPath) -and (Test-Path $scriptPath)) {
+            # 写入临时文件
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            try {
+                [System.IO.File]::WriteAllText($tempFile, $Text, [System.Text.Encoding]::UTF8)
+
+                $output = & node $scriptPath --mode parse --input $tempFile 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    $parsed = $output | ConvertFrom-Json
+                    if ($parsed -and $parsed.names) {
+                        return @(Get-UniqueSkillNames -Names @($parsed.names))
+                    }
+                }
+            }
+            finally {
+                if (Test-Path $tempFile) {
+                    Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
+    catch {
+        # Fallback 到 PowerShell 实现
+    }
+
+    # Fallback: PowerShell 原生实现
     $clean = Remove-SkillsAnsiSequences -Text $Text
     $names = [System.Collections.Generic.List[string]]::new()
     foreach ($rawLine in @($clean -split "`r?`n")) {

@@ -370,7 +370,8 @@ function Get-StringDisplayWidth {
             ($code -ge 0xF900 -and $code -le 0xFAFF) -or    # CJK 兼容表意文字
             ($code -ge 0xFE30 -and $code -le 0xFE4F) -or    # CJK 兼容形式
             ($code -ge 0xFF00 -and $code -le 0xFF60) -or    # 全角 ASCII / 全角标点
-            ($code -ge 0xFFE0 -and $code -le 0xFFE6)) {     # 全角符号
+            ($code -ge 0xFFE0 -and $code -le 0xFFE6) -or    # 全角符号
+            ($code -ge 0x1F300 -and $code -le 0x1FAFF)) {   # Emoji（扩展象形文字，对齐 macOS）
             $width += 2
         } else {
             $width += 1
@@ -805,9 +806,8 @@ function Show-MultiSelectMenu {
                 }
                 'Enter' {
                     Write-Host ""
-                    # HC-13: 逗号阻止 PowerShell 展开空数组为 $null
                     $result = @($selectedItems.Keys | Sort-Object)
-                    return ,$result
+                    return $result
                 }
                 'Escape' {
                     Write-Host ""

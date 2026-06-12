@@ -35,6 +35,9 @@
   "Windows": {
     "StepContract": "contracts/steps.json",
     "CanonicalStepPrefix": "windows/",
+    "CommonStepFiles": [
+      "windows/steps/_NpmToolCommon.ps1"
+    ],
     "Artifacts": [
       {
         "Role": "Bootstrap",

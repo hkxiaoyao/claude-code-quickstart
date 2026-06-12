@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "title": "Cleanup Policy Contract",
+  "description": "更新快照清理策略（双平台共享）",
+  "version": "1.0.0",
+  "contract": {
+    "maxSnapshots": 5,
+    "maxAgeInDays": 30,
+    "recentMinutesSkip": 5,
+    "directoryPattern": "update_*",
+    "baseDirectory": {
+      "windows": "%TEMP%\\ClaudeEnvInstaller\\Backups",
+      "macos": "${TMPDIR:-/tmp}/ccq-backups"
+    },
+    "filesBackedUp": [
+      "~/.claude/settings.json",
+      "~/.claude.json",
+      "~/.claude/providers/*.json"
+    ],
+    "description": "保留最新 5 个快照或 30 天内的快照（取并集），跳过 5 分钟内新建的快照，当前会话快照除外"
+  }
+}
