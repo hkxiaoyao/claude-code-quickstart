@@ -53,7 +53,7 @@ ccq_mcp_with_lock() {
 
   if command -v flock >/dev/null 2>&1; then
     local rc
-    ( flock -x -w "${timeout}" 200 || exit 99; "$@" ) 200>"${lock_file}"
+    ( flock -x -w "${timeout}" 9 || exit 99; "$@" ) 9>"${lock_file}"
     rc=$?
     if [ "${rc}" -eq 99 ]; then
       CCQ_MCP_ERROR="无法获取 MCP Vault 锁（${timeout}s 超时），可能有其他 CCQ 进程正在运行"
