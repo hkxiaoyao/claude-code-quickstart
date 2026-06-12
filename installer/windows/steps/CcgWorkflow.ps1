@@ -16,9 +16,17 @@ $script:ClaudeDir = "$(Get-UserHome)\.claude"
 # ── 契约加载（contracts-first + inline fallback）──
 
 function Get-CcgWorkflowContractsRoot {
+    # irm|iex 场景下 $PSScriptRoot 为空，直接返回空触发 fallback
+    if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return ""
+    }
+
     $installerRoot = $PSScriptRoot
     for ($i = 0; $i -lt 3; $i++) {
         $installerRoot = Split-Path -Parent $installerRoot
+        if ([string]::IsNullOrWhiteSpace($installerRoot)) {
+            break
+        }
         if (Test-Path (Join-Path $installerRoot "installer")) {
             return (Join-Path $installerRoot "installer\contracts")
         }

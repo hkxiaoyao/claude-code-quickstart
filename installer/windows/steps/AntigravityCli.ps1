@@ -48,7 +48,22 @@ function Invoke-AntigravityCliInstaller {
     官方未提供 npm 包，Windows 安装方式为远程 PowerShell 安装脚本：
     irm https://antigravity.google/cli/install.ps1 | iex
     #>
-    $scriptBlock = "irm https://antigravity.google/cli/install.ps1 | iex"
+    $scriptUrl = "https://antigravity.google/cli/install.ps1"
+
+    # 先下载脚本内容，检查是否为空，避免传空字符串给 iex
+    $scriptBlock = @"
+try {
+    `$script = Invoke-RestMethod -Uri '$scriptUrl' -TimeoutSec 60 -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace(`$script)) {
+        throw '下载的安装脚本内容为空'
+    }
+    Invoke-Expression `$script
+} catch {
+    Write-Error "Antigravity CLI 安装脚本下载或执行失败: `$_"
+    exit 1
+}
+"@
+
     return Invoke-ExternalCommand -Command "pwsh" `
         -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $scriptBlock) `
         -TimeoutSeconds 600 -SuppressOutput -RetryCount 0
