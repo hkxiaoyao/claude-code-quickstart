@@ -15,11 +15,21 @@ $script:ManagedBlockEndMarker = "# <<< Claude Code Quickstart <<<"
 # ── 契约加载（contracts-first + inline fallback）──
 
 function Get-CleanupPolicyContractsRoot {
+    # irm|iex 场景下 $PSScriptRoot 为空，直接返回空触发 fallback
+    if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        return ""
+    }
+
     $currentDir = $PSScriptRoot
     for ($i = 0; $i -lt 3; $i++) {
         $currentDir = Split-Path -Parent $currentDir
-        if (Test-Path (Join-Path $currentDir "installer\contracts")) {
-            return (Join-Path $currentDir "installer\contracts")
+        if ([string]::IsNullOrWhiteSpace($currentDir)) {
+            break
+        }
+
+        $contractsDir = Join-Path $currentDir "installer\contracts"
+        if (Test-Path $contractsDir) {
+            return $contractsDir
         }
     }
     return ""

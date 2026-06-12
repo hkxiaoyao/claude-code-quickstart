@@ -422,13 +422,29 @@ function Get-SkillsDiscoveryScriptPath {
     返回 skills-discovery.js 脚本路径
     #>
     $contractsRoot = if (Get-Variable -Name InstallerRoot -Scope Script -ErrorAction SilentlyContinue) {
-        Join-Path $script:InstallerRoot "contracts"
-    } else {
-        $installerRoot = Split-Path -Parent $PSScriptRoot
-        if ((Split-Path -Leaf $installerRoot) -ieq 'windows') {
-            $installerRoot = Split-Path -Parent $installerRoot
+        if (-not [string]::IsNullOrWhiteSpace($script:InstallerRoot)) {
+            Join-Path $script:InstallerRoot "contracts"
+        } else {
+            ""
         }
-        Join-Path $installerRoot "contracts"
+    } else {
+        if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+            ""
+        } else {
+            $installerRoot = Split-Path -Parent $PSScriptRoot
+            if ([string]::IsNullOrWhiteSpace($installerRoot)) {
+                ""
+            } else {
+                if ((Split-Path -Leaf $installerRoot) -ieq 'windows') {
+                    $installerRoot = Split-Path -Parent $installerRoot
+                }
+                if ([string]::IsNullOrWhiteSpace($installerRoot)) {
+                    ""
+                } else {
+                    Join-Path $installerRoot "contracts"
+                }
+            }
+        }
     }
 
     if ([string]::IsNullOrWhiteSpace($contractsRoot)) {
