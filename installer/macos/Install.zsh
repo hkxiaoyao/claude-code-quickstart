@@ -435,7 +435,8 @@ ccq_register_ccq_shortcut() {
   esac
 }"
 
-  if ccq_set_profile_subsection "${zshrc_path}" "SHORTCUTS" "${shortcut_content}"; then
+  if ccq_set_shortcut_subsection "${zshrc_path}" "${shortcut_content}" || \
+     ccq_write_profile_subsection "${zshrc_path}" "SHORTCUTS" "${shortcut_content}"; then
     CCQ_SHORTCUT_REGISTERED=1
     eval "${shortcut_content}" 2>/dev/null || true
     ccq_ui_success "ccq 快捷函数已写入 ${zshrc_path}" "developer"
