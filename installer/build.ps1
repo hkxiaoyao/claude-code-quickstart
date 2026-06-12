@@ -306,14 +306,27 @@ function Test-BuiltScriptSyntax {
 function Clear-KnownBuildArtifacts {
     <#
     .SYNOPSIS
-    清理输出目录中的已知短 artifact，避免旧平台产物残留影响本次分平台构建结果。
+    清理输出目录中的当前平台构建产物，避免旧产物残留。
+    .DESCRIPTION
+    Windows 构建入口只清理 Windows 产物（.ps1），保留 macOS 产物（.sh）。
+    macOS 构建入口应只清理 macOS 产物（.sh），保留 Windows 产物（.ps1）。
     #>
     param(
         [Parameter(Mandatory)]
-        [string]$OutputDir
+        [string]$OutputDir,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('Windows', 'macOS')]
+        [string]$Platform
     )
 
-    foreach ($fileName in @('bootstrap.ps1', 'install.ps1', 'manage.ps1', 'install.sh', 'manage.sh')) {
+    $filesToClean = if ($Platform -eq 'Windows') {
+        @('bootstrap.ps1', 'install.ps1', 'manage.ps1')
+    } else {
+        @('install.sh', 'manage.sh')
+    }
+
+    foreach ($fileName in $filesToClean) {
         $path = Join-Path $OutputDir $fileName
         if (Test-Path $path -PathType Leaf) {
             Remove-Item -Path $path -Force
@@ -324,7 +337,9 @@ function Clear-KnownBuildArtifacts {
 function Assert-ExpectedWindowsOutputs {
     <#
     .SYNOPSIS
-    确认 Windows 构建入口只生成 Windows 三个 artifact。
+    确认 Windows 构建入口生成了 Windows 三个 artifact。
+    .DESCRIPTION
+    不再禁止 macOS 产物存在，允许两个平台产物共存。
     #>
     param(
         [Parameter(Mandatory)]
@@ -336,13 +351,6 @@ function Assert-ExpectedWindowsOutputs {
         $path = Join-Path $OutputDir $fileName
         if (-not (Test-Path $path -PathType Leaf)) {
             throw "缺少预期 Windows 构建产物: $path"
-        }
-    }
-
-    foreach ($forbidden in @('install.sh', 'manage.sh')) {
-        $path = Join-Path $OutputDir $forbidden
-        if (Test-Path $path -PathType Leaf) {
-            throw "Windows 构建入口不应生成 macOS 产物: $path"
         }
     }
 }
@@ -382,7 +390,7 @@ function Main {
         New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
         Write-Host "已创建输出目录: $OutputDir"
     }
-    Clear-KnownBuildArtifacts -OutputDir $OutputDir
+    Clear-KnownBuildArtifacts -OutputDir $OutputDir -Platform $Platform
 
     $builtItems = [System.Collections.Generic.List[hashtable]]::new()
     $allOk = $true

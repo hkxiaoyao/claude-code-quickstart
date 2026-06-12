@@ -316,7 +316,8 @@ function validateMacOSArtifact(outputPath) {
 }
 
 function clearKnownBuildArtifacts() {
-  for (const fileName of ['bootstrap.ps1', 'install.ps1', 'manage.ps1', 'install.sh', 'manage.sh']) {
+  // macOS 构建入口只清理 macOS 产物（.sh），保留 Windows 产物（.ps1）
+  for (const fileName of ['install.sh', 'manage.sh']) {
     const fullPath = path.join(outputDir, fileName);
     if (fs.existsSync(fullPath)) fs.rmSync(fullPath, { force: true });
   }
@@ -328,10 +329,7 @@ function ensureExpectedOutputs(manifest) {
     const fullPath = path.join(outputDir, fileName);
     if (!fs.existsSync(fullPath)) fail(`缺少预期输出文件: ${fullPath}`);
   }
-  for (const fileName of ['bootstrap.ps1', 'install.ps1', 'manage.ps1']) {
-    const fullPath = path.join(outputDir, fileName);
-    if (fs.existsSync(fullPath)) fail(`macOS 构建入口不应生成 Windows 产物: ${fullPath}`);
-  }
+  // 注释：不再禁止 Windows 产物存在，允许两个平台产物共存
   pass(`输出文件集合检查通过: ${expected.join(', ')}`);
 }
 
