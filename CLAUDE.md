@@ -90,6 +90,7 @@ Git (无依赖)    ClaudeMd (无依赖)    CcSwitch [可选, 依赖 ClaudeCode] 
 | **HC-3** | 实时检测：每次运行都实时检测组件状态，无持久化状态文件 |
 | **HC-13** | **PowerShell 数组安全**：`Set-StrictMode -Version Latest` 下，`$null.Count` 会抛异常。接收函数/cmdlet/管道返回值时**必须**用 `@()` 包裹以强制数组上下文（如 `$items = @(SomeFunction)`），禁止裸赋值后直接访问 `.Count`。返回数组的函数应使用 `return ,$array`（逗号阻止展开） |
 | **HC-14** | **PS 版本约束**：`installer/windows/Bootstrap.ps1` 兼容 PS 5.1+；`installer/windows/Install.ps1` 和 `installer/windows/Manage.ps1` 及其加载的 `windows/core` / `windows/steps` 模块**仅需兼容 PS 7.0+**，可安全使用 `ConvertFrom-Json -AsHashtable` 等 PS 7 专有特性 |
+| **HC-15** | **Release 单文件 / `irm\|iex` 兼容约束**：`dist/*.ps1` 通过 `irm ... \| iex` 执行时 `$PSScriptRoot` 为空，代码不得假设源码目录存在。进入单文件 artifact 的 Windows 代码，在 `Join-Path` / `Test-Path` / `Get-Content` / dot-source / contracts 或 templates 查找前必须判空；路径不可用时走 inline fallback、环境变量 fallback 或安全跳过。涉及 contracts、templates、指纹计算、单文件构建、远程入口时，必须同时验证 `pwsh -File` 源码模式与 `irm\|iex` Release 模式。 |
 | **HC-MAC-01** | macOS 入口使用 zsh/bash 脚本体系：首次云端入口 `curl -fsSL <install.sh URL> | bash`，脚本内部自动切换到 `/bin/zsh`；不要求 macOS 用户先安装 PowerShell |
 | **HC-MAC-02** | macOS 使用 Homebrew + nvm：最低 macOS 12+，**npm 只通过 nvm 管理（不支持 fnm / npm 全局包备份恢复）**，Profile 写入 `~/.zprofile` / `~/.zshrc`，PATH 分隔符为 `:`，禁止在 macOS 代码中调用 winget、注册表、MSI/EXE 或 Windows `$PROFILE` |
 | **HC-MAC-03** | Windows 与 macOS 共享 `installer/contracts/` 业务契约与 JSON schema；平台差异只放在 Windows PowerShell runtime 或 macOS zsh runtime 中 |

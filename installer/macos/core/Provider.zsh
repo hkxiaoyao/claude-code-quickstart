@@ -465,19 +465,41 @@ ccq_provider_interactive_install() {
   CCQ_PROVIDER_LAST_NAME=""
   CCQ_PROVIDER_LAST_BASEURL_OK="false"
 
-  local selected_key provider_name base_url api_key model_env_json profile_json profile_path
+  local selected_key provider_name base_url platform_url api_key model_env_json profile_json profile_path
   selected_key="$(ccq_provider_select_builtin)" || {
     CCQ_PROVIDER_ERROR="用户取消供应商选择"
     return 1
   }
   provider_name="$(ccq_provider_get_builtin_field "${selected_key}" Name)"
   base_url="$(ccq_provider_get_builtin_field "${selected_key}" BaseUrl)"
+  platform_url="$(ccq_provider_get_builtin_field "${selected_key}" PlatformUrl)"
+
+  ccq_ui_success "已选择: ${provider_name}"
 
   if [ "${selected_key}" = "custom" ]; then
-    provider_name="$(ccq_provider_prompt_text "供应商名称" "自定义供应商")"
-    base_url="$(ccq_provider_prompt_text "Base URL" "")"
+    ccq_provider_tty || { CCQ_PROVIDER_ERROR="无 TTY"; return 1; }
+    printf '\n' >/dev/tty
+    provider_name="$(ccq_provider_prompt_text "供应商名称（可选，直接回车使用默认）" "自定义供应商")"
+    while true; do
+      base_url="$(ccq_provider_prompt_text "Base URL（必填，如 https://api.example.com/anthropic）" "")"
+      if [ -z "${base_url}" ]; then
+        ccq_ui_danger "Base URL 不能为空" >/dev/tty
+        continue
+      fi
+      if ! printf '%s' "${base_url}" | grep -qE '^https?://'; then
+        ccq_ui_danger "Base URL 必须以 http:// 或 https:// 开头" >/dev/tty
+        continue
+      fi
+      break
+    done
+    base_url="${base_url%/}"
+    ccq_ui_success "Base URL 已设置: ${base_url}"
   else
-    base_url="$(ccq_provider_prompt_text "Base URL" "${base_url}")"
+    # 非自定义供应商：直接使用契约的 Base URL，展示 PlatformUrl
+    ccq_ui_info "Base URL 已使用内置配置: ${base_url}"
+    if [ -n "${platform_url}" ]; then
+      ccq_ui_info "请前往以下平台获取 API Key: ${platform_url}"
+    fi
   fi
 
   if [ -z "${provider_name}" ] || [ -z "${base_url}" ]; then
@@ -488,7 +510,11 @@ ccq_provider_interactive_install() {
   CCQ_PROVIDER_LAST_NAME="${provider_name}"
   CCQ_PROVIDER_LAST_BASEURL_OK="true"
 
-  api_key="$(ccq_provider_prompt_secret "API Key（输入不会显示）")"
+  ccq_provider_tty || { CCQ_PROVIDER_ERROR="无 TTY"; return 1; }
+  printf '\n' >/dev/tty
+  ccq_ui_primary "请粘贴 ${provider_name} 的 API Key（输入不会回显）:" >/dev/tty
+  ccq_ui_warning "注意: API Key 将写入 ~/.claude/settings.json 和 ~/.claude/providers/" >/dev/tty
+  api_key="$(ccq_provider_prompt_secret "API Key")"
   if [ -z "${api_key}" ]; then
     CCQ_PROVIDER_ERROR="API Key 为空"
     return 1

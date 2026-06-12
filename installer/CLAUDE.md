@@ -108,3 +108,27 @@ sh installer/build.sh --check
 - Windows steps 由 `Get-StepFiles` 从 `installer/contracts/steps.json` 生成，路径必须是 `windows/steps/*.ps1`。
 - macOS steps 使用 `MacOSStepFile`，路径必须是 `macos/steps/*.zsh`。
 - Provider / MCP / ClaudeConfig / Skills / UI 文案优先读取 `installer/contracts/*.json`，内联 fallback 只用于 release artifact 或 contracts 不可用场景，并由 `installer/contracts/Test-Contracts.ps1` 校验一致性。
+
+### Release 单文件执行边界（HC-15）
+
+`dist/*.ps1` 通过 `irm ... | iex` 执行时没有稳定脚本文件上下文，`$PSScriptRoot` 为空。进入 Windows 单文件 artifact 的 `windows/core/*.ps1` 与 `windows/steps/*.ps1` 必须遵守：
+
+1. 不得裸用 `$PSScriptRoot` 推导源码路径；使用前先判空。
+2. 不得把空字符串传给 `Join-Path` / `Test-Path` / `Get-Content` 等 `-Path` 参数。
+3. contracts/templates 查找失败时，必须回退到 inline fallback、环境变量 fallback 或安全跳过。
+4. 修改 contracts、templates、指纹计算、构建拼接、远程入口相关代码后，必须同时验证：
+   - 源码模式：`pwsh -File installer/windows/Manage.ps1`
+   - Release 模式：`irm 'https://.../manage.ps1' | iex`
+
+典型错误：
+
+```powershell
+$root = $PSScriptRoot
+Test-Path (Join-Path $root "installer\contracts")
+```
+
+`irm|iex` 场景下 `$root` 为空，会触发：
+
+```text
+Cannot bind argument to parameter 'Path' because it is an empty string.
+```
